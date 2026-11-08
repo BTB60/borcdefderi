@@ -31,7 +31,7 @@ Kök qovluqdakı `render.yaml` Blueprint-dir (servis: `borcdefteri-api`, `rootDi
    | `CORS_ALLOWED_ORIGINS` | Vercel URL-i, məs. `https://borcdefteri.vercel.app` (vergüllə bir neçə dəyər ola bilər) |
 
 3. Health check: `/api/health` (`render.yaml`-da təyin olunub).
-4. **Qəbz faylları:** `UPLOAD_DIR` standart olaraq `/app/uploads`-dır. Render-in konteyner diski yenidən deploy zamanı silinir. Ya **Persistent Disk** əlavə edib `UPLOAD_DIR`-i ona yönəldin (plan tələb edir), ya da qəbzləri obyekt yaddaşına köçürmək üçün kod əlavə edin. Bu açıq işdir.
+4. **Qəbz faylları:** abunəlik çekləri **PostgreSQL-də** saxlanılır (`subscription_receipts.content`, V3 miqrasiyası), ona görə Render diskinin deploy zamanı silinməsi onlara təsir etmir. Persistent Disk lazım deyil. `UPLOAD_DIR` yalnız V3-dən əvvəl diskə yazılmış köhnə qəbzləri oxumaq üçün qalıb.
 5. Deploydan sonra yoxlayın:
 
    ```bash
@@ -50,24 +50,44 @@ Dockerfile: `backend/Dockerfile` (multi-stage, JRE 17, qeyri-root istifadəçi, 
    | Dəyişən | Dəyər |
    |---|---|
    | `NEXT_PUBLIC_API_URL` | Render API URL-i, məs. `https://borcdefteri-api.onrender.com` |
-   | `NEXT_PUBLIC_PAYMENT_INFO` | (istəyə bağlı) Abunəlik ödənişi üçün rekvizit mətni |
 
    `NEXT_PUBLIC_*` dəyişənləri build zamanı daxil edilir — dəyişəndən sonra yenidən deploy edin.
 4. Vercel domeninizi Render-də `CORS_ALLOWED_ORIGINS`-ə əlavə edin.
 
-## 4. Yerli yoxlama siyahısı (deploydan əvvəl)
+## 4. İlk girişdən sonra (Super Admin)
+
+1. `ADMIN_EMAIL` / `ADMIN_PASSWORD` ilə `/login`-dən daxil olun → **Platforma idarəetməsi**.
+2. **Ayarlar**: M10 nömrəsi/hesabı, alanın adı, əlavə qeyd və əlaqə telefonu (WhatsApp) yazın. Mağaza sahibi “Abunə ol” basanda bunları görür.
+3. **Paketlər**: Aylıq / 6 aylıq / İllik qiymətlərini yoxlayın (başlanğıc: 19 / 99 / 179 AZN).
+
+## 5. Mobil tətbiq (Android APK / iOS)
 
 ```bash
-cd backend && mvn verify          # 41 inteqrasiya testi
-cd web && npm ci && npm run lint && npm run build && npx tsc --noEmit
+cd mobile
+flutter build apk --release --dart-define=API_URL=https://<render-api-host>
+# nəticə: build/app/outputs/flutter-apk/app-release.apk
+```
+
+- **Play Store üçün imza:** `mobile/android/key.properties` faylı yaradın (repozitoriyaya YAZMAYIN, `.gitignore`-dadır):
+  `storeFile=<keystore yolu>`, `storePassword=…`, `keyAlias=…`, `keyPassword=…`. Fayl yoxdursa release build debug açarı ilə imzalanır (yalnız test üçün).
+- **iOS:** `flutter build ipa --dart-define=API_URL=…` yalnız macOS + Xcode + Apple Developer hesabı ilə mümkündür.
+- `API_URL` HTTPS olmalıdır (Render URL-i HTTPS-dir).
+
+## 6. Yerli yoxlama siyahısı (deploydan əvvəl)
+
+```bash
+cd backend && mvn verify          # 57 inteqrasiya testi (real PostgreSQL)
+cd web && npm ci && npm run lint && npx tsc --noEmit && npm run build
+cd mobile && flutter analyze && flutter test
 ```
 
 CI (`.github/workflows/ci.yml`) eyni yoxlamaları hər push/PR-da çalışdırır.
 
-## 5. Əməliyyat qeydləri
+## 7. Əməliyyat qeydləri
 
 - **Sirlər:** Heç vaxt repozitoriyaya `.env` yazmayın. Render/Vercel dashboard-u sirlərin yeganə yeridir.
 - **JWT sirrinin dəyişdirilməsi:** bütün aktiv sessiyalar etibarsız olur, istifadəçilər yenidən daxil olur.
 - **Super Admin:** `ADMIN_*` dəyişənləri yalnız ilk yaratma üçündür; sonra onları silə və ya dəyişə bilərsiniz (mövcud admin dəyişmir).
 - **Abunəlik müddəti:** hər gün 00:05 (Asia/Baku) bitmiş abunəliklər `EXPIRED` olur. Eyni zamanda hər sorğuda bitmə tarixi yoxlanılır.
+- **Real IP:** `server.forward-headers-strategy: native` — Tomcat müştəri IP-sini `X-Forwarded-For`-un sağdan ilk etibarsız (daxili proxy olmayan) dəyərindən götürür; müştəri öz başlığı ilə IP-ni saxtalaşdıra bilmir (rate limit, audit).
 - **Ölçü:** `DB_POOL_SIZE` (standart 10). Render Starter planında bir instans işləyir; `RateLimitFilter` yalnız tək instansda düzgün işləyir. Çoxlu instans üçün paylaşılan limit deposu (məs. Redis) lazımdır.

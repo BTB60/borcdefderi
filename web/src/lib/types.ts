@@ -1,6 +1,6 @@
 export type DebtType = "CUSTOMER_DEBT" | "COMPANY_RECEIVABLE" | "COMPANY_PAYABLE";
 export type DebtStatus = "OPEN" | "PARTIAL" | "PAID";
-export type PaymentMethod = "CASH" | "CARD";
+export type PaymentMethod = "CASH" | "CARD" | "TRANSFER" | "OTHER";
 export type Permission = "CUSTOMER_DEBTS" | "COMPANY_RECEIVABLES" | "COMPANY_PAYABLES" | "REPORTS";
 
 export interface SubscriptionSummary {
@@ -18,6 +18,9 @@ export interface SubscriptionSummary {
 export interface Contact {
   phone: string | null;
   whatsapp: string | null;
+  m10Account: string | null;
+  m10Recipient: string | null;
+  paymentNote: string | null;
 }
 
 export interface Me {
@@ -66,7 +69,7 @@ export interface DebtPage {
 
 export interface LedgerEntry {
   id: string;
-  type: "DEBT_CREATED" | "DEBT_ADJUSTED" | "PAYMENT_CASH" | "PAYMENT_CARD";
+  type: "DEBT_CREATED" | "DEBT_ADJUSTED" | "PAYMENT_CASH" | "PAYMENT_CARD" | "PAYMENT_TRANSFER" | "PAYMENT_OTHER";
   amount: number;
   balanceAfter: number;
   paymentId: string | null;
@@ -80,6 +83,7 @@ export interface Payment {
   debtId: string;
   debtType: DebtType;
   partyName: string;
+  partyPhone?: string | null;
   amount: number;
   paymentMethod: PaymentMethod;
   paidAt: string;
@@ -88,6 +92,8 @@ export interface Payment {
   recordedBy: string;
   recordedByName: string | null;
   createdAt: string;
+  remainingAfter?: number | null;
+  debtStatusAfter?: DebtStatus | null;
 }
 
 export interface Party {
@@ -106,18 +112,21 @@ export interface DashboardSummary {
   companyPayables: number;
   cashReceived: number;
   cardReceived: number;
+  otherReceived: number;
   todayTotal: number;
   todayCash: number;
   todayCard: number;
+  todayOther: number;
   monthTotal: number;
   monthCash: number;
   monthCard: number;
+  monthOther: number;
 }
 
 export interface Dashboard {
   summary: DashboardSummary;
-  daily: { date: string; cash: number; card: number; total: number }[];
-  monthly: { month: string; cash: number; card: number; total: number }[];
+  daily: { date: string; cash: number; card: number; other: number; total: number }[];
+  monthly: { month: string; cash: number; card: number; other: number; total: number }[];
   recentTransactions: Payment[];
   outstanding: { id: string; debtType: DebtType; partyName: string; remaining: number; dueDate: string | null; overdue: boolean }[];
 }
@@ -202,6 +211,9 @@ export interface AuditEntry {
   id: number;
   storeId: string | null;
   actorId: string | null;
+  actorEmail?: string | null;
+  actorName?: string | null;
+  storeName?: string | null;
   action: string;
   entityType: string | null;
   entityId: string | null;

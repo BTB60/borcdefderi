@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../format.dart';
+import '../whatsapp.dart';
 import '../models/models.dart';
 import '../state/session.dart';
 import '../theme.dart';
@@ -239,20 +241,39 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
     return j.cast<Map<String, dynamic>>();
   }
 
+  bool get _canNotify => _debt.debtType != 'COMPANY_PAYABLE';
+
+  Future<void> _openWhatsApp(Uri uri) async {
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('WhatsApp açıla bilmədi')));
+    }
+  }
+
   Future<void> _pay() async {
-    final paid = await showModalBottomSheet<bool>(
+    final payment = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => PaymentSheet(session: widget.session, debt: _debt),
     );
-    if (paid == true) {
+    if (payment != null) {
       final fresh = await widget.session.api.get('/api/debts/${_debt.id}') as Map<String, dynamic>;
+      if (!mounted) return;
       setState(() {
         _debt = Debt.fromJson(fresh);
         _changed = true;
         _history = _loadHistory();
       });
+      final paid = (payment['amount'] as num?)?.toDouble() ?? 0;
+      final wa = _canNotify
+          ? waUri(_debt.partyPhone,
+              paymentConfirmationText(widget.session.me?.storeName ?? '', _debt.partyName, paid, _debt.remainingAmount))
+          : null;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Ödəniş qeydə alındı: ${formatMoney(paid)}'),
+        duration: const Duration(seconds: 6),
+        action: wa == null ? null : SnackBarAction(label: 'WhatsApp ilə bildir', onPressed: () => _openWhatsApp(wa)),
+      ));
     }
   }
 
@@ -261,13 +282,29 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
     'DEBT_ADJUSTED': 'Məbləğ dəyişdirildi',
     'PAYMENT_CASH': 'Nağd ödəniş',
     'PAYMENT_CARD': 'Kart ödənişi',
+    'PAYMENT_TRANSFER': 'Köçürmə ilə ödəniş',
+    'PAYMENT_OTHER': 'Digər ödəniş',
   };
 
   @override
   Widget build(BuildContext context) {
     final canPay = !_debt.isPaid && widget.session.me!.can(_sectionPermission[_debt.debtType]!);
     return Scaffold(
-        appBar: AppBar(title: Text(_debt.partyName), leading: BackButton(onPressed: () => Navigator.of(context).pop(_changed))),
+        appBar: AppBar(
+          title: Text(_debt.partyName),
+          leading: BackButton(onPressed: () => Navigator.of(context).pop(_changed)),
+          actions: [
+            if (_canNotify && !_debt.isPaid && waNumber(_debt.partyPhone) != null)
+              IconButton(
+                tooltip: 'WhatsApp ilə borc xatırlatması',
+                icon: const Icon(Icons.chat_outlined, color: Colors.green),
+                onPressed: () => _openWhatsApp(waUri(
+                    _debt.partyPhone,
+                    debtReminderText(widget.session.me?.storeName ?? '', _debt.partyName, _debt.remainingAmount,
+                        _debt.dueDate))!),
+              ),
+          ],
+        ),
         bottomNavigationBar: canPay
             ? SafeArea(
                 child: Padding(
@@ -344,7 +381,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
       );
 }
 
-/// Records a CASH or CARD payment. The server rejects amounts above the remaining balance.
+/// Records a cash, card, transfer or other payment. The server rejects amounts above the remaining balance.
 class PaymentSheet extends StatefulWidget {
   const PaymentSheet({super.key, required this.session, required this.debt});
 
@@ -390,12 +427,12 @@ class _PaymentSheetState extends State<PaymentSheet> {
       _error = null;
     });
     try {
-      await widget.session.api.post('/api/debts/${widget.debt.id}/payments', {
+      final res = await widget.session.api.post('/api/debts/${widget.debt.id}/payments', {
         'amount': value.toStringAsFixed(2),
         'paymentMethod': _method,
         if (_description.text.trim().isNotEmpty) 'description': _description.text.trim(),
-      });
-      if (mounted) Navigator.of(context).pop(true);
+      }) as Map<String, dynamic>;
+      if (mounted) Navigator.of(context).pop(res);
     } catch (e) {
       if (mounted) setState(() => _error = errorMessage(e));
     } finally {
@@ -419,14 +456,20 @@ class _PaymentSheetState extends State<PaymentSheet> {
           decoration: const InputDecoration(labelText: 'Məbləğ (₼)'),
         ),
         const SizedBox(height: 12),
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'CASH', label: Text('Nağd'), icon: Icon(Icons.money)),
-            ButtonSegment(value: 'CARD', label: Text('Kart'), icon: Icon(Icons.credit_card)),
-          ],
-          selected: {_method},
-          onSelectionChanged: (s) => setState(() => _method = s.first),
-        ),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final m in const [
+            ('CASH', 'Nağd', Icons.money),
+            ('CARD', 'Kart', Icons.credit_card),
+            ('TRANSFER', 'Köçürmə', Icons.swap_horiz),
+            ('OTHER', 'Digər', Icons.more_horiz),
+          ])
+            ChoiceChip(
+              avatar: Icon(m.$3, size: 18),
+              label: Text(m.$2),
+              selected: _method == m.$1,
+              onSelected: (_) => setState(() => _method = m.$1),
+            ),
+        ]),
         const SizedBox(height: 12),
         TextField(controller: _description, decoration: const InputDecoration(labelText: 'Təsvir (istəyə bağlı)')),
         const SizedBox(height: 20),

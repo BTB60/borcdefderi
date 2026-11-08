@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required in RELEASE builds too (debug/profile manifests add it only for development). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="borcdefteri_mobile"
+        android:label="BORCDEFTERI"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

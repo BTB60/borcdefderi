@@ -79,6 +79,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Expanded(child: _MiniCard(label: 'Nağd (cəmi)', value: formatMoney(s.cashReceived))),
                   const SizedBox(width: 12),
                   Expanded(child: _MiniCard(label: 'Kart (cəmi)', value: formatMoney(s.cardReceived))),
+                  const SizedBox(width: 12),
+                  Expanded(child: _MiniCard(label: 'Köçürmə/digər', value: formatMoney(s.otherReceived))),
                 ]),
                 const SizedBox(height: 24),
                 const Text('Son əməliyyatlar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),

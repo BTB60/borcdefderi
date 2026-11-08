@@ -43,7 +43,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         SizedBox(
           height: 44,
           child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16), children: [
-            for (final m in const [('', 'Hamısı'), ('CASH', 'Nağd'), ('CARD', 'Kart')])
+            for (final m in const [('', 'Hamısı'), ('CASH', 'Nağd'), ('CARD', 'Kart'), ('TRANSFER', 'Köçürmə'), ('OTHER', 'Digər')])
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
@@ -82,9 +82,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     return Card(
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: p.paymentMethod == 'CASH' ? Colors.green.shade50 : Colors.blue.shade50,
-                          child: Icon(p.paymentMethod == 'CASH' ? Icons.money : Icons.credit_card,
-                              color: p.paymentMethod == 'CASH' ? Colors.green : Colors.blue),
+                          backgroundColor: _methodColor(p.paymentMethod).shade50,
+                          child: Icon(_methodIcon(p.paymentMethod), color: _methodColor(p.paymentMethod)),
                         ),
                         title: Text(p.partyName),
                         subtitle: Text('${formatDateTime(p.paidAt)} · ${methodLabels[p.paymentMethod]}${p.description == null ? '' : '\n${p.description}'}'),
@@ -102,3 +101,17 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     );
   }
 }
+
+MaterialColor _methodColor(String method) => switch (method) {
+      'CASH' => Colors.green,
+      'CARD' => Colors.blue,
+      'TRANSFER' => Colors.amber,
+      _ => Colors.grey,
+    };
+
+IconData _methodIcon(String method) => switch (method) {
+      'CASH' => Icons.money,
+      'CARD' => Icons.credit_card,
+      'TRANSFER' => Icons.swap_horiz,
+      _ => Icons.more_horiz,
+    };

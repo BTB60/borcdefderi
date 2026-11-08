@@ -144,14 +144,27 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   Future<void> _subscribe(Plan plan) async {
     setState(() => _busyCode = plan.code);
     try {
-      await widget.session.api.post('/api/subscriptions/request', {'planCode': plan.code});
       final contact = Contact.fromJson(await widget.session.api.get('/api/public/contact') as Map<String, dynamic>);
-      await widget.session.refresh();
       if (mounted) await _showContact(plan, contact);
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
       if (mounted) setState(() => _busyCode = null);
+    }
+  }
+
+  Future<bool> _sendConfirmation(Plan plan, String reference) async {
+    try {
+      await widget.session.api.post('/api/subscriptions/request', {
+        'planCode': plan.code,
+        if (reference.trim().isNotEmpty) 'payerReference': reference.trim(),
+      });
+      await widget.session.refresh();
+      if (mounted) setState(() {});
+      return true;
+    } catch (e) {
+      if (mounted) showError(context, e);
+      return false;
     }
   }
 
@@ -165,66 +178,114 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   Future<void> _showContact(Plan plan, Contact contact) {
     final store = widget.session.me?.storeName ?? '';
     final message =
-        'Salam! "$store" mağazası üçün ${plan.name} (${formatMoney(plan.price)}) abunəliyini almaq istəyirəm. Ödəniş çekini göndərirəm.';
+        'Salam! "$store" mağazası üçün ${plan.name} (${formatMoney(plan.price)}) abunəliyinin ödənişini etdim. Çeki göndərirəm.';
     final phone = contact.phone;
+    final reference = TextEditingController();
+    var sending = false;
+    var sent = false;
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const Text('Abunə olmaq üçün əlaqə saxlayın',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: navy)),
-            const SizedBox(height: 12),
-            StatTile(label: 'Seçilmiş paket', value: '${plan.name} · ${formatMoney(plan.price)}'),
-            const SizedBox(height: 16),
-            if (phone != null) ...[
-              Text('Administratorun nömrəsi', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600)),
-              SelectableText(phone,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: navy)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.viewInsetsOf(ctx).bottom + 20),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('Abunə ol — ${plan.name}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: navy)),
               const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () => _open(Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'[^+\d]'), ''))),
-                icon: const Icon(Icons.call),
-                label: const Text('Zəng et'),
-              ),
-              if (contact.whatsapp != null) ...[
+              StatTile(label: 'Ödəniləcək məbləğ', value: formatMoney(plan.price), hint: '${plan.durationMonths} ay'),
+              const SizedBox(height: 16),
+              const Text('1. Ödənişi edin', style: TextStyle(fontWeight: FontWeight.w700, color: navy)),
+              const SizedBox(height: 8),
+              if (contact.m10Account != null)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: gold.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: gold.withValues(alpha: 0.5)),
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('M10 ilə ödəniş', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                    Row(children: [
+                      Expanded(
+                        child: SelectableText(contact.m10Account!,
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: navy)),
+                      ),
+                      IconButton(
+                        tooltip: 'Kopyala',
+                        icon: const Icon(Icons.copy),
+                        onPressed: () => Clipboard.setData(ClipboardData(text: contact.m10Account!)),
+                      ),
+                    ]),
+                    if (contact.m10Recipient != null) Text('Alan: ${contact.m10Recipient}'),
+                    if (contact.paymentNote != null)
+                      Text(contact.paymentNote!, style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+                  ]),
+                )
+              else
+                const ErrorBanner('M10 ödəniş məlumatları hələ əlavə edilməyib. Ödəniş üçün administratorla əlaqə saxlayın.'),
+              if (phone != null) ...[
                 const SizedBox(height: 8),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600),
-                  onPressed: () => _open(Uri.https('wa.me', '/${contact.whatsapp}', {'text': message})),
-                  icon: const Icon(Icons.chat),
-                  label: const Text('WhatsApp ilə yaz'),
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _open(Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'[^+\d]'), ''))),
+                      icon: const Icon(Icons.call),
+                      label: const Text('Zəng et'),
+                    ),
+                  ),
+                  if (contact.whatsapp != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600),
+                        onPressed: () => _open(Uri.https('wa.me', '/${contact.whatsapp}', {'text': message})),
+                        icon: const Icon(Icons.chat),
+                        label: const Text('Çeki göndər'),
+                      ),
+                    ),
+                  ],
+                ]),
+              ],
+              const SizedBox(height: 16),
+              const Text('2. Təsdiq sorğusu göndərin', style: TextStyle(fontWeight: FontWeight.w700, color: navy)),
+              const SizedBox(height: 8),
+              if (sent)
+                Text('Sorğunuz göndərildi. Administrator ödənişi təsdiqləyəndən sonra mağazanız avtomatik aktiv olacaq.',
+                    style: TextStyle(color: Colors.green.shade800))
+              else ...[
+                TextField(
+                  controller: reference,
+                  maxLength: 120,
+                  decoration: const InputDecoration(labelText: 'M10 / bank əməliyyat nömrəsi (istəyə bağlı)'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: navy),
+                  onPressed: sending
+                      ? null
+                      : () async {
+                          setSheet(() => sending = true);
+                          final ok = await _sendConfirmation(plan, reference.text);
+                          setSheet(() {
+                            sending = false;
+                            sent = ok;
+                          });
+                        },
+                  child: sending
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Ödəniş etdim — təsdiq sorğusu göndər'),
                 ),
               ],
               const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: phone));
-                  if (ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Nömrə kopyalandı')));
-                  }
-                },
-                icon: const Icon(Icons.copy),
-                label: const Text('Nömrəni kopyala'),
-              ),
-            ] else
-              const ErrorBanner(
-                  'Administratorun nömrəsi hələ təyin edilməyib. Sorğunuz qeydə alındı — sizinlə əlaqə saxlanılacaq.'),
-            const SizedBox(height: 16),
-            Text(
-              '1. Administratorla əlaqə saxlayın və ödənişi edin.\n'
-              '2. Ödəniş çekini WhatsApp ilə göndərin.\n'
-              '3. Administrator çeki yoxlayıb abunəliyinizi aktiv edəcək — sayğac avtomatik başlayacaq.',
-              style: TextStyle(color: Colors.grey.shade700, height: 1.5),
-            ),
-          ]),
+              Text('Ödəniş administrator tərəfindən təsdiqlənməyənə qədər mağaza aktivləşdirilmir.',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+            ]),
+          ),
         ),
       ),
-    );
+    ).whenComplete(reference.dispose);
   }
 
   Future<void> _refresh() async {

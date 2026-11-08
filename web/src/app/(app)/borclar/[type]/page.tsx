@@ -5,11 +5,21 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th } from "@/components/ui";
 import { ApiError, api, download } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { DEBT_SECTION_SLUG, DEBT_STATUS_LABEL, DEBT_TYPE_LABEL, METHOD_LABEL, formatDate, formatDateTime, formatMoney } from "@/lib/format";
-import type { Debt, DebtPage, DebtStatus, DebtType, LedgerEntry, Party, PaymentMethod } from "@/lib/types";
+import { DEBT_SECTION_SLUG, DEBT_STATUS_LABEL, DEBT_TYPE_LABEL, METHOD_LABEL, formatDate, formatDateTime, formatMoney, todayBaku } from "@/lib/format";
+import type { Debt, DebtPage, DebtStatus, DebtType, LedgerEntry, Party, Payment, PaymentMethod } from "@/lib/types";
+import { debtReminderText, paymentConfirmationText, waLink } from "@/lib/whatsapp";
 
 const PAGE_SIZE = 20;
-const TODAY = () => new Date().toISOString().slice(0, 10);
+const TODAY = todayBaku;
+const METHODS: PaymentMethod[] = ["CASH", "CARD", "TRANSFER", "OTHER"];
+
+function WhatsAppIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+      <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2l-.5-.2Z" />
+    </svg>
+  );
+}
 
 const STATUS_TONE: Record<DebtStatus, "amber" | "emerald" | "slate"> = { OPEN: "slate", PARTIAL: "amber", PAID: "emerald" };
 
@@ -18,7 +28,7 @@ type Filters = { status: string; q: string; from: string; to: string };
 export default function DebtSectionPage() {
   const params = useParams<{ type: string }>();
   const type: DebtType | undefined = DEBT_SECTION_SLUG[params.type];
-  const { can } = useAuth();
+  const { can, me } = useAuth();
 
   const [filters, setFilters] = useState<Filters>({ status: "", q: "", from: "", to: "" });
   const [applied, setApplied] = useState<Filters>(filters);
@@ -157,6 +167,18 @@ export default function DebtSectionPage() {
                     <Td><Badge tone={STATUS_TONE[d.status]}>{DEBT_STATUS_LABEL[d.status]}</Badge></Td>
                     <Td className="text-right">
                       <div className="flex justify-end gap-1">
+                        {type !== "COMPANY_PAYABLE" && d.status !== "PAID" && waLink(d.partyPhone, "") && (
+                          <a
+                            href={waLink(d.partyPhone, debtReminderText(me?.storeName ?? "", d.partyName, d.remainingAmount, d.dueDate)) ?? undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="WhatsApp ilə borc xatırlatması göndər"
+                            aria-label={`${d.partyName} — WhatsApp xatırlatma`}
+                            className="inline-flex items-center rounded-xl px-2.5 py-1.5 text-emerald-600 transition hover:bg-emerald-50"
+                          >
+                            <WhatsAppIcon />
+                          </a>
+                        )}
                         <Button variant="ghost" className="px-2.5 py-1.5" onClick={() => setHistoryOf(d)}>Tarixçə</Button>
                         <Button variant="ghost" className="px-2.5 py-1.5" onClick={() => setEditing(d)} disabled={d.status === "PAID"}>Redaktə</Button>
                         <Button variant="primary" className="px-3 py-1.5" onClick={() => setPaying(d)} disabled={d.status === "PAID"}>Ödəniş</Button>
@@ -202,6 +224,8 @@ export default function DebtSectionPage() {
       {paying && (
         <PaymentModal
           debt={paying}
+          storeName={me?.storeName ?? ""}
+          canNotify={type !== "COMPANY_PAYABLE"}
           onClose={() => setPaying(null)}
           onSaved={() => {
             setPaying(null);
@@ -361,10 +385,11 @@ function DebtEditModal({ debt, onClose, onSaved }: { debt: Debt; onClose: () => 
   );
 }
 
-function PaymentModal({ debt, onClose, onSaved }: { debt: Debt; onClose: () => void; onSaved: () => void }) {
+function PaymentModal({ debt, storeName, canNotify, onClose, onSaved }: { debt: Debt; storeName: string; canNotify: boolean; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({ amount: String(debt.remainingAmount), paymentMethod: "CASH" as PaymentMethod, description: "", note: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<Payment | null>(null);
   const amountNumber = Number(form.amount);
   const exceeds = amountNumber > debt.remainingAmount + 1e-9;
 
@@ -373,8 +398,7 @@ function PaymentModal({ debt, onClose, onSaved }: { debt: Debt; onClose: () => v
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/debts/${debt.id}/payments`, { method: "POST", json: { ...form, description: form.description || null, note: form.note || null } });
-      onSaved();
+      setDone(await api<Payment>(`/api/debts/${debt.id}/payments`, { method: "POST", json: { ...form, description: form.description || null, note: form.note || null } }));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Ödəniş qeydə alınmadı");
     } finally {
@@ -382,12 +406,39 @@ function PaymentModal({ debt, onClose, onSaved }: { debt: Debt; onClose: () => v
     }
   }
 
+  if (done) {
+    const remaining = done.remainingAfter ?? 0;
+    const wa = canNotify ? waLink(debt.partyPhone, paymentConfirmationText(storeName, debt.partyName, done.amount, remaining)) : null;
+    return (
+      <Modal open title="Ödəniş qeydə alındı" onClose={onSaved} footer={<Button variant="primary" onClick={onSaved}>Bağla</Button>}>
+        <div className="mb-5 rounded-2xl bg-emerald-50 px-5 py-4 text-center ring-1 ring-emerald-600/20">
+          <p className="text-sm text-emerald-700">{debt.partyName} · {METHOD_LABEL[done.paymentMethod]}</p>
+          <p className="mt-1 font-serif text-3xl font-semibold text-emerald-700">{formatMoney(done.amount)}</p>
+          <p className="mt-1 text-sm text-slate-600">{remaining > 0 ? `Qalıq borc: ${formatMoney(remaining)}` : "Borc tam ödənildi"}</p>
+        </div>
+        {error && <div className="mb-4"><Alert>{error}</Alert></div>}
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button variant="outline" onClick={() => download(`/api/payments/${done.id}/receipt`, "cek.pdf").catch((e) => setError(e instanceof ApiError ? e.message : "Çek yüklənmədi"))}>
+            Çeki yüklə (PDF)
+          </Button>
+          {wa ? (
+            <a href={wa} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-500">
+              <WhatsAppIcon /> WhatsApp ilə bildir
+            </a>
+          ) : (
+            <p className="self-center text-center text-xs text-slate-400">{canNotify ? "WhatsApp üçün telefon nömrəsi yoxdur" : ""}</p>
+          )}
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       open
       title="Ödəniş qəbulu"
       onClose={onClose}
-      footer={<><Button variant="ghost" onClick={onClose}>Ləğv et</Button><Button type="submit" form="payment-form" disabled={busy || exceeds || amountNumber <= 0}>Ödənişi qeydə al</Button></>}
+      footer={<><Button variant="ghost" onClick={onClose}>Ləğv et</Button><Button type="submit" form="payment-form" disabled={busy || exceeds || !(amountNumber > 0)}>{busy ? "Saxlanılır…" : "Ödənişi qeydə al"}</Button></>}
     >
       <div className="mb-5 flex items-center justify-between rounded-2xl bg-navy-800 px-5 py-4 text-white">
         <div>
@@ -398,29 +449,27 @@ function PaymentModal({ debt, onClose, onSaved }: { debt: Debt; onClose: () => v
       </div>
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       <form id="payment-form" onSubmit={submit} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Məbləğ (₼)" error={exceeds ? "Qalıq borcdan çox ola bilməz" : undefined}>
-            <Input required type="number" min="0.01" max={debt.remainingAmount} step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-          </Field>
-          <Field label="Ödəniş üsulu">
-            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Ödəniş üsulu">
-              {(["CASH", "CARD"] as PaymentMethod[]).map((m) => (
-                <button
-                  type="button"
-                  key={m}
-                  role="radio"
-                  aria-checked={form.paymentMethod === m}
-                  onClick={() => setForm({ ...form, paymentMethod: m })}
-                  className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-all ${form.paymentMethod === m ? "border-gold-500 bg-gold-500/10 text-navy-800 shadow-glow" : "border-slate-300 text-slate-600 hover:border-slate-400"}`}
-                >
-                  {METHOD_LABEL[m]}
-                </button>
-              ))}
-            </div>
-          </Field>
-        </div>
+        <Field label="Məbləğ (₼)" error={exceeds ? "Qalıq borcdan çox ola bilməz" : undefined}>
+          <Input required type="number" min="0.01" max={debt.remainingAmount} step="0.01" inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+        </Field>
+        <Field label="Ödəniş üsulu">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Ödəniş üsulu">
+            {METHODS.map((m) => (
+              <button
+                type="button"
+                key={m}
+                role="radio"
+                aria-checked={form.paymentMethod === m}
+                onClick={() => setForm({ ...form, paymentMethod: m })}
+                className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-all ${form.paymentMethod === m ? "border-gold-500 bg-gold-500/10 text-navy-800 shadow-glow" : "border-slate-300 text-slate-600 hover:border-slate-400"}`}
+              >
+                {METHOD_LABEL[m]}
+              </button>
+            ))}
+          </div>
+        </Field>
         <Field label="Təsvir">
-          <Input maxLength={255} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Məs: Qismən ödəniş" />
+          <Input maxLength={255} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder={form.paymentMethod === "TRANSFER" ? "Məs: M10 / bank əməliyyat nömrəsi" : "Məs: Qismən ödəniş"} />
         </Field>
         <Field label="Qeyd">
           <Input maxLength={1000} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
@@ -447,6 +496,8 @@ function HistoryModal({ debt, onClose }: { debt: Debt; onClose: () => void }) {
     DEBT_ADJUSTED: "Məbləğ dəyişdirildi",
     PAYMENT_CASH: "Nağd ödəniş",
     PAYMENT_CARD: "Kart ödənişi",
+    PAYMENT_TRANSFER: "Köçürmə ilə ödəniş",
+    PAYMENT_OTHER: "Digər ödəniş",
   };
 
   return (
@@ -464,6 +515,14 @@ function HistoryModal({ debt, onClose }: { debt: Debt; onClose: () => void }) {
                 <span className="tabular-nums">{formatMoney(e.amount)}</span>
                 <span className="ml-2 text-xs text-slate-500">qalıq: {formatMoney(e.balanceAfter)}</span>
               </p>
+              {e.paymentId && (
+                <button
+                  className="mt-1 text-xs font-medium text-gold-600 hover:text-gold-500"
+                  onClick={() => download(`/api/payments/${e.paymentId}/receipt`, "cek.pdf").catch((err) => setError(err instanceof ApiError ? err.message : "Çek yüklənmədi"))}
+                >
+                  Çek (PDF) →
+                </button>
+              )}
             </li>
           ))}
         </ol>

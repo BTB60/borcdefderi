@@ -36,6 +36,36 @@ void main() {
     expect(await tokens.read(), isNull);
   });
 
+  test('being offline at start-up keeps the saved session (no forced logout)', () async {
+    final client = MockClient((_) async => throw http.ClientException('offline'));
+    final tokens = MemoryTokenStore();
+    await tokens.write('valid-token');
+    final session = Session(api: ApiClient(baseUrl: 'http://x', httpClient: client), tokens: tokens);
+    await session.restore();
+    expect(session.isSignedIn, isFalse);
+    expect(session.restoreError, isNotNull);
+    expect(await tokens.read(), 'valid-token');
+  });
+
+  test('a 401 on any request after login signs the user out', () async {
+    var calls = 0;
+    final client = MockClient((req) async {
+      calls++;
+      if (req.url.path == '/api/auth/login') {
+        return http.Response(jsonEncode({'token': 't', 'expiresInSeconds': 1, 'me': _me()}), 200);
+      }
+      return http.Response.bytes(utf8.encode(jsonEncode({'error': 'UNAUTHORIZED', 'message': 'Giriş tələb olunur'})), 401);
+    });
+    final tokens = MemoryTokenStore();
+    final session = Session(api: ApiClient(baseUrl: 'http://x', httpClient: client), tokens: tokens);
+    await session.login('o@x.az', 'Owner#Passw0rd');
+    await expectLater(session.api.get('/api/debts'), throwsA(isA<ApiException>()));
+    await Future<void>.delayed(Duration.zero);
+    expect(calls, 2);
+    expect(session.isSignedIn, isFalse);
+    expect(await tokens.read(), isNull);
+  });
+
   test('logout clears the token', () async {
     final client = MockClient((_) async => http.Response(jsonEncode({'token': 't', 'expiresInSeconds': 1, 'me': _me()}), 200));
     final tokens = MemoryTokenStore();

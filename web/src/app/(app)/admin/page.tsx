@@ -60,7 +60,36 @@ function errorText(e: unknown, fallback: string) {
   return e instanceof ApiError ? e.message : fallback;
 }
 
-type StoreFilter = "attention" | "all" | "active" | "expired" | "none";
+type StoreFilter = "attention" | "new" | "all" | "active" | "expired" | "none";
+
+/** Human-readable names for audit actions (store activity history). */
+const ACTION_LABEL: Record<string, string> = {
+  STORE_REGISTERED: "Mağaza qeydiyyatı",
+  LOGIN: "Sistemə giriş",
+  CUSTOMER_CREATED: "Müştəri əlavə edildi",
+  CUSTOMER_UPDATED: "Müştəri dəyişdirildi",
+  COMPANY_CREATED: "Şirkət əlavə edildi",
+  COMPANY_UPDATED: "Şirkət dəyişdirildi",
+  DEBT_CREATED: "Borc əlavə edildi",
+  DEBT_UPDATED: "Borc dəyişdirildi",
+  PAYMENT_RECORDED: "Ödəniş qəbul edildi",
+  EMPLOYEE_CREATED: "İşçi əlavə edildi",
+  EMPLOYEE_UPDATED: "İşçi dəyişdirildi",
+  SUBSCRIPTION_REQUESTED: "Abunəlik sorğusu",
+  SUBSCRIPTION_SUBMITTED: "Abunəlik sorğusu (qəbz)",
+  SUBSCRIPTION_APPROVED: "Abunəlik təsdiqləndi",
+  SUBSCRIPTION_ACTIVATED: "Abunəlik aktiv edildi",
+  SUBSCRIPTION_REJECTED: "Abunəlik rədd edildi",
+  SUBSCRIPTION_EXTENDED: "Abunəlik uzadıldı",
+  STORE_SUSPENDED: "Mağaza dayandırıldı",
+  STORE_ACTIVATED: "Mağaza bərpa edildi",
+  PLAN_UPDATED: "Paket dəyişdirildi",
+  CONTACT_UPDATED: "Əlaqə məlumatı dəyişdirildi",
+  PAYMENT_SETTINGS_UPDATED: "Ödəniş ayarları dəyişdirildi",
+};
+
+const NEW_DAYS = 7;
+
 
 /** Lower = needs attention sooner: pending requests, expired, running out, then by time left. */
 function urgency(s: AdminStore, now: number): number {
@@ -76,6 +105,7 @@ function StoresTab({ onError, onNotice }: TabProps) {
   const [items, setItems] = useState<AdminStore[] | null>(null);
   const [extending, setExtending] = useState<AdminStore | null>(null);
   const [activating, setActivating] = useState<AdminStore | null>(null);
+  const [historyOf, setHistoryOf] = useState<AdminStore | null>(null);
   const [filter, setFilter] = useState<StoreFilter>("attention");
   const [reload, setReload] = useState(0);
   const now = useNow(1000);
@@ -118,6 +148,7 @@ function StoresTab({ onError, onNotice }: TabProps) {
         case "active": return s.subscriptionState === "ACTIVE";
         case "expired": return s.subscriptionState === "EXPIRED";
         case "none": return s.subscriptionState === "NONE";
+        case "new": return now - new Date(s.createdAt).getTime() < NEW_DAYS * 86_400_000;
         default: return true;
       }
     })
@@ -127,7 +158,8 @@ function StoresTab({ onError, onNotice }: TabProps) {
     { key: "attention", label: "Diqqət tələb edənlər" },
     { key: "active", label: "Aktiv" },
     { key: "expired", label: "Vaxtı bitib" },
-    { key: "none", label: "Abunəsiz" },
+    { key: "new", label: `Yeni qeydiyyatlar (${NEW_DAYS} gün)` },
+    { key: "none", label: "Gözləmədə (abunəsiz)" },
     { key: "all", label: "Hamısı" },
   ];
 
@@ -191,6 +223,7 @@ function StoresTab({ onError, onNotice }: TabProps) {
                     <Td className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button variant="gold" onClick={() => setActivating(s)}>{s.activePlan ? "Yenilə" : "Aktiv et"}</Button>
+                        <Button variant="ghost" onClick={() => setHistoryOf(s)}>Tarixçə</Button>
                         <Button variant="ghost" onClick={() => setExtending(s)} disabled={!s.activePlan}>Uzat</Button>
                         <Button variant={s.status === "ACTIVE" ? "danger" : "outline"} onClick={() => toggle(s)}>
                           {s.status === "ACTIVE" ? "Dayandır" : "Bərpa et"}
@@ -204,6 +237,7 @@ function StoresTab({ onError, onNotice }: TabProps) {
           </Table>
         )}
       </Card>
+      {historyOf && <StoreHistoryModal store={historyOf} onClose={() => setHistoryOf(null)} />}
       {activating && (
         <ActivateModal
           store={activating}
@@ -301,21 +335,23 @@ function ActivateModal({ store, onClose, onDone, onError }: { store: AdminStore;
 }
 
 function SettingsTab({ onError, onNotice }: TabProps) {
-  const [phone, setPhone] = useState<string | null>(null);
+  const [form, setForm] = useState<{ phone: string; m10Account: string; m10Recipient: string; paymentNote: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const fill = (c: Contact) => setForm({ phone: c.phone ?? "", m10Account: c.m10Account ?? "", m10Recipient: c.m10Recipient ?? "", paymentNote: c.paymentNote ?? "" });
+
   useEffect(() => {
-    api<Contact>("/api/public/contact").then((c) => setPhone(c.phone ?? "")).catch((e) => onError(errorText(e, "Ayarlar yüklənmədi")));
+    api<Contact>("/api/public/contact").then(fill).catch((e) => onError(errorText(e, "Ayarlar yüklənmədi")));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function save(e: FormEvent) {
     e.preventDefault();
+    if (!form) return;
     setBusy(true);
     try {
-      const c = await api<Contact>("/api/admin/settings/contact", { method: "PUT", json: { phone } });
-      setPhone(c.phone ?? "");
-      onNotice?.("Əlaqə nömrəsi yadda saxlanıldı");
+      fill(await api<Contact>("/api/admin/settings/contact", { method: "PUT", json: form }));
+      onNotice?.("Ödəniş və əlaqə məlumatları yadda saxlanıldı");
     } catch (err) {
       onError(errorText(err, "Yadda saxlanılmadı"));
     } finally {
@@ -323,18 +359,60 @@ function SettingsTab({ onError, onNotice }: TabProps) {
     }
   }
 
-  if (phone === null) return <Spinner />;
+  if (!form) return <Spinner />;
   return (
-    <Card className="max-w-xl">
-      <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Abunəlik üçün əlaqə nömrəsi</h2>
-      <p className="mb-5 text-sm text-slate-500">Mağaza sahibi “Abunə ol” düyməsini basanda bu nömrə göstərilir (zəng və WhatsApp üçün).</p>
+    <Card className="max-w-2xl">
+      <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Abunəlik ödənişi və əlaqə</h2>
+      <p className="mb-5 text-sm text-slate-500">Mağaza sahibi “Abunə ol” düyməsini basanda bu məlumatlar göstərilir.</p>
       <form onSubmit={save} className="space-y-4">
-        <Field label="Telefon nömrəsi" hint="Məs: +994 50 123 45 67">
-          <Input value={phone} maxLength={30} inputMode="tel" onChange={(e) => setPhone(e.target.value)} placeholder="+994 50 123 45 67" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="M10 nömrəsi / hesab" hint="Ödənişin göndəriləcəyi M10 hesabı">
+            <Input value={form.m10Account} maxLength={60} onChange={(e) => setForm({ ...form, m10Account: e.target.value })} placeholder="+994 50 123 45 67" />
+          </Field>
+          <Field label="Alanın adı" hint="M10-da görünən ad">
+            <Input value={form.m10Recipient} maxLength={120} onChange={(e) => setForm({ ...form, m10Recipient: e.target.value })} />
+          </Field>
+        </div>
+        <Field label="Əlavə qeyd" hint="Məs: təyinat hissəsinə mağaza adını yazın">
+          <Input value={form.paymentNote} maxLength={500} onChange={(e) => setForm({ ...form, paymentNote: e.target.value })} />
+        </Field>
+        <Field label="Əlaqə telefonu (zəng və WhatsApp)" hint="Məs: +994 50 123 45 67">
+          <Input value={form.phone} maxLength={30} inputMode="tel" onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+994 50 123 45 67" />
         </Field>
         <Button type="submit" variant="primary" disabled={busy}>{busy ? "Saxlanılır…" : "Yadda saxla"}</Button>
       </form>
     </Card>
+  );
+}
+
+function StoreHistoryModal({ store, onClose }: { store: AdminStore; onClose: () => void }) {
+  const [items, setItems] = useState<AuditEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api<AuditEntry[]>(`/api/admin/audit-logs?storeId=${store.id}&limit=200`)
+      .then(setItems)
+      .catch((e) => setError(errorText(e, "Tarixçə yüklənmədi")));
+  }, [store.id]);
+  return (
+    <Modal open title={`Fəaliyyət tarixçəsi — ${store.name}`} onClose={onClose} footer={<Button variant="ghost" onClick={onClose}>Bağla</Button>}>
+      {error && <Alert>{error}</Alert>}
+      {!items && !error && <Spinner />}
+      {items && items.length === 0 && <EmptyState title="Qeyd yoxdur" />}
+      {items && items.length > 0 && (
+        <ol className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+          {items.map((a) => (
+            <li key={a.id} className="rounded-xl border border-slate-100 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-navy-800">{ACTION_LABEL[a.action] ?? a.action}</span>
+                <span className="text-xs text-slate-400">{formatDateTime(a.createdAt)}</span>
+              </div>
+              <p className="text-xs text-slate-500">{a.actorName ?? "—"}{a.actorEmail ? ` · ${a.actorEmail}` : ""}</p>
+              {a.details && <p className="mt-0.5 text-xs text-slate-600">{a.details}</p>}
+            </li>
+          ))}
+        </ol>
+      )}
+    </Modal>
   );
 }
 
@@ -406,7 +484,7 @@ function SubscriptionsTab({ onError, onNotice }: TabProps) {
         {!items ? <Spinner /> : items.length === 0 ? <EmptyState title="Sorğu yoxdur" /> : (
           <Table>
             <thead className="bg-slate-50/70">
-              <tr><Th>Mağaza</Th><Th>Plan</Th><Th className="text-right">Məbləğ</Th><Th>Sorğu tarixi</Th><Th>İstinad</Th><Th>Status</Th><Th className="text-right">Əməliyyat</Th></tr>
+              <tr><Th>Mağaza</Th><Th>Plan</Th><Th className="text-right">Məbləğ</Th><Th>Sorğu tarixi</Th><Th>M10 / istinad</Th><Th>Status</Th><Th className="text-right">Əməliyyat</Th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {items.map((s) => (
@@ -614,13 +692,14 @@ function AuditTab({ onError }: { onError: (m: string | null) => void }) {
     <Card>
       {!items ? <Spinner /> : items.length === 0 ? <EmptyState title="Qeyd yoxdur" /> : (
         <Table>
-          <thead className="bg-slate-50/70"><tr><Th>Vaxt</Th><Th>Əməliyyat</Th><Th>Obyekt</Th><Th>Təfərrüat</Th><Th>IP</Th></tr></thead>
+          <thead className="bg-slate-50/70"><tr><Th>Vaxt</Th><Th>Mağaza</Th><Th>Kim</Th><Th>Əməliyyat</Th><Th>Təfərrüat</Th><Th>IP</Th></tr></thead>
           <tbody className="divide-y divide-slate-100">
             {items.map((a) => (
               <tr key={a.id} className="hover:bg-gold-500/5">
                 <Td className="text-slate-500">{formatDateTime(a.createdAt)}</Td>
-                <Td><span className="font-mono text-xs text-navy-800">{a.action}</span></Td>
-                <Td className="text-slate-500">{a.entityType ?? "—"}</Td>
+                <Td className="text-slate-500">{a.storeName ?? "Platforma"}</Td>
+                <Td className="text-slate-500">{a.actorName ?? "—"}<div className="text-xs text-slate-400">{a.actorEmail}</div></Td>
+                <Td><span className="text-xs font-medium text-navy-800">{ACTION_LABEL[a.action] ?? a.action}</span></Td>
                 <Td className="max-w-[24rem] truncate">{a.details ?? "—"}</Td>
                 <Td className="font-mono text-xs text-slate-400">{a.ipAddress ?? "—"}</Td>
               </tr>

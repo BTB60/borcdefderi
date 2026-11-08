@@ -40,11 +40,19 @@ class SubscriptionSummary {
 class Contact {
   final String? phone;
   final String? whatsapp;
+  final String? m10Account;
+  final String? m10Recipient;
+  final String? paymentNote;
 
-  const Contact({this.phone, this.whatsapp});
+  const Contact({this.phone, this.whatsapp, this.m10Account, this.m10Recipient, this.paymentNote});
 
-  factory Contact.fromJson(Map<String, dynamic> j) =>
-      Contact(phone: _str(j['phone']), whatsapp: _str(j['whatsapp']));
+  factory Contact.fromJson(Map<String, dynamic> j) => Contact(
+        phone: _str(j['phone']),
+        whatsapp: _str(j['whatsapp']),
+        m10Account: _str(j['m10Account']),
+        m10Recipient: _str(j['m10Recipient']),
+        paymentNote: _str(j['paymentNote']),
+      );
 }
 
 /// Days/hours/minutes/seconds left until [expiresAt]. [warning] = expired or fewer than [warnDays] days left.
@@ -248,6 +256,7 @@ class DashboardSummary {
   final double companyPayables;
   final double cashReceived;
   final double cardReceived;
+  final double otherReceived;
   final double todayTotal;
   final double monthTotal;
 
@@ -257,6 +266,7 @@ class DashboardSummary {
     required this.companyPayables,
     required this.cashReceived,
     required this.cardReceived,
+    this.otherReceived = 0,
     required this.todayTotal,
     required this.monthTotal,
   });
@@ -267,6 +277,7 @@ class DashboardSummary {
         companyPayables: _num(j['companyPayables']),
         cashReceived: _num(j['cashReceived']),
         cardReceived: _num(j['cardReceived']),
+        otherReceived: _num(j['otherReceived']),
         todayTotal: _num(j['todayTotal']),
         monthTotal: _num(j['monthTotal']),
       );

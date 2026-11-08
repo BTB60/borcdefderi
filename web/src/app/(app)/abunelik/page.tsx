@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Alert, Badge, Button, Card, EmptyState, Modal, PageHeader, Spinner, StatCard } from "@/components/ui";
+import { useEffect, useState, type FormEvent } from "react";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Spinner, StatCard } from "@/components/ui";
 import { Countdown, WARN_DAYS } from "@/components/Countdown";
 import { ApiError, api, openProtected } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -23,7 +23,6 @@ export default function SubscriptionPage() {
   const [history, setHistory] = useState<SubscriptionRecord[] | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
   const [chosen, setChosen] = useState<Plan | null>(null);
-  const [busyCode, setBusyCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
@@ -44,18 +43,9 @@ export default function SubscriptionPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function subscribe(plan: Plan) {
+  function subscribe(plan: Plan) {
     setError(null);
-    setBusyCode(plan.code);
-    try {
-      await api("/api/subscriptions/request", { method: "POST", json: { planCode: plan.code } });
-      setChosen(plan);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Sorğu göndərilmədi");
-    } finally {
-      setBusyCode(null);
-    }
+    setChosen(plan);
   }
 
   async function checkStatus() {
@@ -80,8 +70,8 @@ export default function SubscriptionPage() {
       {pending && (
         <div className="mb-4">
           <Alert kind="info">
-            <strong>{pending.planName}</strong> paketi üçün sorğunuz administratora göndərilib. Ödəniş çekini administratora göndərin — təsdiqdən sonra abunəlik avtomatik aktiv olacaq.{" "}
-            <button className="font-semibold underline" onClick={() => setChosen(plans.find((p) => p.code === pending.planCode) ?? null)}>Əlaqə nömrəsi</button>
+            <strong>{pending.planName}</strong> paketi üçün ödəniş təsdiq sorğunuz administratora göndərilib{pending.payerReference ? ` (istinad: ${pending.payerReference})` : ""}. Administrator ödənişi yoxlayıb təsdiqləyəndən sonra mağazanız avtomatik aktiv olacaq.{" "}
+            <button className="font-semibold underline" onClick={() => setChosen(plans.find((p) => p.code === pending.planCode) ?? null)}>Ödəniş məlumatları</button>
           </Alert>
         </div>
       )}
@@ -119,11 +109,11 @@ export default function SubscriptionPage() {
               <Button
                 variant={best ? "gold" : "primary"}
                 className="w-full py-3"
-                disabled={!isOwner || busyCode !== null}
+                disabled={!isOwner}
                 onClick={() => subscribe(p)}
                 title={!isOwner ? "Yalnız mağaza sahibi abunə ola bilər" : undefined}
               >
-                {busyCode === p.code ? "Göndərilir…" : pending?.planCode === p.code ? "Seçilib — əlaqə" : "Abunə ol"}
+                {pending?.planCode === p.code ? "Sorğu göndərilib" : "Abunə ol"}
               </Button>
             </div>
           );
@@ -159,69 +149,135 @@ export default function SubscriptionPage() {
 
       <p className="mt-8 text-xs text-slate-400">Aktiv abunəlik olmadan mağazanın borc və ödəniş modulları bağlı qalır.</p>
 
-      {chosen && <ContactModal plan={chosen} contact={contact} storeName={me?.storeName ?? ""} onClose={() => setChosen(null)} />}
+      {chosen && (
+        <SubscribeModal
+          plan={chosen}
+          contact={contact}
+          storeName={me?.storeName ?? ""}
+          alreadySent={pending?.planCode === chosen.code}
+          onClose={() => setChosen(null)}
+          onSent={async () => {
+            await load().catch(() => undefined);
+          }}
+        />
+      )}
     </>
   );
 }
 
-function ContactModal({ plan, contact, storeName, onClose }: { plan: Plan; contact: Contact | null; storeName: string; onClose: () => void }) {
-  const [copied, setCopied] = useState(false);
-  const message = `Salam! "${storeName}" mağazası üçün ${plan.name} (${formatMoney(plan.price)}) abunəliyini almaq istəyirəm. Ödəniş çekini göndərirəm.`;
+const MAX_RECEIPT_BYTES = 5 * 1024 * 1024;
+
+function SubscribeModal({ plan, contact, storeName, alreadySent, onClose, onSent }: {
+  plan: Plan;
+  contact: Contact | null;
+  storeName: string;
+  alreadySent: boolean;
+  onClose: () => void;
+  onSent: () => Promise<void>;
+}) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const [reference, setReference] = useState("");
+  const [receipt, setReceipt] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  const message = `Salam! "${storeName}" mağazası üçün ${plan.name} (${formatMoney(plan.price)}) abunəliyinin ödənişini etdim. Çeki göndərirəm.`;
   const phone = contact?.phone;
 
-  async function copy() {
-    if (!phone) return;
+  async function copy(value: string, key: string) {
     try {
-      await navigator.clipboard.writeText(phone);
-      setCopied(true);
+      await navigator.clipboard.writeText(value);
+      setCopied(key);
     } catch {
-      setCopied(false);
+      setCopied(null);
+    }
+  }
+
+  async function send(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (receipt && receipt.size > MAX_RECEIPT_BYTES) {
+      setError("Faylın ölçüsü 5 MB-dan çox ola bilməz");
+      return;
+    }
+    const form = new FormData();
+    form.append("planCode", plan.code);
+    if (reference.trim()) form.append("payerReference", reference.trim());
+    if (receipt) form.append("receipt", receipt);
+    setBusy(true);
+    try {
+      await api("/api/subscriptions", { method: "POST", body: form });
+      setSent(true);
+      await onSent();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Sorğu göndərilmədi");
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <Modal open title="Abunə olmaq üçün əlaqə saxlayın" onClose={onClose} footer={<Button variant="ghost" onClick={onClose}>Bağla</Button>}>
-      <div className="mb-5 rounded-2xl bg-navy-800 px-5 py-4 text-white">
-        <p className="text-xs text-white/60">Seçilmiş paket</p>
-        <p className="mt-1 flex items-baseline justify-between gap-3">
-          <span className="font-serif text-lg font-semibold">{plan.name}</span>
-          <span className="font-serif text-2xl font-semibold text-gold-400">{formatMoney(plan.price)}</span>
-        </p>
+    <Modal open title={`Abunə ol — ${plan.name}`} onClose={onClose} footer={<Button variant="ghost" onClick={onClose}>Bağla</Button>}>
+      <div className="mb-5 flex items-baseline justify-between gap-3 rounded-2xl bg-navy-800 px-5 py-4 text-white">
+        <span className="font-serif text-lg font-semibold">{plan.name} · {plan.durationMonths} ay</span>
+        <span className="font-serif text-2xl font-semibold text-gold-400">{formatMoney(plan.price)}</span>
       </div>
 
-      {phone ? (
-        <div className="mb-5 text-center">
-          <p className="text-sm text-slate-500">Administratorun telefon nömrəsi</p>
-          <a href={`tel:${phone.replace(/[^+\d]/g, "")}`} className="mt-1 block font-serif text-3xl font-semibold tracking-wide text-navy-800 hover:text-gold-600">
-            {phone}
-          </a>
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <a href={`tel:${phone.replace(/[^+\d]/g, "")}`} className="rounded-xl bg-navy-800 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-navy-700">Zəng et</a>
-            {contact?.whatsapp && (
-              <a
-                href={`https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(message)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-500"
-              >
-                WhatsApp
-              </a>
-            )}
-            <button type="button" onClick={copy} className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400">
-              {copied ? "Kopyalandı ✓" : "Nömrəni kopyala"}
+      <h3 className="mb-2 text-sm font-semibold text-navy-800">1. Ödənişi edin</h3>
+      {contact?.m10Account ? (
+        <div className="mb-4 rounded-xl border border-gold-500/40 bg-gold-500/5 px-4 py-3 text-sm">
+          <p className="text-xs uppercase tracking-wider text-slate-500">M10 ilə ödəniş</p>
+          <p className="mt-1 flex flex-wrap items-center gap-2">
+            <span className="font-mono text-lg font-semibold text-navy-800">{contact.m10Account}</span>
+            <button type="button" onClick={() => copy(contact.m10Account ?? "", "m10")} className="rounded-full bg-white px-2.5 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50">
+              {copied === "m10" ? "Kopyalandı ✓" : "Kopyala"}
             </button>
-          </div>
+          </p>
+          {contact.m10Recipient && <p className="text-slate-600">Alan: <strong>{contact.m10Recipient}</strong></p>}
+          <p className="text-slate-600">Məbləğ: <strong>{formatMoney(plan.price)}</strong></p>
+          {contact.paymentNote && <p className="mt-1 text-xs text-slate-500">{contact.paymentNote}</p>}
         </div>
       ) : (
-        <div className="mb-5"><Alert kind="info">Administratorun əlaqə nömrəsi hələ təyin edilməyib. Sorğunuz qeydə alındı — administrator sizinlə əlaqə saxlayacaq.</Alert></div>
+        <div className="mb-4"><Alert kind="info">M10 ödəniş məlumatları hələ əlavə edilməyib. Ödəniş üçün administratorla əlaqə saxlayın.</Alert></div>
+      )}
+      {phone && (
+        <div className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <a href={`tel:${phone.replace(/[^+\d]/g, "")}`} className="rounded-xl bg-navy-800 px-4 py-2.5 text-center text-sm font-medium text-white transition hover:bg-navy-700">Zəng et · {phone}</a>
+          {contact?.whatsapp && (
+            <a href={`https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(message)}`} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-emerald-600 px-4 py-2.5 text-center text-sm font-medium text-white transition hover:bg-emerald-500">
+              Çeki WhatsApp-a göndər
+            </a>
+          )}
+          <button type="button" onClick={() => copy(phone, "phone")} className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400">
+            {copied === "phone" ? "Kopyalandı ✓" : "Nömrəni kopyala"}
+          </button>
+        </div>
       )}
 
-      <ol className="space-y-2 rounded-xl bg-slate-50 px-5 py-4 text-sm text-slate-600">
-        <li><strong className="text-navy-800">1.</strong> Administratorla əlaqə saxlayın və ödənişi edin.</li>
-        <li><strong className="text-navy-800">2.</strong> Ödəniş çekini (qəbzi) WhatsApp ilə administratora göndərin.</li>
-        <li><strong className="text-navy-800">3.</strong> Administrator çeki yoxlayıb abunəliyinizi aktiv edəcək — sayğac avtomatik başlayacaq.</li>
-      </ol>
-      <p className="mt-3 text-xs text-slate-400">Sorğunuz qeydə alınıb. Başqa paket seçsəniz, sorğu yeni paketlə yenilənəcək.</p>
+      <h3 className="mb-2 text-sm font-semibold text-navy-800">2. Təsdiq sorğusu göndərin</h3>
+      {sent ? (
+        <Alert kind="success">Sorğunuz göndərildi. Administrator ödənişi yoxlayıb təsdiqləyəndən sonra mağazanız avtomatik aktiv olacaq və sayğac başlayacaq.</Alert>
+      ) : (
+        <form onSubmit={send} className="space-y-3">
+          {alreadySent && <Alert kind="info">Bu paket üçün sorğunuz artıq var. Yenidən göndərsəniz, məlumatlar yenilənəcək.</Alert>}
+          {error && <Alert>{error}</Alert>}
+          <Field label="M10 / bank əməliyyat nömrəsi" hint="Ödəniş çekindəki əməliyyat nömrəsi (istəyə bağlı)">
+            <Input maxLength={120} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Məs: 123456789" />
+          </Field>
+          <Field label="Ödəniş çeki" hint="Şəkil və ya PDF · maksimum 5 MB (istəyə bağlı — WhatsApp ilə də göndərə bilərsiniz)">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,application/pdf"
+              onChange={(e) => setReceipt(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-navy-800 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-white hover:file:bg-navy-700"
+            />
+          </Field>
+          <Button type="submit" variant="gold" className="w-full py-3" disabled={busy}>
+            {busy ? "Göndərilir…" : "Ödəniş etdim — təsdiq sorğusu göndər"}
+          </Button>
+        </form>
+      )}
+      <p className="mt-3 text-xs text-slate-400">Ödəniş administrator tərəfindən təsdiqlənməyənə qədər mağaza aktivləşdirilmir.</p>
     </Modal>
   );
 }

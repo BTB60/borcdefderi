@@ -25,6 +25,8 @@ const debtStatusLabels = {
 const methodLabels = {
   'CASH': 'Nağd',
   'CARD': 'Kart',
+  'TRANSFER': 'Köçürmə',
+  'OTHER': 'Digər',
 };
 
 const permissionLabels = {

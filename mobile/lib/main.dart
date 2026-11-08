@@ -41,6 +41,25 @@ class _BorcdefteriAppState extends State<BorcdefteriApp> {
           if (session.restoring) {
             return const Scaffold(body: Center(child: CircularProgressIndicator()));
           }
+          if (!session.isSignedIn && session.restoreError != null) {
+            return Scaffold(
+              body: SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.cloud_off, size: 48),
+                      const SizedBox(height: 12),
+                      Text(session.restoreError!, textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      FilledButton(onPressed: session.restore, child: const Text('Yenidən cəhd et')),
+                      TextButton(onPressed: session.logout, child: const Text('Çıxış')),
+                    ]),
+                  ),
+                ),
+              ),
+            );
+          }
           if (!session.isSignedIn) {
             return AuthScreen(session: session);
           }

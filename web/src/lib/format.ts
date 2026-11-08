@@ -39,7 +39,21 @@ export const DEBT_STATUS_LABEL: Record<DebtStatus, string> = {
 export const METHOD_LABEL: Record<PaymentMethod, string> = {
   CASH: "Nağd",
   CARD: "Kart",
+  TRANSFER: "Köçürmə",
+  OTHER: "Digər",
 };
+
+export const METHOD_TONE: Record<PaymentMethod, "emerald" | "sky" | "gold" | "slate"> = {
+  CASH: "emerald",
+  CARD: "sky",
+  TRANSFER: "gold",
+  OTHER: "slate",
+};
+
+/** Today's date (YYYY-MM-DD) in the business time zone — not UTC, which is "yesterday" in Baku before 04:00. */
+export function todayBaku(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baku", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
 
 export const PERMISSION_LABEL: Record<Permission, string> = {
   CUSTOMER_DEBTS: "Müştəri borcları",

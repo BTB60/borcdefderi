@@ -13,22 +13,22 @@ Hər mağaza öz təcrid olunmuş iş sahəsinə malikdir: müştəri borcları,
 | `mobile/` | Android/iOS tətbiqi (eyni REST API) | Flutter 3.47, Dart 3.13 |
 | `docs/` | API, deployment, backup sənədləri | |
 | `render.yaml` | Render Blueprint (backend) | |
-| `.github/workflows/ci.yml` | CI: backend testləri + web build | |
+| `.github/workflows/ci.yml` | CI: backend testləri + web build + Flutter analyze/test | |
 
 ## Status
 
 Hazırdır və yoxlanılıb:
 
-- **Backend** — 41 inteqrasiya testi real PostgreSQL üzərində keçir (`mvn test`).
+- **Backend** — 57 inteqrasiya testi real PostgreSQL üzərində keçir (`mvn test`).
   - Qeydiyyat, giriş (BCrypt, JWT), rol və abunəlik qapısı, sorğu limiti (rate limit)
   - Tenant izolyasiyası (başqa mağazanın qeydi 404, mağaza ID-si istəkdən qəbul olunmur, dayandırılmış mağaza)
   - Müştəri borcu, şirkət alacağı, şirkət borcu (üç ayrı bölmə), qismən/tam ödəniş, overpayment qadağası, versiya konflikti
-  - Nağd və kart ödənişləri, maliyyə jurnalının yalnız əlavə etmə (append-only) olması (DB trigger ilə)
-  - Abunəlik: PENDING → ACTIVE / REJECTED → EXPIRED, yeniləmə, qəbz yükləmə (magic-bytes yoxlaması), plan qiyməti
+  - Nağd, kart, köçürmə (M10/bank) və digər ödənişlər; ödəniş çeki (PDF); gündəlik/aylıq ödəniş hesabatı (Excel/PDF); maliyyə jurnalının yalnız əlavə etmə (append-only) olması (DB trigger ilə)
+  - Abunəlik: Aylıq / 6 aylıq / İllik paket, M10 ödəniş məlumatı, təsdiq sorğusu (istinad nömrəsi + çek, bazada saxlanılır), Super Admin təsdiqi, PENDING → ACTIVE / REJECTED → EXPIRED, bitmə bildirişi, sayğac
   - İşçi icazələri, yalnız sahibə aid əməliyyatlar, işçinin deaktivləşdirilməsi
   - Panel rəqəmləri PostgreSQL-dən hesablanır; Excel və PDF eksportu (Azərbaycan hərfləri üçün DejaVu şrifti)
 - **Web** — `npm run build`, `npm run lint`, `tsc --noEmit` keçir. Səhifələr: giriş, qeydiyyat, panel, borc bölmələri (axtarış, filtr, ödəniş, tarixçə, redaktə, eksport), ödənişlər, müştəri/şirkət siyahısı, abunəlik, işçilər, Super Admin paneli (mağazalar, sorğu təsdiqi, planlar, gəlir, istifadəçilər, audit).
-- **Mobil (Flutter)** — `flutter analyze` xətasız, 12 unit test keçir (API client, sessiya, modellər, formatlama). Ekranlar: giriş/qeydiyyat, panel, üç borc bölməsi (axtarış, filtr, yeni borc, tarixçə), nağd/kart ödəniş, ödənişlər, abunəlik, bildirişlər. Bax: [mobile/README.md](mobile/README.md).
+- **Mobil (Flutter)** — `flutter analyze` xətasız, 19 unit test keçir (API client, sessiya, modellər, formatlama, sayğac, WhatsApp). Android release APK build alınır. Ekranlar: giriş/qeydiyyat, panel, üç borc bölməsi (axtarış, filtr, yeni borc, tarixçə), nağd/kart ödəniş, ödənişlər, abunəlik, bildirişlər. Bax: [mobile/README.md](mobile/README.md).
 - **API canlı yoxlaması** — yerli PostgreSQL ilə backend işə salınıb və curl ilə qeydiyyat → abunəlik təsdiqi → müştəri → borc → qismən ödəniş → overpayment rədd → panel → Excel/PDF axını yoxlanılıb.
 
 Hələ edilməyib (açıq qalan işlər):

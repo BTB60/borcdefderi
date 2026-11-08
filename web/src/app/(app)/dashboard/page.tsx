@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { DEBT_STATUS_LABEL, DEBT_TYPE_LABEL, METHOD_LABEL, formatDate, formatDateTime, formatMoney } from "@/lib/format";
+import { DEBT_STATUS_LABEL, DEBT_TYPE_LABEL, METHOD_LABEL, METHOD_TONE, formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { Dashboard } from "@/lib/types";
 import { Alert, Badge, Card, EmptyState, PageHeader, Spinner, StatCard, Table, Td, Th } from "@/components/ui";
 
-function BarChart({ data, label }: { data: { label: string; value: number; cash: number; card: number }[]; label: string }) {
+function BarChart({ data, label }: { data: { label: string; value: number; cash: number; card: number; other: number }[]; label: string }) {
   const max = Math.max(1, ...data.map((d) => d.value));
   return (
     <div role="img" aria-label={label} className="flex h-48 items-end gap-1.5 sm:gap-2">
@@ -18,7 +18,7 @@ function BarChart({ data, label }: { data: { label: string; value: number; cash:
             <div
               className="w-full rounded-t-md bg-gradient-to-t from-navy-800 to-navy-600 transition-all duration-500 group-hover:from-gold-600 group-hover:to-gold-400"
               style={{ height: `${Math.max(3, (d.value / max) * 100)}%` }}
-              title={`${d.label}: ${formatMoney(d.value)} (nağd ${formatMoney(d.cash)}, kart ${formatMoney(d.card)})`}
+              title={`${d.label}: ${formatMoney(d.value)} (nağd ${formatMoney(d.cash)}, kart ${formatMoney(d.card)}, köçürmə/digər ${formatMoney(d.other)})`}
             />
           </div>
           <span className="text-[10px] text-slate-400 sm:text-xs">{d.label}</span>
@@ -58,25 +58,29 @@ export default function DashboardPage() {
     value: d.total,
     cash: d.cash,
     card: d.card,
+    other: d.other ?? 0,
   }));
   const monthly = data.monthly.map((m) => ({
     label: m.month.slice(5) + "/" + m.month.slice(2, 4),
     value: m.total,
     cash: m.cash,
     card: m.card,
+    other: m.other ?? 0,
   }));
 
   return (
     <>
       <PageHeader title="Panel" subtitle="Bütün rəqəmlər birbaşa veritabanından hesablanır" />
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="Əsas göstəricilər">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Əsas göstəricilər">
         <StatCard label="Müştəri borcları" value={formatMoney(s.customerDebts)} hint="Qalıq məbləğ" tone="navy" />
         <StatCard label="Şirkət alacaqları" value={formatMoney(s.companyReceivables)} hint="Qalıq məbləğ" tone="emerald" />
         <StatCard label="Şirkət borcları" value={formatMoney(s.companyPayables)} hint="Ödənilməli qalıq" tone="rose" />
         <StatCard label="Nağd ödənişlər (cəmi)" value={formatMoney(s.cashReceived)} tone="gold" />
         <StatCard label="Kart ödənişləri (cəmi)" value={formatMoney(s.cardReceived)} tone="sky" />
-        <StatCard label="Bu gün" value={formatMoney(s.todayTotal)} hint={`Nağd ${formatMoney(s.todayCash)} · Kart ${formatMoney(s.todayCard)}`} tone="amber" />
+        <StatCard label="Köçürmə və digər (cəmi)" value={formatMoney(s.otherReceived ?? 0)} tone="navy" />
+        <StatCard label="Bu gün" value={formatMoney(s.todayTotal)} hint={`Nağd ${formatMoney(s.todayCash)} · Kart ${formatMoney(s.todayCard)} · Digər ${formatMoney(s.todayOther ?? 0)}`} tone="amber" />
+        <StatCard label="Bu ay" value={formatMoney(s.monthTotal)} hint={`Nağd ${formatMoney(s.monthCash)} · Kart ${formatMoney(s.monthCard)} · Digər ${formatMoney(s.monthOther ?? 0)}`} tone="emerald" />
       </section>
 
       <section className="mt-6 grid gap-6 xl:grid-cols-3">
@@ -120,7 +124,7 @@ export default function DashboardPage() {
                   <tr key={p.id} className="transition hover:bg-slate-50/60">
                     <Td>{formatDateTime(p.paidAt)}</Td>
                     <Td className="font-medium text-navy-800">{p.partyName}</Td>
-                    <Td><Badge tone={p.paymentMethod === "CASH" ? "emerald" : "sky"}>{METHOD_LABEL[p.paymentMethod]}</Badge></Td>
+                    <Td><Badge tone={METHOD_TONE[p.paymentMethod]}>{METHOD_LABEL[p.paymentMethod]}</Badge></Td>
                     <Td className="text-right font-medium tabular-nums">{formatMoney(p.amount)}</Td>
                   </tr>
                 ))}

@@ -34,7 +34,13 @@ class MemoryTokenStore implements TokenStore {
 
 /// Holds the signed-in user and performs auth calls against the shared REST API.
 class Session extends ChangeNotifier {
-  Session({required this.api, required this.tokens});
+  Session({required this.api, required this.tokens}) {
+    api.onUnauthorized = () {
+      if (me != null) {
+        _clear().then((_) => notifyListeners());
+      }
+    };
+  }
 
   final ApiClient api;
   final TokenStore tokens;
@@ -42,9 +48,14 @@ class Session extends ChangeNotifier {
   Me? me;
   bool restoring = true;
 
+  /// Set when the saved session could not be checked (no internet / server down). The token is kept.
+  String? restoreError;
+
   bool get isSignedIn => me != null;
 
   Future<void> restore() async {
+    restoring = true;
+    restoreError = null;
     final saved = await tokens.read();
     if (saved == null) {
       restoring = false;
@@ -54,8 +65,12 @@ class Session extends ChangeNotifier {
     api.setToken(saved);
     try {
       me = Me.fromJson(await api.get('/api/auth/me') as Map<String, dynamic>);
-    } on ApiException {
-      await _clear();
+    } on ApiException catch (e) {
+      if (e.status == 401) {
+        await _clear(); // expired or revoked: sign in again
+      } else {
+        restoreError = e.message; // offline / server error: do NOT sign the user out
+      }
     } finally {
       restoring = false;
       notifyListeners();

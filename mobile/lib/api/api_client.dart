@@ -26,6 +26,9 @@ class ApiClient {
 
   void setToken(String? token) => _token = token;
 
+  /// Called when a signed-in request gets 401 (token expired or account disabled); the session signs out.
+  void Function()? onUnauthorized;
+
   Uri _uri(String path, [Map<String, String>? query]) {
     final base = Uri.parse(baseUrl);
     return base.replace(path: path, queryParameters: (query == null || query.isEmpty) ? null : query);
@@ -77,6 +80,9 @@ class ApiClient {
       } catch (_) {
         // non-JSON error body
       }
+    }
+    if (res.statusCode == 401 && _token != null && onUnauthorized != null) {
+      onUnauthorized!();
     }
     throw ApiException(res.statusCode, code, message, fields);
   }

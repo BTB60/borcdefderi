@@ -101,10 +101,11 @@ public class AuthService {
     }
 
     public MeResponse me(UUID userId) {
-        record Base(String email, String fullName, String platformRole) {}
-        Base base = jdbc.sql("SELECT email, full_name, platform_role FROM users WHERE id = :id")
+        record Base(String email, String fullName, String platformRole, String phone, java.time.OffsetDateTime avatarAt) {}
+        Base base = jdbc.sql("SELECT email, full_name, platform_role, phone, avatar_updated_at FROM users WHERE id = :id")
                 .param("id", userId)
-                .query((rs, n) -> new Base(rs.getString("email"), rs.getString("full_name"), rs.getString("platform_role")))
+                .query((rs, n) -> new Base(rs.getString("email"), rs.getString("full_name"), rs.getString("platform_role"),
+                        rs.getString("phone"), rs.getObject("avatar_updated_at", java.time.OffsetDateTime.class)))
                 .single();
 
         CurrentMember member = null;
@@ -126,7 +127,10 @@ public class AuthService {
                 member == null ? null : member.storeId(),
                 member == null ? null : member.storeName(),
                 member == null ? null : member.permissions().stream().sorted().toList(),
-                subscription
+                subscription,
+                base.phone(),
+                base.avatarAt() != null,
+                base.avatarAt() == null ? null : base.avatarAt().toInstant().toEpochMilli()
         );
     }
 

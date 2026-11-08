@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 
 /// Business or transport error with the server's stable code and Azerbaijani message.
 class ApiException implements Exception {
@@ -101,6 +102,17 @@ class ApiClient {
     }
     throw ApiException(res.statusCode, code, message, fields);
   }
+
+  Future<dynamic> delete(String path) => _send(() => _http.delete(_uri(path), headers: _headers()));
+
+  /// Multipart upload of one file (e.g. the profile picture).
+  Future<dynamic> upload(String path, String field, List<int> bytes, String fileName, String contentType) =>
+      _send(() async {
+        final req = http.MultipartRequest('POST', _uri(path))
+          ..headers.addAll(_headers())
+          ..files.add(http.MultipartFile.fromBytes(field, bytes, filename: fileName, contentType: MediaType.parse(contentType)));
+        return http.Response.fromStream(await _http.send(req));
+      });
 
   void close() => _http.close();
 }

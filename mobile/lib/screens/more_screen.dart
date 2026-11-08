@@ -10,6 +10,7 @@ import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'notifications_screen.dart';
+import 'profile_screen.dart';
 
 /// Profile, subscription information, notifications and sign-out.
 class MoreScreen extends StatelessWidget {
@@ -26,10 +27,12 @@ class MoreScreen extends StatelessWidget {
       body: ListView(padding: const EdgeInsets.all(16), children: [
         Card(
           child: ListTile(
-            leading: const CircleAvatar(backgroundColor: navy, child: Icon(Icons.person, color: gold)),
+            leading: UserAvatar(session: session, name: me.fullName, version: me.hasAvatar ? me.avatarVersion : null),
             title: Text(me.fullName, style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text('${me.email}\n${me.isOwner ? 'Mağaza sahibi' : me.isSuperAdmin ? 'Platforma administratoru' : 'İşçi'}'),
             isThreeLine: true,
+            trailing: const Icon(Icons.settings_outlined),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProfileScreen(session: session))),
           ),
         ),
         const SizedBox(height: 12),

@@ -48,7 +48,8 @@ public class JwtService {
             Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
             return Optional.of(new AuthenticatedUser(
                     UUID.fromString(claims.getSubject()),
-                    claims.get(CLAIM_PLATFORM_ROLE, String.class)));
+                    claims.get(CLAIM_PLATFORM_ROLE, String.class),
+                    claims.getIssuedAt() == null ? Instant.EPOCH : claims.getIssuedAt().toInstant()));
         } catch (JwtException | IllegalArgumentException e) {
             return Optional.empty();
         }

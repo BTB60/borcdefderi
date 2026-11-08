@@ -129,3 +129,16 @@ Gövdə: `{ "name", "phone?", "note?" }`.
 | GET | `/api/public/receipts/{id}/{token}` | **Girişsiz** — çek PDF brauzerdə açılır. `token` = HMAC-SHA256 (JWT_SECRET-dən törədilmiş açar); yanlış/saxta token → `404`. `JWT_SECRET` dəyişsə köhnə linklər etibarsız olur |
 
 Ödəniş cavablarında (`POST /api/debts/{id}/payments`, `GET /api/payments`) `receiptUrl` sahəsi də qaytarılır.
+
+## Parametrlər (profil) — bütün rollar
+
+| Metod | Yol | Qeyd |
+|---|---|---|
+| GET | `/api/profile` | Öz profili (mağaza sahibi üçün mağaza məlumatı da) |
+| PUT | `/api/profile` | `{fullName, phone?, email?, currentPassword?}` — e-poçt dəyişirsə cari şifrə tələb olunur |
+| PUT | `/api/profile/store` | `{name, phone?, address?}` — yalnız mağaza sahibi |
+| PUT | `/api/profile/password` | `{currentPassword, newPassword}` (≥8, admin ≥12) → yeni `{token, …}`. Əvvəl verilmiş tokenlər etibarsız olur (digər cihazlarda çıxış) |
+| POST | `/api/profile/avatar` | `multipart file` — PNG/JPG ≤3 MB; 256×256 PNG-yə çevrilir (EXIF silinir) |
+| GET / DELETE | `/api/profile/avatar` | Öz profil şəkli (başqasının şəkli verilmir) |
+
+Abunəlik tələb olunmur. Şifrə yoxlanan sorğular (`PUT /api/profile`, `PUT /api/profile/password`) giriş kimi rate limit-ə tabedir. `/api/auth/me` cavabında `phone`, `hasAvatar`, `avatarVersion` var.

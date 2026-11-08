@@ -14,5 +14,9 @@ public record MeResponse(
         UUID storeId,
         String storeName,
         List<String> permissions,
-        SubscriptionSummary subscription
+        SubscriptionSummary subscription,
+        String phone,
+        boolean hasAvatar,
+        /** Changes whenever the profile picture changes — clients use it to refresh their cached image. */
+        Long avatarVersion
 ) {}

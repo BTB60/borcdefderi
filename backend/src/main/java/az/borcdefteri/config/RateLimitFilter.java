@@ -31,7 +31,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !("POST".equalsIgnoreCase(request.getMethod()) && request.getRequestURI().startsWith("/api/auth/"));
+        String uri = request.getRequestURI();
+        boolean login = "POST".equalsIgnoreCase(request.getMethod()) && uri.startsWith("/api/auth/");
+        // Password checks on the profile (change password / change e-mail) are limited the same way.
+        boolean passwordCheck = "PUT".equalsIgnoreCase(request.getMethod())
+                && (uri.equals("/api/profile/password") || uri.equals("/api/profile"));
+        return !(login || passwordCheck);
     }
 
     @Override

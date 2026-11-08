@@ -37,7 +37,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    JwtService jwtService,
                                                    AppProperties props,
-                                                   ObjectMapper objectMapper) throws Exception {
+                                                   ObjectMapper objectMapper,
+                                                   org.springframework.jdbc.core.simple.JdbcClient jdbc) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
@@ -57,7 +58,7 @@ public class SecurityConfig {
                                 writeError(res, objectMapper, 403, "FORBIDDEN", "Bu əməliyyat üçün icazəniz yoxdur")))
                 .addFilterBefore(new RateLimitFilter(props.rateLimit().authRequestsPerMinute(), objectMapper),
                         UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(new JwtAuthenticationFilter(jwtService, jdbc), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 

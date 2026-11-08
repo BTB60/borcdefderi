@@ -101,6 +101,11 @@ class Me {
   final String? storeName;
   final List<String> permissions;
   final SubscriptionSummary? subscription;
+  final String? phone;
+  final bool hasAvatar;
+
+  /// Changes whenever the profile picture changes (cache key for the downloaded image).
+  final int? avatarVersion;
 
   const Me({
     required this.userId,
@@ -111,6 +116,9 @@ class Me {
     required this.storeName,
     required this.permissions,
     required this.subscription,
+    this.phone,
+    this.hasAvatar = false,
+    this.avatarVersion,
   });
 
   bool get isOwner => role == 'STORE_OWNER';
@@ -128,6 +136,9 @@ class Me {
         subscription: j['subscription'] == null
             ? null
             : SubscriptionSummary.fromJson(j['subscription'] as Map<String, dynamic>),
+        phone: _str(j['phone']),
+        hasAvatar: j['hasAvatar'] as bool? ?? false,
+        avatarVersion: (j['avatarVersion'] as num?)?.toInt(),
       );
 }
 
@@ -318,5 +329,48 @@ class Plan {
         name: j['name'] as String,
         price: _num(j['price']),
         durationMonths: (j['durationMonths'] as num).toInt(),
+      );
+}
+
+/// The signed-in user's own profile ("Parametrlər").
+class Profile {
+  final String email;
+  final String fullName;
+  final String? phone;
+  final String platformRole;
+  final String? role;
+  final String? storeName;
+  final String? storePhone;
+  final String? storeAddress;
+  final bool hasAvatar;
+  final int? avatarVersion;
+
+  const Profile({
+    required this.email,
+    required this.fullName,
+    this.phone,
+    required this.platformRole,
+    this.role,
+    this.storeName,
+    this.storePhone,
+    this.storeAddress,
+    this.hasAvatar = false,
+    this.avatarVersion,
+  });
+
+  bool get isOwner => role == 'STORE_OWNER';
+  bool get isSuperAdmin => platformRole == 'SUPER_ADMIN';
+
+  factory Profile.fromJson(Map<String, dynamic> j) => Profile(
+        email: j['email'] as String,
+        fullName: j['fullName'] as String,
+        phone: _str(j['phone']),
+        platformRole: j['platformRole'] as String? ?? 'USER',
+        role: _str(j['role']),
+        storeName: _str(j['storeName']),
+        storePhone: _str(j['storePhone']),
+        storeAddress: _str(j['storeAddress']),
+        hasAvatar: j['hasAvatar'] as bool? ?? false,
+        avatarVersion: (j['avatarVersion'] as num?)?.toInt(),
       );
 }

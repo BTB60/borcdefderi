@@ -110,6 +110,9 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// After a password change: this device continues with the new token (other devices are signed out).
+  Future<void> applyAuthResponse(Map<String, dynamic> res) => _apply(res);
+
   Future<void> _apply(Map<String, dynamic> res) async {
     final token = res['token'] as String;
     api.setToken(token);

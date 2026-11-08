@@ -33,6 +33,25 @@ export interface Me {
   storeName: string | null;
   permissions: Permission[] | null;
   subscription: SubscriptionSummary | null;
+  phone?: string | null;
+  hasAvatar?: boolean;
+  /** Changes whenever the profile picture changes. */
+  avatarVersion?: number | null;
+}
+
+export interface Profile {
+  userId: string;
+  email: string;
+  fullName: string;
+  phone: string | null;
+  platformRole: "SUPER_ADMIN" | "USER";
+  role: "STORE_OWNER" | "EMPLOYEE" | null;
+  storeId: string | null;
+  storeName: string | null;
+  storePhone: string | null;
+  storeAddress: string | null;
+  hasAvatar: boolean;
+  avatarVersion: number | null;
 }
 
 export interface AuthResponse {

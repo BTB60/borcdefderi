@@ -8,6 +8,9 @@ import { api } from "@/lib/api";
 import type { Notification, Permission } from "@/lib/types";
 import { cx } from "./ui";
 import { Countdown } from "./Countdown";
+import { Avatar } from "./Avatar";
+
+const SETTINGS_ICON = "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.2-1.3L14.3 3h-4l-.4 2.5a7.6 7.6 0 0 0-2.2 1.3l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.6l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2.2 1.3l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.2-1.3l2.4 1 2-3.4-2-1.6c.1-.4.1-.9.1-1.3Z";
 
 type NavItem = { href: string; label: string; icon: string; permission?: Permission; ownerOnly?: boolean };
 
@@ -20,9 +23,13 @@ const STORE_NAV: NavItem[] = [
   { href: "/kontragentlar", label: "Müştəri və şirkətlər", icon: "M16 11a4 4 0 1 0-8 0M3 21a9 9 0 0 1 18 0" },
   { href: "/abunelik", label: "Abunəlik", icon: "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z" },
   { href: "/isciler", label: "İşçilər", icon: "M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 8a6 6 0 0 1 12 0", ownerOnly: true },
+  { href: "/profil", label: "Parametrlər", icon: SETTINGS_ICON },
 ];
 
-const ADMIN_NAV: NavItem[] = [{ href: "/admin", label: "Platforma idarəetməsi", icon: "M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7l3-7Z" }];
+const ADMIN_NAV: NavItem[] = [
+  { href: "/admin", label: "Platforma idarəetməsi", icon: "M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7l3-7Z" },
+  { href: "/profil", label: "Parametrlər", icon: SETTINGS_ICON },
+];
 
 function Icon({ d, className }: { d: string; className?: string }) {
   return (
@@ -104,15 +111,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               )}
             </div>
           )}
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gold-500/90 text-sm font-semibold text-navy-900">
-              {(me?.fullName ?? "?").charAt(0).toUpperCase()}
-            </div>
+          <Link href="/profil" className="-mx-2 flex items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-white/5" title="Parametrlər">
+            <Avatar name={me?.fullName} version={me?.hasAvatar ? me?.avatarVersion : null} size={36} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{me?.fullName}</p>
               <p className="truncate text-xs text-white/50">{roleLabel}</p>
             </div>
-          </div>
+          </Link>
           <button onClick={signOut} className="w-full rounded-xl border border-white/15 px-3 py-2 text-sm text-white/80 transition hover:border-gold-500 hover:text-gold-400">
             Çıxış
           </button>

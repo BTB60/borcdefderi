@@ -17,12 +17,12 @@ Sistem lokal mühitdə uçdan-uca işləyir: qeydiyyat → paket seçimi → M10
 | Test | Nəticə |
 |---|---|
 | Backend build (`mvn package`) | PASS |
-| Backend inteqrasiya testləri (real PostgreSQL, 8 sinif) | **PASS — 58/58** |
+| Backend inteqrasiya testləri (real PostgreSQL, 9 sinif) | **PASS — 63/63** |
 | Frontend lint (`next lint`) | PASS — 0 xəta |
 | Frontend typecheck (`tsc --noEmit`) | PASS |
 | Frontend production build (`next build`) | PASS — 12 səhifə |
 | Flutter analyze | PASS — 0 problem |
-| Flutter testləri | **PASS — 21/21** |
+| Flutter testləri | **PASS — 23/23** |
 | Android release APK (`flutter build apk --release`) | PASS — 50.6 MB |
 | Miqrasiya V2→V3 mövcud məlumatla (12 cədvəl, sətir sayı əvvəl/sonra eyni) | PASS |
 | API uçdan-uca yoxlama (işləyən server, miqrasiya olunmuş baza) | **PASS — 16/16** |
@@ -66,6 +66,15 @@ Sistem lokal mühitdə uçdan-uca işləyir: qeydiyyat → paket seçimi → M10
 | Ödəniş çeki (PDF, mağaza adı, qalıq borc) | PASS | ProductionHardeningTest, smoke, PDF baxılıb |
 | WhatsApp borc xatırlatması və ödəniş bildirişi | **WARNING** | Hazır mətnlə WhatsApp açılır, mesajı mağaza özü göndərir. Avtomatik göndərmə WhatsApp Business API (pullu provayder) tələb edir |
 | Ödəniş çekini WhatsApp ilə göndərmək | PASS | Mesajda çekin təhlükəsiz linki (HMAC, təxmin edilə bilməz, girişsiz açılır); telefonlarda PDF faylın özü də paylaşılır (web: Web Share, mobil: share_plus). ProductionHardeningTest + canlı yoxlama |
+
+### Parametrlər (admin, sahib, işçi)
+| Funksiya | Status |
+|---|---|
+| Şifrəni dəyişmək (cari şifrə ilə; digər cihazlarda avtomatik çıxış) | PASS (ProfileTest + canlı yoxlama) |
+| Şəxsi məlumatlar (ad, telefon, e-poçt — e-poçt üçün şifrə tələb olunur) | PASS |
+| Mağaza məlumatları (yalnız sahib) | PASS |
+| Profil şəkli (PNG/JPG, 256×256, EXIF silinir, yalnız özünə görünür) | PASS. Mobil kamera/qalereya cihazda NOT TESTED |
+| Deaktiv istifadəçinin köhnə tokeni rədd olunur | PASS |
 
 ### Abunəlik sistemi
 | Funksiya | Status |

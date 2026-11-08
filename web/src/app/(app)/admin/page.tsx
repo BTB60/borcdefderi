@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th } from "@/components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
 import { ApiError, api, openProtected } from "@/lib/api";
 import { Countdown, WARN_DAYS, countdown, useNow } from "@/components/Countdown";
 import { SUBSCRIPTION_STATUS_LABEL, formatDate, formatDateTime, formatMoney, planPeriodLabel } from "@/lib/format";
@@ -106,6 +106,7 @@ function StoresTab({ onError, onNotice }: TabProps) {
   const [extending, setExtending] = useState<AdminStore | null>(null);
   const [activating, setActivating] = useState<AdminStore | null>(null);
   const [historyOf, setHistoryOf] = useState<AdminStore | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
   const [filter, setFilter] = useState<StoreFilter>("attention");
   const [reload, setReload] = useState(0);
   const now = useNow(1000);
@@ -120,7 +121,7 @@ function StoresTab({ onError, onNotice }: TabProps) {
 
   async function toggle(s: AdminStore) {
     const action = s.status === "ACTIVE" ? "suspend" : "activate";
-    if (action === "suspend" && !window.confirm(`“${s.name}” mağazasını dayandırmaq istədiyinizə əminsiniz?`)) return;
+    if (action === "suspend" && !(await confirm(`“${s.name}” mağazasını dayandırmaq istədiyinizə əminsiniz? Mağazanın bütün istifadəçiləri sistemə giriş edə bilməyəcək.`, { title: "Mağazanı dayandır", confirmLabel: "Bəli, dayandır", danger: true }))) return;
     try {
       await api(`/api/admin/stores/${s.id}/${action}`, { method: "POST" });
       onNotice?.(action === "suspend" ? "Mağaza dayandırıldı" : "Mağaza aktivləşdirildi");
@@ -237,6 +238,7 @@ function StoresTab({ onError, onNotice }: TabProps) {
           </Table>
         )}
       </Card>
+      {confirmDialog}
       {historyOf && <StoreHistoryModal store={historyOf} onClose={() => setHistoryOf(null)} />}
       {activating && (
         <ActivateModal
@@ -448,6 +450,8 @@ function SubscriptionsTab({ onError, onNotice }: TabProps) {
   const [items, setItems] = useState<SubscriptionRecord[] | null>(null);
   const [rejecting, setRejecting] = useState<SubscriptionRecord | null>(null);
   const [reload, setReload] = useState(0);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   useEffect(() => {
     setItems(null);
@@ -458,13 +462,25 @@ function SubscriptionsTab({ onError, onNotice }: TabProps) {
   }, [status, reload]);
 
   async function approve(s: SubscriptionRecord) {
-    if (!window.confirm(`${s.storeName} — ${s.planName} (${formatMoney(s.amount)}) ödənişini təsdiqləyirsiniz?`)) return;
+    const ok = await confirm(
+      <>
+        <strong>{s.storeName}</strong> — {s.planName} ({formatMoney(s.amount)}) ödənişini təsdiqləyirsiniz?
+        {s.payerReference && <span className="mt-2 block text-xs text-slate-500">M10 / istinad: {s.payerReference}</span>}
+        <span className="mt-2 block text-xs text-slate-500">Təsdiqdən sonra mağaza dərhal aktiv olacaq və sayğac başlayacaq.</span>
+      </>,
+      { title: "Ödənişi təsdiqlə", confirmLabel: "Bəli, təsdiqlə və aktiv et" },
+    );
+    if (!ok) return;
+    setBusyId(s.id);
+    onError(null);
     try {
       await api(`/api/admin/subscriptions/${s.id}/approve`, { method: "POST" });
       onNotice?.("Abunəlik təsdiqləndi və aktivləşdirildi");
       setReload((r) => r + 1);
     } catch (e) {
       onError(errorText(e, "Təsdiq alınmadı"));
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -505,7 +521,7 @@ function SubscriptionsTab({ onError, onNotice }: TabProps) {
                       {s.status === "PENDING" && (
                         <>
                           <Button variant="outline" onClick={() => setRejecting(s)}>Rədd et</Button>
-                          <Button variant="gold" onClick={() => approve(s)}>Təsdiqlə</Button>
+                          <Button variant="gold" disabled={busyId === s.id} onClick={() => approve(s)}>{busyId === s.id ? "Təsdiqlənir…" : "Təsdiqlə"}</Button>
                         </>
                       )}
                     </div>
@@ -516,6 +532,7 @@ function SubscriptionsTab({ onError, onNotice }: TabProps) {
           </Table>
         )}
       </Card>
+      {confirmDialog}
       {rejecting && (
         <RejectModal
           sub={rejecting}

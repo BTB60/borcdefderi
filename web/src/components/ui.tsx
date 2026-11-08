@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 
 export function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -177,4 +177,50 @@ export function Th({ children, className }: { children?: ReactNode; className?: 
 
 export function Td({ children, className }: { children?: ReactNode; className?: string }) {
   return <td className={cx("whitespace-nowrap px-4 py-3 text-slate-700", className)}>{children}</td>;
+}
+
+type ConfirmOptions = { title?: string; confirmLabel?: string; danger?: boolean };
+
+/**
+ * In-app confirmation dialog. Use this instead of window.confirm: some browsers and embedded webviews block
+ * native dialogs and window.confirm then returns false immediately, so the action silently never runs.
+ * Usage: const [confirm, confirmDialog] = useConfirm(); … if (!(await confirm("…"))) return; … render {confirmDialog}.
+ */
+export function useConfirm(): [(message: ReactNode, options?: ConfirmOptions) => Promise<boolean>, ReactNode] {
+  const [state, setState] = useState<{ message: ReactNode; options: ConfirmOptions } | null>(null);
+  const resolver = useRef<((ok: boolean) => void) | null>(null);
+
+  const confirm = useCallback((message: ReactNode, options: ConfirmOptions = {}) => {
+    resolver.current?.(false);
+    setState({ message, options });
+    return new Promise<boolean>((resolve) => {
+      resolver.current = resolve;
+    });
+  }, []);
+
+  const close = (ok: boolean) => {
+    resolver.current?.(ok);
+    resolver.current = null;
+    setState(null);
+  };
+
+  const dialog = state ? (
+    <Modal
+      open
+      title={state.options.title ?? "Təsdiq"}
+      onClose={() => close(false)}
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => close(false)}>Ləğv et</Button>
+          <Button variant={state.options.danger ? "danger" : "gold"} onClick={() => close(true)} autoFocus>
+            {state.options.confirmLabel ?? "Bəli, təsdiqlə"}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-slate-700">{state.message}</p>
+    </Modal>
+  ) : null;
+
+  return [confirm, dialog];
 }

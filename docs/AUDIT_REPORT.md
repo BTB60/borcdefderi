@@ -48,6 +48,7 @@ Sistem lokal mühitdə uçdan-uca işləyir: qeydiyyat → paket seçimi → M10
 | 13 | Bildirişlərdə icazə filtri LIMIT-dən sonra tətbiq olunurdu | Aşağı | Düzəldildi |
 | 14 | Yükləmə adlarında Azərbaycan hərfləri pozulurdu | Aşağı | Düzəldildi (RFC 5987) |
 | 15 | Abunəlik bitəndə mağazaya bildiriş yox idi | Orta | Düzəldildi (tətbiqdaxili bildiriş) |
+| 16 | Admin paneldə **“Təsdiqlə” düyməsi işləmirdi**: `window.confirm` bəzi brauzerlərdə/daxili pəncərələrdə bloklanır və dərhal `false` qaytarır. “Dayandır” düyməsində də eyni problem | Yüksək | Düzəldildi: saytın öz təsdiq pəncərəsi (`useConfirm`), brauzerdə yoxlanılıb |
 
 ## 4. Funksiyalar
 

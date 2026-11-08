@@ -12,6 +12,9 @@ Bu sənəd hazır konfiqurasiyaları izah edir. **Heç bir yerləşdirmə icra e
    ```
 
 3. İstifadəçi adı və şifrəni ayrıca `DATABASE_USERNAME` / `DATABASE_PASSWORD` kimi verin (URL-də saxlamayın).
+   **Birbaşa host-u** (`-pooler` olmayan) istifadə edin: tətbiqin öz connection pool-u var, Flyway isə sessiya bağlantısı tələb edir.
+   Neon `channel_binding=require` parametri Java sürücüsü üçün lazım deyil — `?sslmode=require` kifayətdir.
+   Render servisi Neon ilə **eyni regionda** olmalıdır (`render.yaml`-da `region: ohio` = AWS us-east-2).
 4. Flyway ilk işə salınmada cədvəlləri və planları özü yaradır (`backend/src/main/resources/db/migration`). Əl ilə SQL işlətmək lazım deyil.
 5. Neon-da avtomatik ehtiyat nüsxə / point-in-time restore planınızı yoxlayın (bax: [BACKUP.md](BACKUP.md)).
 
@@ -26,7 +29,7 @@ Kök qovluqdakı `render.yaml` Blueprint-dir (servis: `borcdefteri-api`, `rootDi
    |---|---|
    | `DATABASE_URL` | Neon JDBC URL (yuxarıya bax) |
    | `DATABASE_USERNAME` / `DATABASE_PASSWORD` | Neon istifadəçisi |
-   | `JWT_SECRET` | Ən azı 32 simvol. Məs: `openssl rand -base64 48` |
+   | `JWT_SECRET` | **Render özü yaradır** (`generateValue: true`) — heç nə yazmağa ehtiyac yoxdur |
    | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | İlk Super Admin (şifrə ≥12 simvol). Hesab yalnız ilk işə salınmada yaradılır |
    | `APP_WEB_URL` | Vercel URL-i (şifrə bərpa linkləri üçün), məs. `https://borcdefteri.vercel.app` |
    | `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` | **İstəyə bağlı** — "Şifrəni unutdum" e-poçtu üçün SMTP (Gmail app password, Brevo, Mailgun və s.). Boşdursa istifadəçilər şifrəni administrator vasitəsilə bərpa edir |

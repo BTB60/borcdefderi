@@ -1,6 +1,12 @@
 server:
   port: ${PORT:8080}
-  forward-headers-strategy: framework
+  # "native" = Tomcat RemoteIpValve: the client IP is the right-most X-Forwarded-For entry that is not a trusted
+  # internal proxy, so a client cannot spoof its IP (rate limit, audit log) by sending its own X-Forwarded-For.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      remote-ip-header: x-forwarded-for
+      protocol-header: x-forwarded-proto
   error:
     include-message: never
 

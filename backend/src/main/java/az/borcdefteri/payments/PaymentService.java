@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 @Service
 public class PaymentService {
 
-    public record PaymentView(UUID id, UUID debtId, DebtType debtType, String partyName, BigDecimal amount,
+    public record PaymentView(UUID id, UUID debtId, DebtType debtType, String partyName, String partyPhone, BigDecimal amount,
                               PaymentMethod paymentMethod, OffsetDateTime paidAt, String description, String note,
                               UUID recordedBy, String recordedByName, OffsetDateTime createdAt,
                               BigDecimal remainingAfter, String debtStatusAfter) {}
@@ -35,7 +35,7 @@ public class PaymentService {
     private static final String PAYMENT_SELECT = """
             SELECT p.id, p.debt_id, p.amount, p.payment_method, p.paid_at, p.description, p.note,
                    p.recorded_by, p.created_at, u.full_name AS recorded_by_name, d.debt_type,
-                   COALESCE(c.name, co.name) AS party_name
+                   COALESCE(c.name, co.name) AS party_name, COALESCE(c.phone, co.phone) AS party_phone
             FROM payments p
             JOIN debts d ON d.id = p.debt_id AND d.store_id = p.store_id
             LEFT JOIN customers c ON c.id = d.customer_id
@@ -111,17 +111,25 @@ public class PaymentService {
                 .update();
 
         ledger.append(m.storeId(), debtId, paymentId,
-                req.paymentMethod() == PaymentMethod.CASH ? "PAYMENT_CASH" : "PAYMENT_CARD",
+                req.paymentMethod().ledgerType(),
                 amount, newRemaining, m.userId());
         audit.log(m.storeId(), m.userId(), "PAYMENT_RECORDED", "PAYMENT", paymentId.toString(),
                 req.paymentMethod() + " " + amount + " AZN, borc " + debtId);
-        return new PaymentView(paymentId, debtId, debt.debtType(), debt.partyName(), amount, req.paymentMethod(),
+        return new PaymentView(paymentId, debtId, debt.debtType(), debt.partyName(), debt.partyPhone(), amount, req.paymentMethod(),
                 paidAt, blank(req.description()), blank(req.note()), m.userId(), null, now, newRemaining, status);
     }
 
     /** Payments across the debt types the caller may see. */
     public List<PaymentView> list(LocalDate from, LocalDate to, PaymentMethod method, UUID debtId, int limit) {
-        CurrentMember m = tenant.requireBusinessMember();
+        return list(tenant.requireBusinessMember(), from, to, method, debtId, Math.min(Math.max(limit, 1), 500));
+    }
+
+    /** Payments for the reports export (REPORTS permission checked by the caller). Capped to protect memory. */
+    public List<PaymentView> listForExport(CurrentMember m, LocalDate from, LocalDate to) {
+        return list(m, from, to, null, null, 10_000);
+    }
+
+    private List<PaymentView> list(CurrentMember m, LocalDate from, LocalDate to, PaymentMethod method, UUID debtId, int limit) {
         String allowed = Arrays.stream(DebtType.values())
                 .filter(t -> m.has(t.permission()))
                 .map(t -> "'" + t.name() + "'")
@@ -149,7 +157,7 @@ public class PaymentService {
             params.put("debtId", debtId);
         }
         var spec = jdbc.sql(PAYMENT_SELECT + where
-                + " ORDER BY p.paid_at DESC, p.id DESC LIMIT " + Math.min(Math.max(limit, 1), 500));
+                + " ORDER BY p.paid_at DESC, p.id DESC LIMIT " + limit);
         for (Map.Entry<String, Object> e : params.entrySet()) {
             spec = spec.param(e.getKey(), e.getValue());
         }
@@ -158,6 +166,7 @@ public class PaymentService {
                 rs.getObject("debt_id", UUID.class),
                 DebtType.valueOf(rs.getString("debt_type")),
                 rs.getString("party_name"),
+                rs.getString("party_phone"),
                 Money.of(rs.getBigDecimal("amount")),
                 PaymentMethod.valueOf(rs.getString("payment_method")),
                 rs.getObject("paid_at", OffsetDateTime.class),
@@ -168,6 +177,42 @@ public class PaymentService {
                 rs.getObject("created_at", OffsetDateTime.class),
                 null,
                 null)).list();
+    }
+
+    /** Everything printed on a payment receipt (çek). */
+    public record PaymentReceipt(UUID id, String storeName, String storePhone, String storeAddress, DebtType debtType,
+                                 String partyName, String partyPhone, BigDecimal amount, PaymentMethod method,
+                                 OffsetDateTime paidAt, String description, String recordedByName,
+                                 BigDecimal debtAmount, BigDecimal balanceAfter, LocalDate debtDate) {}
+
+    /** Store-scoped: a payment of another store is reported as not found. */
+    public PaymentReceipt receipt(UUID paymentId) {
+        CurrentMember m = tenant.requireBusinessMember();
+        PaymentReceipt r = jdbc.sql("""
+                SELECT p.id, s.name AS store_name, s.phone AS store_phone, s.address AS store_address, d.debt_type,
+                       COALESCE(c.name, co.name) AS party_name, COALESCE(c.phone, co.phone) AS party_phone,
+                       p.amount, p.payment_method, p.paid_at, p.description, u.full_name AS recorded_by,
+                       d.amount AS debt_amount, d.debt_date,
+                       (SELECT t.balance_after FROM financial_transactions t WHERE t.payment_id = p.id LIMIT 1) AS balance_after
+                FROM payments p
+                JOIN debts d ON d.id = p.debt_id AND d.store_id = p.store_id
+                JOIN stores s ON s.id = p.store_id
+                JOIN users u ON u.id = p.recorded_by
+                LEFT JOIN customers c ON c.id = d.customer_id
+                LEFT JOIN companies co ON co.id = d.company_id
+                WHERE p.id = :id AND p.store_id = :storeId
+                """).param("id", paymentId).param("storeId", m.storeId())
+                .query((rs, n) -> new PaymentReceipt(
+                        rs.getObject("id", UUID.class), rs.getString("store_name"), rs.getString("store_phone"),
+                        rs.getString("store_address"), DebtType.valueOf(rs.getString("debt_type")),
+                        rs.getString("party_name"), rs.getString("party_phone"), Money.of(rs.getBigDecimal("amount")),
+                        PaymentMethod.valueOf(rs.getString("payment_method")),
+                        rs.getObject("paid_at", OffsetDateTime.class), rs.getString("description"),
+                        rs.getString("recorded_by"), Money.of(rs.getBigDecimal("debt_amount")),
+                        Money.of(rs.getBigDecimal("balance_after")), rs.getObject("debt_date", LocalDate.class)))
+                .optional().orElseThrow(() -> ApiException.notFound("Ödəniş tapılmadı"));
+        debts.requireAccess(m, r.debtType());
+        return r;
     }
 
     private static String blank(String s) {

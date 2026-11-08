@@ -91,7 +91,7 @@ public class PartyService {
     // ----- shared helpers -----
 
     private List<Party> list(String table, String fkColumn, CurrentMember m, String q, String debtType) {
-        String like = (q == null || q.isBlank()) ? "%" : "%" + q.trim().toLowerCase() + "%";
+        String like = az.borcdefteri.common.Search.contains(q);
         String typeFilter = debtType == null ? "" : " AND d.debt_type = '" + debtType + "'";
         return jdbc.sql("""
                 SELECT p.id, p.name, p.phone, p.note, p.created_at,
@@ -100,7 +100,7 @@ public class PartyService {
                 FROM\s""" + table + """
                  p
                 LEFT JOIN debts d ON d.""" + fkColumn + " = p.id AND d.store_id = p.store_id" + typeFilter + " " + """
-                WHERE p.store_id = :storeId AND (LOWER(p.name) LIKE :q OR COALESCE(p.phone, '') LIKE :q)
+                WHERE p.store_id = :storeId AND (LOWER(p.name) LIKE LOWER(:q) OR COALESCE(p.phone, '') LIKE :q)
                 GROUP BY p.id, p.name, p.phone, p.note, p.created_at
                 ORDER BY p.name
                 """)

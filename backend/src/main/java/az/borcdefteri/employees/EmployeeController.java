@@ -20,7 +20,7 @@ public class EmployeeController {
             @NotBlank @Email @Size(max = 190) String email,
             @NotBlank @Size(min = 8, max = 72, message = "Şifrə ən azı 8 simvol olmalıdır") String password,
             @NotBlank @Size(max = 150) String fullName,
-            @Size(max = 30) String phone,
+            @jakarta.validation.constraints.Pattern(regexp = "^[+0-9 ()-]{0,30}$", message = "Telefon nömrəsi düzgün deyil") String phone,
             @NotNull List<String> permissions) {}
 
     public record EmployeeUpdate(@NotNull List<String> permissions, boolean active) {}

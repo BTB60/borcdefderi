@@ -48,6 +48,7 @@ public class EmployeeService {
     public EmployeeView create(String email, String password, String fullName, String phone, List<String> permissions) {
         CurrentMember owner = tenant.requireOwner();
         Set<String> perms = validatePermissions(permissions);
+        az.borcdefteri.common.Passwords.requireBcryptLength(password);
         String normalized = email.trim().toLowerCase(Locale.ROOT);
         boolean exists = jdbc.sql("SELECT COUNT(*) FROM users WHERE email = :e").param("e", normalized)
                 .query(Long.class).single() > 0;
@@ -113,11 +114,11 @@ public class EmployeeService {
     static Set<String> validatePermissions(List<String> permissions) {
         Set<String> allowed = Set.copyOf(TenantService.allPermissions());
         for (String p : permissions) {
-            if (!allowed.contains(p)) {
+            if (p == null || !allowed.contains(p)) {
                 throw ApiException.badRequest("INVALID_PERMISSION", "Naməlum icazə: " + p);
             }
         }
-        return Set.copyOf(permissions);
+        return new java.util.TreeSet<>(permissions);
     }
 
     private static List<String> splitPermissions(String csv) {

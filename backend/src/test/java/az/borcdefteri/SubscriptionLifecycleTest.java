@@ -34,9 +34,11 @@ class SubscriptionLifecycleTest extends IntegrationTestBase {
                 .andExpect(jsonPath("$.active", is(false)));
         get(owner, "/api/debts?type=CUSTOMER_DEBT").andExpect(status().isPaymentRequired());
 
+        // A second submission updates the same pending request (new receipt) instead of creating a duplicate.
         uploadReceipt(owner, "MONTHLY", "again.png", "image/png", pngBytes())
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error", is("SUBSCRIPTION_PENDING")));
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status", is("PENDING")));
+        get(owner, "/api/subscriptions/history").andExpect(jsonPath("$", hasSize(1)));
     }
 
     @Test

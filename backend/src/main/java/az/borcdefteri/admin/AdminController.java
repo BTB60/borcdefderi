@@ -6,9 +6,6 @@ import az.borcdefteri.subscriptions.SubscriptionService.ReceiptFile;
 import az.borcdefteri.subscriptions.SubscriptionService.SubscriptionView;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.http.ContentDisposition;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -74,13 +71,9 @@ public class AdminController {
     }
 
     @GetMapping("/subscriptions/{id}/receipt")
-    public ResponseEntity<FileSystemResource> receipt(@PathVariable UUID id) {
+    public ResponseEntity<byte[]> receipt(@PathVariable UUID id) {
         ReceiptFile file = subscriptions.receiptFor(id);
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(file.contentType()))
-                .header("Content-Disposition", ContentDisposition.attachment().filename(file.fileName()).build().toString())
-                .header("X-Content-Type-Options", "nosniff")
-                .body(new FileSystemResource(file.path()));
+        return az.borcdefteri.common.FileResponses.attachment(file.content(), file.contentType(), file.fileName());
     }
 
     @PostMapping("/subscriptions/{id}/approve")

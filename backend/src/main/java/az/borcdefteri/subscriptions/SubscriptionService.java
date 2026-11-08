@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
-import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -33,7 +32,7 @@ public class SubscriptionService {
                                    String payerReference, String rejectReason, OffsetDateTime requestedAt,
                                    OffsetDateTime reviewedAt, boolean hasReceipt) {}
 
-    public record ReceiptFile(Path path, String contentType, String fileName) {}
+    public record ReceiptFile(byte[] content, String contentType, String fileName) {}
 
     private static final String SELECT_SUB = """
             SELECT s.id, s.store_id, st.name AS store_name, p.code AS plan_code, p.name AS plan_name,
@@ -138,95 +137,85 @@ public class SubscriptionService {
                 .param("storeId", storeId).query(this::mapSub).list();
     }
 
-    /** Owner submits a plan + payment reference + receipt. Amount is always taken from the plan, never from the client. */
-    @Transactional
-    public SubscriptionView submit(String planCode, String payerReference, MultipartFile receipt) {
-        CurrentMember member = tenant.requireMember();
-        if (!member.isOwner()) {
-            throw ApiException.forbidden("OWNER_ONLY", "Abunəliyi yalnız mağaza sahibi göndərə bilər");
-        }
-        boolean pending = jdbc.sql("SELECT COUNT(*) FROM subscriptions WHERE store_id = :s AND status = 'PENDING'")
-                .param("s", member.storeId()).query(Long.class).single() > 0;
-        if (pending) {
-            throw ApiException.conflict("SUBSCRIPTION_PENDING", "Artıq təsdiq gözləyən abunəliyiniz var");
-        }
-        PlanView plan = activePlans().stream().filter(p -> p.code().equals(planCode)).findFirst()
-                .orElseThrow(() -> ApiException.badRequest("INVALID_PLAN", "Seçilmiş plan mövcud deyil"));
-
-        ReceiptStorage.Stored stored = receipts.store(receipt);
-        UUID subId = UUID.randomUUID();
-        jdbc.sql("""
-                INSERT INTO subscriptions (id, store_id, plan_id, status, amount, payer_reference)
-                VALUES (:id, :storeId, :planId, 'PENDING', :amount, :ref)
-                """)
-                .param("id", subId).param("storeId", member.storeId())
-                .param("planId", plan.id()).param("amount", plan.price())
-                .param("ref", blankToNull(payerReference))
-                .update();
-        jdbc.sql("""
-                INSERT INTO subscription_receipts (id, subscription_id, store_id, storage_name, original_name, content_type, size_bytes)
-                VALUES (:id, :subId, :storeId, :name, :orig, :type, :size)
-                """)
-                .param("id", UUID.randomUUID()).param("subId", subId).param("storeId", member.storeId())
-                .param("name", stored.storageName()).param("orig", stored.originalName())
-                .param("type", stored.contentType()).param("size", stored.sizeBytes())
-                .update();
-        audit.log(member.storeId(), member.userId(), "SUBSCRIPTION_SUBMITTED", "SUBSCRIPTION", subId.toString(),
-                "Plan: " + plan.code() + ", məbləğ: " + plan.price());
-        return getView(subId);
-    }
-
     /**
-     * "Abunə ol": the owner picks a package. Creates a PENDING request without a receipt (the receipt is sent to the
-     * admin directly, e.g. by WhatsApp). If a request is already pending, its package is changed instead.
+     * The owner tells the admin which package they paid for: package + optional M10 / bank transaction number +
+     * optional receipt image (PNG/JPG/PDF). Creates a PENDING request, or updates the store's existing pending
+     * request (a new receipt replaces the old one). The amount always comes from the plan, never from the client.
+     * Nothing is activated here: only the SUPER_ADMIN activates after checking the payment.
      */
     @Transactional
-    public SubscriptionView request(String planCode) {
+    public SubscriptionView request(String planCode, String payerReference, MultipartFile receipt) {
         CurrentMember member = tenant.requireMember();
         if (!member.isOwner()) {
             throw ApiException.forbidden("OWNER_ONLY", "Abunəliyi yalnız mağaza sahibi göndərə bilər");
         }
         PlanView plan = activePlans().stream().filter(p -> p.code().equals(planCode)).findFirst()
                 .orElseThrow(() -> ApiException.badRequest("INVALID_PLAN", "Seçilmiş plan mövcud deyil"));
+        String reference = blankToNull(payerReference);
+        if (reference != null && reference.length() > 120) {
+            throw ApiException.badRequest("REFERENCE_TOO_LONG", "Ödəniş istinad nömrəsi 120 simvoldan uzun ola bilməz");
+        }
+        ReceiptStorage.Stored stored = (receipt == null || receipt.isEmpty()) ? null : receipts.store(receipt);
+
         lockStore(member.storeId()); // serialises concurrent requests of the same store
         UUID pendingId = jdbc.sql("SELECT id FROM subscriptions WHERE store_id = :s AND status = 'PENDING' ORDER BY requested_at DESC LIMIT 1")
                 .param("s", member.storeId()).query(UUID.class).optional().orElse(null);
         UUID subId;
         if (pendingId != null) {
-            jdbc.sql("UPDATE subscriptions SET plan_id = :planId, amount = :amount, requested_at = now() WHERE id = :id")
-                    .param("planId", plan.id()).param("amount", plan.price()).param("id", pendingId).update();
+            jdbc.sql("""
+                    UPDATE subscriptions SET plan_id = :planId, amount = :amount, requested_at = now(),
+                           payer_reference = COALESCE(:ref, payer_reference)
+                    WHERE id = :id
+                    """)
+                    .param("planId", plan.id()).param("amount", plan.price()).param("ref", reference)
+                    .param("id", pendingId).update();
             subId = pendingId;
         } else {
             subId = UUID.randomUUID();
             jdbc.sql("""
-                    INSERT INTO subscriptions (id, store_id, plan_id, status, amount)
-                    VALUES (:id, :storeId, :planId, 'PENDING', :amount)
+                    INSERT INTO subscriptions (id, store_id, plan_id, status, amount, payer_reference)
+                    VALUES (:id, :storeId, :planId, 'PENDING', :amount, :ref)
                     """)
                     .param("id", subId).param("storeId", member.storeId())
-                    .param("planId", plan.id()).param("amount", plan.price())
+                    .param("planId", plan.id()).param("amount", plan.price()).param("ref", reference)
+                    .update();
+        }
+        if (stored != null) {
+            jdbc.sql("DELETE FROM subscription_receipts WHERE subscription_id = :subId").param("subId", subId).update();
+            jdbc.sql("""
+                    INSERT INTO subscription_receipts (id, subscription_id, store_id, storage_name, original_name,
+                                                       content_type, size_bytes, content)
+                    VALUES (:id, :subId, :storeId, :name, :orig, :type, :size, :content)
+                    """)
+                    .param("id", UUID.randomUUID()).param("subId", subId).param("storeId", member.storeId())
+                    .param("name", stored.storageName()).param("orig", stored.originalName())
+                    .param("type", stored.contentType()).param("size", stored.sizeBytes())
+                    .param("content", stored.content())
                     .update();
         }
         audit.log(member.storeId(), member.userId(), "SUBSCRIPTION_REQUESTED", "SUBSCRIPTION", subId.toString(),
-                "Plan: " + plan.code() + ", məbləğ: " + plan.price());
+                "Plan: " + plan.code() + ", məbləğ: " + plan.price()
+                        + (reference != null ? ", istinad: " + reference : "") + (stored != null ? ", qəbz yükləndi" : ""));
         return getView(subId);
     }
 
     public ReceiptFile receiptFor(UUID subscriptionId) {
         boolean admin = tenant.isSuperAdmin();
         UUID callerStoreId = admin ? null : tenant.requireMember().storeId();
-        record R(String storage, String type, String original, UUID storeId) {}
+        record R(String storage, String type, String original, UUID storeId, byte[] content) {}
         R row = jdbc.sql("""
-                SELECT r.storage_name, r.content_type, r.original_name, r.store_id
+                SELECT r.storage_name, r.content_type, r.original_name, r.store_id, r.content
                 FROM subscription_receipts r WHERE r.subscription_id = :id
                 """).param("id", subscriptionId)
                 .query((rs, n) -> new R(rs.getString("storage_name"), rs.getString("content_type"),
-                        rs.getString("original_name"), rs.getObject("store_id", UUID.class)))
+                        rs.getString("original_name"), rs.getObject("store_id", UUID.class), rs.getBytes("content")))
                 .optional().orElseThrow(() -> ApiException.notFound("Qəbz tapılmadı"));
         if (!admin && !row.storeId().equals(callerStoreId)) {
             throw ApiException.notFound("Qəbz tapılmadı");
         }
         String name = row.original() != null ? row.original() : "qebz";
-        return new ReceiptFile(receipts.resolve(row.storage()), row.type(), name);
+        byte[] bytes = row.content() != null ? row.content() : receipts.readLegacy(row.storage());
+        return new ReceiptFile(bytes, row.type(), name);
     }
 
     // ---------- super admin side ----------
@@ -235,7 +224,7 @@ public class SubscriptionService {
         String where = (status == null || status.isBlank()) ? "" : " WHERE s.status = :status";
         var q = jdbc.sql(SELECT_SUB + where + " ORDER BY s.requested_at DESC");
         if (where.length() > 0) {
-            q = q.param("status", status.toUpperCase());
+            q = q.param("status", status.toUpperCase(java.util.Locale.ROOT));
         }
         return q.query(this::mapSub).list();
     }
@@ -351,8 +340,12 @@ public class SubscriptionService {
                 ORDER BY end_date DESC LIMIT 1
                 """).param("s", storeId).query(UUID.class).optional()
                 .orElseThrow(() -> ApiException.conflict("NO_ACTIVE_SUBSCRIPTION", "Mağazanın aktiv abunəliyi yoxdur"));
-        LocalDate newEnd = jdbc.sql("UPDATE subscriptions SET end_date = end_date + :days WHERE id = :id RETURNING end_date")
-                .param("days", days).param("id", subId).query(LocalDate.class).single();
+        LocalDate newEnd = jdbc.sql("""
+                UPDATE subscriptions SET end_date = GREATEST(end_date, CAST(:yesterday AS date)) + :days
+                WHERE id = :id RETURNING end_date
+                """)
+                .param("yesterday", tenant.today().minusDays(1)).param("days", days).param("id", subId)
+                .query(LocalDate.class).single();
         audit.log(storeId, tenant.currentUserId(), "SUBSCRIPTION_EXTENDED", "SUBSCRIPTION", subId.toString(),
                 "+" + days + " gün, yeni bitmə tarixi: " + newEnd);
         return newEnd;

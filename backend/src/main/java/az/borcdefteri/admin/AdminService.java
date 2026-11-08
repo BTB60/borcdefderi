@@ -44,7 +44,7 @@ public class AdminService {
      */
     public List<Map<String, Object>> stores(String q) {
         tenant.requireSuperAdmin();
-        String like = (q == null || q.isBlank()) ? "%" : "%" + q.trim().toLowerCase() + "%";
+        String like = az.borcdefteri.common.Search.contains(q);
         LocalDate today = tenant.today();
         int reminderDays = props.subscription().reminderDays();
         return jdbc.sql("""
@@ -64,7 +64,7 @@ public class AdminService {
                     JOIN subscription_plans p ON p.id = sb.plan_id
                     WHERE sb.store_id = s.id AND sb.status = 'PENDING'
                     ORDER BY sb.requested_at DESC LIMIT 1) pend ON TRUE
-                WHERE LOWER(s.name) LIKE :q OR LOWER(COALESCE(u.email, '')) LIKE :q
+                WHERE LOWER(s.name) LIKE LOWER(:q) OR LOWER(COALESCE(u.email, '')) LIKE LOWER(:q)
                 ORDER BY s.created_at DESC
                 """)
                 .param("q", like).param("today", today)
@@ -115,11 +115,12 @@ public class AdminService {
     public Map<String, Object> revenue() {
         tenant.requireSuperAdmin();
         BigDecimal total = sumApproved("1=1");
-        BigDecimal thisMonth = sumApproved("reviewed_at >= date_trunc('month', now())");
-        BigDecimal thisYear = sumApproved("reviewed_at >= date_trunc('year', now())");
+        // Month/year boundaries in the business time zone (Asia/Baku), not the database server's zone.
+        BigDecimal thisMonth = sumApproved("reviewed_at >= (date_trunc('month', now() AT TIME ZONE 'Asia/Baku') AT TIME ZONE 'Asia/Baku')");
+        BigDecimal thisYear = sumApproved("reviewed_at >= (date_trunc('year', now() AT TIME ZONE 'Asia/Baku') AT TIME ZONE 'Asia/Baku')");
         long activeStores = jdbc.sql("""
-                SELECT COUNT(DISTINCT store_id) FROM subscriptions WHERE status = 'ACTIVE' AND end_date >= CURRENT_DATE
-                """).query(Long.class).single();
+                SELECT COUNT(DISTINCT store_id) FROM subscriptions WHERE status = 'ACTIVE' AND end_date >= :today
+                """).param("today", tenant.today()).query(Long.class).single();
         long totalStores = jdbc.sql("SELECT COUNT(*) FROM stores").query(Long.class).single();
         long pending = jdbc.sql("SELECT COUNT(*) FROM subscriptions WHERE status = 'PENDING'").query(Long.class).single();
         long expired = jdbc.sql("SELECT COUNT(*) FROM subscriptions WHERE status = 'EXPIRED'").query(Long.class).single();
@@ -152,14 +153,14 @@ public class AdminService {
 
     public List<Map<String, Object>> users(String q) {
         tenant.requireSuperAdmin();
-        String like = (q == null || q.isBlank()) ? "%" : "%" + q.trim().toLowerCase() + "%";
+        String like = az.borcdefteri.common.Search.contains(q);
         return jdbc.sql("""
                 SELECT u.id, u.email, u.full_name, u.phone, u.platform_role, u.enabled, u.created_at,
                        m.role AS store_role, s.name AS store_name
                 FROM users u
                 LEFT JOIN store_members m ON m.user_id = u.id
                 LEFT JOIN stores s ON s.id = m.store_id
-                WHERE LOWER(u.email) LIKE :q OR LOWER(u.full_name) LIKE :q
+                WHERE LOWER(u.email) LIKE LOWER(:q) OR LOWER(u.full_name) LIKE LOWER(:q)
                 ORDER BY u.created_at DESC LIMIT 500
                 """).param("q", like).query((rs, n) -> {
                     Map<String, Object> m = new LinkedHashMap<>();
@@ -177,10 +178,14 @@ public class AdminService {
 
     public List<Map<String, Object>> auditLogs(UUID storeId, int limit) {
         tenant.requireSuperAdmin();
-        String where = storeId == null ? "" : " WHERE store_id = :storeId";
+        String where = storeId == null ? "" : " WHERE a.store_id = :storeId";
         var q = jdbc.sql("""
-                SELECT id, store_id, actor_id, action, entity_type, entity_id, details, ip_address, created_at
-                FROM audit_logs""" + where + " ORDER BY created_at DESC, id DESC LIMIT " + Math.min(Math.max(limit, 1), 1000));
+                SELECT a.id, a.store_id, a.actor_id, a.action, a.entity_type, a.entity_id, a.details, a.ip_address, a.created_at,
+                       u.email AS actor_email, u.full_name AS actor_name, s.name AS store_name
+                FROM audit_logs a
+                LEFT JOIN users u ON u.id = a.actor_id
+                LEFT JOIN stores s ON s.id = a.store_id""" + where
+                + " ORDER BY a.created_at DESC, a.id DESC LIMIT " + Math.min(Math.max(limit, 1), 1000));
         if (storeId != null) {
             q = q.param("storeId", storeId);
         }
@@ -189,6 +194,9 @@ public class AdminService {
             m.put("id", rs.getLong("id"));
             m.put("storeId", rs.getObject("store_id", UUID.class));
             m.put("actorId", rs.getObject("actor_id", UUID.class));
+            m.put("actorEmail", rs.getString("actor_email"));
+            m.put("actorName", rs.getString("actor_name"));
+            m.put("storeName", rs.getString("store_name"));
             m.put("action", rs.getString("action"));
             m.put("entityType", rs.getString("entity_type"));
             m.put("entityId", rs.getString("entity_id"));

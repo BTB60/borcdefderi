@@ -42,17 +42,19 @@ public class ReportService {
     private static final String HELVETICA_FALLBACK = "Helvetica";
 
     private final DebtService debts;
+    private final java.time.Clock clock;
 
-    public ReportService(DebtService debts) {
+    public ReportService(DebtService debts, java.time.Clock clock) {
         this.debts = debts;
+        this.clock = clock;
     }
 
     public record ExportFile(byte[] content, String contentType, String fileName) {}
 
     public ExportFile exportDebts(DebtType type, String status, LocalDate from, LocalDate to, String format) {
         List<DebtView> rows = debts.listAll(type, status, from, to);
-        String base = "borc-" + type.name().toLowerCase() + "-" + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
-        return switch (format == null ? "" : format.toLowerCase()) {
+        String base = "borc-" + type.name().toLowerCase(java.util.Locale.ROOT) + "-" + LocalDate.now(clock).format(DateTimeFormatter.BASIC_ISO_DATE);
+        return switch (format == null ? "" : format.toLowerCase(java.util.Locale.ROOT)) {
             case "xlsx", "excel" -> new ExportFile(excel(type, rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", base + ".xlsx");
             case "pdf" -> new ExportFile(pdf(type, rows), "application/pdf", base + ".pdf");
             default -> throw ApiException.badRequest("INVALID_FORMAT", "Format yalnız xlsx və ya pdf ola bilər");
@@ -127,7 +129,7 @@ public class ReportService {
             Paragraph title = new Paragraph("BORCDEFTERI — " + title(type), titleFont);
             title.setSpacingAfter(4);
             doc.add(title);
-            doc.add(new Paragraph("Hesabat tarixi: " + LocalDate.now().format(DATE) + "   |   Qeyd sayı: " + rows.size(), small));
+            doc.add(new Paragraph("Hesabat tarixi: " + LocalDate.now(clock).format(DATE) + "   |   Qeyd sayı: " + rows.size(), small));
             doc.add(new Paragraph(" "));
 
             PdfPTable table = new PdfPTable(new float[]{1.1f, 1.1f, 2.2f, 1.4f, 3.0f, 1.3f, 1.3f, 1.3f, 1.2f});
@@ -172,7 +174,7 @@ public class ReportService {
         }
     }
 
-    private static BaseFont baseFont(boolean bold) throws Exception {
+    static BaseFont baseFont(boolean bold) throws Exception {
         String file = bold ? "fonts/DejaVuSans-Bold.ttf" : "fonts/DejaVuSans.ttf";
         byte[] bytes = new ClassPathResource(file).getContentAsByteArray();
         return BaseFont.createFont(file, BaseFont.IDENTITY_H, BaseFont.EMBEDDED, true, bytes, null);

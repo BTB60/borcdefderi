@@ -227,7 +227,7 @@ public class DebtService {
         f.clause("d.store_id = :storeId", "storeId", m.storeId());
         f.clause("d.debt_type = :debtType", "debtType", type.name());
         if (status != null && !status.isBlank()) {
-            switch (status.toUpperCase()) {
+            switch (status.toUpperCase(java.util.Locale.ROOT)) {
                 case "OPEN" -> f.clause("d.status = 'OPEN'", null, null);
                 case "PARTIAL" -> f.clause("d.status = 'PARTIAL'", null, null);
                 case "PAID" -> f.clause("d.status = 'PAID'", null, null);
@@ -236,8 +236,8 @@ public class DebtService {
             }
         }
         if (q != null && !q.isBlank()) {
-            f.clause("(LOWER(COALESCE(c.name, co.name)) LIKE :q OR COALESCE(c.phone, co.phone, '') LIKE :q "
-                    + "OR LOWER(COALESCE(d.description, '')) LIKE :q)", "q", "%" + q.trim().toLowerCase() + "%");
+            f.clause("(LOWER(COALESCE(c.name, co.name)) LIKE LOWER(:q) OR COALESCE(c.phone, co.phone, '') LIKE :q "
+                    + "OR LOWER(COALESCE(d.description, '')) LIKE LOWER(:q))", "q", az.borcdefteri.common.Search.contains(q));
         }
         if (from != null) {
             f.clause("d.debt_date >= :from", "from", from);

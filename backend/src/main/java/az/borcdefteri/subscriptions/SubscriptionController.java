@@ -4,8 +4,6 @@ import az.borcdefteri.subscriptions.SubscriptionService.PlanView;
 import az.borcdefteri.subscriptions.SubscriptionService.ReceiptFile;
 import az.borcdefteri.subscriptions.SubscriptionService.SubscriptionView;
 import az.borcdefteri.tenant.TenantService;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -41,31 +39,28 @@ public class SubscriptionController {
         return subscriptions.historyFor(tenant.requireMember().storeId());
     }
 
-    public record PlanChoice(@jakarta.validation.constraints.NotBlank String planCode) {}
+    public record PlanChoice(@jakarta.validation.constraints.NotBlank String planCode,
+                             @jakarta.validation.constraints.Size(max = 120) String payerReference) {}
 
-    /** "Abunə ol": records the chosen package as a pending request; payment is confirmed by the admin. */
+    /** "Ödəniş etdim": package + optional M10/bank transaction number. Creates or updates the pending request. */
     @PostMapping("/api/subscriptions/request")
     @ResponseStatus(HttpStatus.CREATED)
     public SubscriptionView request(@jakarta.validation.Valid @RequestBody PlanChoice req) {
-        return subscriptions.request(req.planCode());
+        return subscriptions.request(req.planCode(), req.payerReference(), null);
     }
 
-    /** Optional: request with an uploaded receipt (PNG/JPG/PDF). */
+    /** Same as /request, with an optional receipt image (PNG/JPG/PDF, max 5 MB). */
     @PostMapping(value = "/api/subscriptions", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public SubscriptionView submit(@RequestParam String planCode,
                                    @RequestParam(required = false) String payerReference,
-                                   @RequestParam("receipt") MultipartFile receipt) {
-        return subscriptions.submit(planCode, payerReference, receipt);
+                                   @RequestParam(value = "receipt", required = false) MultipartFile receipt) {
+        return subscriptions.request(planCode, payerReference, receipt);
     }
 
     @GetMapping("/api/subscriptions/{id}/receipt")
-    public ResponseEntity<FileSystemResource> receipt(@PathVariable UUID id) {
+    public ResponseEntity<byte[]> receipt(@PathVariable UUID id) {
         ReceiptFile file = subscriptions.receiptFor(id);
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(file.contentType()))
-                .header("Content-Disposition", ContentDisposition.attachment().filename(file.fileName()).build().toString())
-                .header("X-Content-Type-Options", "nosniff")
-                .body(new FileSystemResource(file.path()));
+        return az.borcdefteri.common.FileResponses.attachment(file.content(), file.contentType(), file.fileName());
     }
 }

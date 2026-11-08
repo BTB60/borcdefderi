@@ -42,6 +42,7 @@ public class AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest req) {
         String email = normalizeEmail(req.email());
+        az.borcdefteri.common.Passwords.requireBcryptLength(req.password());
         if (userExists(email)) {
             throw ApiException.conflict("EMAIL_EXISTS", "Bu e-poçt ünvanı artıq qeydiyyatdadır");
         }
@@ -83,7 +84,10 @@ public class AuthService {
                         rs.getBoolean("enabled"), rs.getString("platform_role")))
                 .optional()
                 .orElse(null);
-        if (creds == null || !passwordEncoder.matches(req.password(), creds.hash())) {
+        boolean usable = az.borcdefteri.common.Passwords.fitsBcrypt(req.password());
+        // Unknown accounts still run one BCrypt check so response time does not reveal which e-mails exist.
+        boolean ok = usable && passwordEncoder.matches(req.password(), creds != null ? creds.hash() : dummyHash());
+        if (creds == null || !ok) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "E-poçt və ya şifrə yanlışdır");
         }
         if (!creds.enabled()) {
@@ -140,6 +144,15 @@ public class AuthService {
                 .param("m", row.get("id")).query(String.class).list();
         return new CurrentMember(userId, (UUID) row.get("id"), (UUID) row.get("store_id"),
                 (String) row.get("name"), (String) row.get("role"), null, new java.util.HashSet<>(perms));
+    }
+
+    private volatile String dummyHash;
+
+    private String dummyHash() {
+        if (dummyHash == null) {
+            dummyHash = passwordEncoder.encode(UUID.randomUUID().toString());
+        }
+        return dummyHash;
     }
 
     private boolean userExists(String email) {

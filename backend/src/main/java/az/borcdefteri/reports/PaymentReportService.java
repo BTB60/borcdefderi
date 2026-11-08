@@ -72,7 +72,15 @@ public class PaymentReportService {
     // ---------------------------------------------------------------- receipt (çek)
 
     public ExportFile receiptPdf(UUID paymentId) {
-        PaymentReceipt r = payments.receipt(paymentId);
+        return render(payments.receipt(paymentId));
+    }
+
+    /** Receipt opened by the customer from a shared (HMAC-signed) link — no login. */
+    public ExportFile sharedReceiptPdf(UUID paymentId) {
+        return render(payments.receiptForSharedLink(paymentId));
+    }
+
+    private ExportFile render(PaymentReceipt r) {
         String number = r.id().toString().substring(0, 8).toUpperCase(Locale.ROOT);
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Document doc = new Document(PageSize.A5, 36, 36, 36, 36);

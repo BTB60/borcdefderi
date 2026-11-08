@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../format.dart';
@@ -265,15 +268,86 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
         _history = _loadHistory();
       });
       final paid = (payment['amount'] as num?)?.toDouble() ?? 0;
-      final wa = _canNotify
-          ? waUri(_debt.partyPhone,
-              paymentConfirmationText(widget.session.me?.storeName ?? '', _debt.partyName, paid, _debt.remainingAmount))
-          : null;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Ödəniş qeydə alındı: ${formatMoney(paid)}'),
-        duration: const Duration(seconds: 6),
-        action: wa == null ? null : SnackBarAction(label: 'WhatsApp ilə bildir', onPressed: () => _openWhatsApp(wa)),
+      final paymentId = payment['id'] as String?;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödəniş qeydə alındı: ${formatMoney(paid)}')));
+      if (paymentId != null && _canNotify) _offerReceipt(paymentId, paid);
+    }
+  }
+
+  /// After a payment: ask whether to send the receipt (link via WhatsApp, or the PDF file itself).
+  Future<void> _offerReceipt(String paymentId, double paid) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text('Ödəniş çeki — ${formatMoney(paid)}',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: navy)),
+            const SizedBox(height: 4),
+            Text(_debt.partyName, style: TextStyle(color: Colors.grey.shade700)),
+            const SizedBox(height: 16),
+            _receiptActions(ctx, paymentId, paid),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _receiptActions(BuildContext ctx, String paymentId, double paid) {
+    final hasWhatsApp = waNumber(_debt.partyPhone) != null;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (hasWhatsApp)
+        FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600),
+          icon: const Icon(Icons.chat),
+          label: const Text('Çek linkini WhatsApp-a göndər'),
+          onPressed: () async {
+            Navigator.of(ctx).pop();
+            await _sendReceiptLink(paymentId, paid);
+          },
+        ),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+        icon: const Icon(Icons.picture_as_pdf_outlined),
+        label: const Text('PDF faylı paylaş (WhatsApp və s.)'),
+        onPressed: () async {
+          Navigator.of(ctx).pop();
+          await _shareReceiptPdf(paymentId, paid);
+        },
+      ),
+      if (!hasWhatsApp)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text('Müştərinin telefon nömrəsi yoxdur — PDF-i paylaşıb WhatsApp-da kontaktı özünüz seçin.',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+        ),
+    ]);
+  }
+
+  Future<void> _sendReceiptLink(String paymentId, double paid) async {
+    try {
+      final link = (await widget.session.api.get('/api/payments/$paymentId/share-link') as Map<String, dynamic>)['url'] as String;
+      final uri = waUri(_debt.partyPhone, receiptMessageText(widget.session.me?.storeName ?? '', _debt.partyName, paid, link));
+      if (uri != null) await _openWhatsApp(uri);
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  /// Shares the PDF itself through the system share sheet; the user picks WhatsApp and the chat.
+  Future<void> _shareReceiptPdf(String paymentId, double paid) async {
+    try {
+      final bytes = await widget.session.api.getBytes('/api/payments/$paymentId/receipt');
+      final name = 'cek-${paymentId.substring(0, 8)}.pdf';
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile.fromData(Uint8List.fromList(bytes), mimeType: 'application/pdf', name: name)],
+        fileNameOverrides: [name],
+        text: 'Ödəniş çeki — ${_debt.partyName}, ${formatMoney(paid)}',
       ));
+    } catch (e) {
+      if (mounted) showError(context, e);
     }
   }
 
@@ -352,6 +426,9 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                   for (final e in snap.data!)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
+                      onTap: e['paymentId'] == null || !_canNotify
+                          ? null
+                          : () => _offerReceipt(e['paymentId'] as String, (e['amount'] as num).toDouble()),
                       leading: Icon(
                         (e['type'] as String).startsWith('PAYMENT') ? Icons.south_west : Icons.receipt_long_outlined,
                         color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green : navy,

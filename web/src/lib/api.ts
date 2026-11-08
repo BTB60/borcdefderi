@@ -83,6 +83,38 @@ export async function download(path: string, fallbackName: string) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Shares a protected PDF through the system share sheet (WhatsApp, Telegram, …) where the browser can share
+ * files — mostly phones. Returns false when file sharing is not supported, so the caller can fall back to a link.
+ */
+export async function shareProtectedFile(path: string, fileName: string, text: string): Promise<boolean> {
+  if (typeof navigator === "undefined" || typeof navigator.canShare !== "function") return false;
+  const headers = new Headers();
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(`${API_URL}${path}`, { headers });
+  if (!res.ok) throw new ApiError(res.status, "DOWNLOAD_FAILED", "Fayl yüklənə bilmədi");
+  const file = new File([await res.blob()], fileName, { type: "application/pdf" });
+  if (!navigator.canShare({ files: [file] })) return false;
+  try {
+    await navigator.share({ files: [file], text });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") return true; // user closed the share sheet
+    throw e;
+  }
+  return true;
+}
+
+/** True when the browser can share files (show the "PDF-i paylaş" button only then). */
+export function canShareFiles(): boolean {
+  if (typeof navigator === "undefined" || typeof navigator.canShare !== "function") return false;
+  try {
+    return navigator.canShare({ files: [new File(["x"], "x.pdf", { type: "application/pdf" })] });
+  } catch {
+    return false;
+  }
+}
+
 /** Opens a protected file in a new tab (receipt preview). */
 export async function openProtected(path: string) {
   const headers = new Headers();

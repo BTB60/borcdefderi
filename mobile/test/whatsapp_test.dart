@@ -19,4 +19,13 @@ void main() {
     expect(paymentConfirmationText('Market', 'Leyla', 50, 0), contains('tam ödənilib'));
     expect(debtReminderText('Market', 'Leyla', 12.5, DateTime(2026, 12, 1)), contains('01.12.2026'));
   });
+
+  test('receipt link travels inside the WhatsApp message', () {
+    const link = 'https://api.example.az/api/public/receipts/abc/token123';
+    final confirmation = paymentConfirmationText('Market', 'Leyla', 20, 30, link);
+    expect(confirmation, contains('Ödəniş çeki: $link'));
+    expect(paymentConfirmationText('Market', 'Leyla', 20, 30), isNot(contains('çeki:')));
+    final uri = waUri('050 123 45 67', receiptMessageText('Market', 'Leyla', 20, link))!;
+    expect(uri.queryParameters['text'], endsWith(link));
+  });
 }

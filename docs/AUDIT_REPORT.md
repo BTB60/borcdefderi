@@ -17,12 +17,12 @@ Sistem lokal mühitdə uçdan-uca işləyir: qeydiyyat → paket seçimi → M10
 | Test | Nəticə |
 |---|---|
 | Backend build (`mvn package`) | PASS |
-| Backend inteqrasiya testləri (real PostgreSQL, 8 sinif) | **PASS — 57/57** |
+| Backend inteqrasiya testləri (real PostgreSQL, 8 sinif) | **PASS — 58/58** |
 | Frontend lint (`next lint`) | PASS — 0 xəta |
 | Frontend typecheck (`tsc --noEmit`) | PASS |
 | Frontend production build (`next build`) | PASS — 12 səhifə |
 | Flutter analyze | PASS — 0 problem |
-| Flutter testləri | **PASS — 19/19** |
+| Flutter testləri | **PASS — 21/21** |
 | Android release APK (`flutter build apk --release`) | PASS — 50.6 MB |
 | Miqrasiya V2→V3 mövcud məlumatla (12 cədvəl, sətir sayı əvvəl/sonra eyni) | PASS |
 | API uçdan-uca yoxlama (işləyən server, miqrasiya olunmuş baza) | **PASS — 16/16** |
@@ -65,6 +65,7 @@ Sistem lokal mühitdə uçdan-uca işləyir: qeydiyyat → paket seçimi → M10
 | Borc bölmələrinin PDF/Excel çıxarışı | PASS | ReportExportTest, smoke |
 | Ödəniş çeki (PDF, mağaza adı, qalıq borc) | PASS | ProductionHardeningTest, smoke, PDF baxılıb |
 | WhatsApp borc xatırlatması və ödəniş bildirişi | **WARNING** | Hazır mətnlə WhatsApp açılır, mesajı mağaza özü göndərir. Avtomatik göndərmə WhatsApp Business API (pullu provayder) tələb edir |
+| Ödəniş çekini WhatsApp ilə göndərmək | PASS | Mesajda çekin təhlükəsiz linki (HMAC, təxmin edilə bilməz, girişsiz açılır); telefonlarda PDF faylın özü də paylaşılır (web: Web Share, mobil: share_plus). ProductionHardeningTest + canlı yoxlama |
 
 ### Abunəlik sistemi
 | Funksiya | Status |

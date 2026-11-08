@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th } from "@/components/ui";
-import { ApiError, api, download } from "@/lib/api";
+import { ApiError, api, canShareFiles, download, shareProtectedFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DEBT_SECTION_SLUG, DEBT_STATUS_LABEL, DEBT_TYPE_LABEL, METHOD_LABEL, formatDate, formatDateTime, formatMoney, todayBaku } from "@/lib/format";
 import type { Debt, DebtPage, DebtStatus, DebtType, LedgerEntry, Party, Payment, PaymentMethod } from "@/lib/types";
@@ -408,7 +408,17 @@ function PaymentModal({ debt, storeName, canNotify, onClose, onSaved }: { debt: 
 
   if (done) {
     const remaining = done.remainingAfter ?? 0;
-    const wa = canNotify ? waLink(debt.partyPhone, paymentConfirmationText(storeName, debt.partyName, done.amount, remaining)) : null;
+    const text = paymentConfirmationText(storeName, debt.partyName, done.amount, remaining, done.receiptUrl);
+    const wa = canNotify ? waLink(debt.partyPhone, text) : null;
+    const shareFile = async () => {
+      setError(null);
+      try {
+        const shared = await shareProtectedFile(`/api/payments/${done.id}/receipt`, `cek-${done.id.slice(0, 8)}.pdf`, text);
+        if (!shared) setError("Bu brauzer faylı paylaşa bilmir — “WhatsApp ilə çek göndər” düyməsindən istifadə edin");
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : "Çek paylaşılmadı");
+      }
+    };
     return (
       <Modal open title="Ödəniş qeydə alındı" onClose={onSaved} footer={<Button variant="primary" onClick={onSaved}>Bağla</Button>}>
         <div className="mb-5 rounded-2xl bg-emerald-50 px-5 py-4 text-center ring-1 ring-emerald-600/20">
@@ -423,12 +433,16 @@ function PaymentModal({ debt, storeName, canNotify, onClose, onSaved }: { debt: 
           </Button>
           {wa ? (
             <a href={wa} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-500">
-              <WhatsAppIcon /> WhatsApp ilə bildir
+              <WhatsAppIcon /> WhatsApp ilə çek göndər
             </a>
           ) : (
             <p className="self-center text-center text-xs text-slate-400">{canNotify ? "WhatsApp üçün telefon nömrəsi yoxdur" : ""}</p>
           )}
+          {canNotify && canShareFiles() && (
+            <Button variant="outline" className="sm:col-span-2" onClick={shareFile}>PDF faylı paylaş (WhatsApp və s.)</Button>
+          )}
         </div>
+        {wa && <p className="mt-3 text-xs text-slate-400">Mesajda müştərinin çeki açması üçün təhlükəsiz link olur — müştəri basanda çek PDF kimi açılır.</p>}
       </Modal>
     );
   }

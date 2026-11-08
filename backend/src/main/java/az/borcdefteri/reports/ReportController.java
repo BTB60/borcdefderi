@@ -18,10 +18,13 @@ public class ReportController {
 
     private final ReportService reports;
     private final PaymentReportService paymentReports;
+    private final az.borcdefteri.payments.ReceiptLinks links;
 
-    public ReportController(ReportService reports, PaymentReportService paymentReports) {
+    public ReportController(ReportService reports, PaymentReportService paymentReports,
+                            az.borcdefteri.payments.ReceiptLinks links) {
         this.reports = reports;
         this.paymentReports = paymentReports;
+        this.links = links;
     }
 
     /** Debts of one section (customer debts / company receivables / company payables) as XLSX or PDF. */
@@ -48,6 +51,19 @@ public class ReportController {
     @GetMapping("/api/payments/{id}/receipt")
     public ResponseEntity<byte[]> paymentReceipt(@PathVariable UUID id) {
         return send(paymentReports.receiptPdf(id));
+    }
+
+    /**
+     * Public receipt link sent to the customer over WhatsApp. Valid only with the HMAC token of that payment;
+     * anything else is reported as not found (no information about which payments exist).
+     */
+    @GetMapping("/api/public/receipts/{id}/{token}")
+    public ResponseEntity<byte[]> sharedReceipt(@PathVariable UUID id, @PathVariable String token) {
+        if (!links.isValid(id, token)) {
+            throw az.borcdefteri.common.ApiException.notFound("Çek tapılmadı");
+        }
+        ExportFile file = paymentReports.sharedReceiptPdf(id);
+        return FileResponses.inline(file.content(), file.contentType(), file.fileName());
     }
 
     private static ResponseEntity<byte[]> send(ExportFile file) {

@@ -94,6 +94,8 @@ export interface Payment {
   createdAt: string;
   remainingAfter?: number | null;
   debtStatusAfter?: DebtStatus | null;
+  /** Public, unguessable link to the PDF receipt — sent to the customer over WhatsApp. */
+  receiptUrl?: string | null;
 }
 
 export interface Party {

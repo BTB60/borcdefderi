@@ -43,6 +43,21 @@ class ApiClient {
   Future<dynamic> get(String path, {Map<String, String>? query}) =>
       _send(() => _http.get(_uri(path, query), headers: _headers()));
 
+  /// Downloads a protected file (e.g. the PDF receipt) as bytes.
+  Future<List<int>> getBytes(String path) async {
+    final http.Response res;
+    try {
+      res = await _http.get(_uri(path), headers: _headers()).timeout(const Duration(seconds: 25));
+    } on http.ClientException {
+      throw const ApiException(0, 'NETWORK', 'Serverlə əlaqə qurula bilmədi. İnternet bağlantınızı yoxlayın.');
+    } on TimeoutException {
+      throw const ApiException(0, 'NETWORK', 'Serverlə əlaqə qurula bilmədi. İnternet bağlantınızı yoxlayın.');
+    }
+    if (res.statusCode >= 200 && res.statusCode < 300) return res.bodyBytes;
+    if (res.statusCode == 401 && _token != null && onUnauthorized != null) onUnauthorized!();
+    throw ApiException(res.statusCode, 'DOWNLOAD_FAILED', 'Fayl yüklənə bilmədi');
+  }
+
   Future<dynamic> post(String path, [Object? body]) => _send(() => _http.post(
         _uri(path),
         headers: _headers(json: true),

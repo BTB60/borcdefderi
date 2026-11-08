@@ -119,3 +119,13 @@ Gövdə: `{ "name", "phone?", "note?" }`.
 | GET | `/api/admin/revenue` | Ümumi/aylıq/illik gəlir, aktiv mağaza sayı, plan üzrə |
 | GET | `/api/admin/users?q=` | İstifadəçilər |
 | GET | `/api/admin/audit-logs?storeId=&limit=` | Audit jurnalı (yalnız əlavə etmə) |
+
+## Ödəniş çeki və WhatsApp
+
+| Metod | Yol | Qeyd |
+|---|---|---|
+| GET | `/api/payments/{id}/receipt` | Çek PDF (giriş tələb olunur, mağazaya bağlı) |
+| GET | `/api/payments/{id}/share-link` | `{url}` — müştəriyə göndəriləcək çek linki (mağazaya bağlı) |
+| GET | `/api/public/receipts/{id}/{token}` | **Girişsiz** — çek PDF brauzerdə açılır. `token` = HMAC-SHA256 (JWT_SECRET-dən törədilmiş açar); yanlış/saxta token → `404`. `JWT_SECRET` dəyişsə köhnə linklər etibarsız olur |
+
+Ödəniş cavablarında (`POST /api/debts/{id}/payments`, `GET /api/payments`) `receiptUrl` sahəsi də qaytarılır.

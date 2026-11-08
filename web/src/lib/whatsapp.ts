@@ -26,7 +26,14 @@ export function debtReminderText(store: string, party: string, remaining: number
   return `Hörmətli ${party}, "${store}" mağazasına qalıq borcunuz ${formatMoney(remaining)} təşkil edir.${due} Təşəkkür edirik!`;
 }
 
-export function paymentConfirmationText(store: string, party: string, paid: number, remaining: number): string {
+/** Payment confirmation; with a receipt link the customer can open the PDF receipt (çek) from WhatsApp. */
+export function paymentConfirmationText(store: string, party: string, paid: number, remaining: number, receiptUrl?: string | null): string {
   const rest = remaining > 0 ? `Qalıq borcunuz: ${formatMoney(remaining)}.` : "Borcunuz tam ödənilib.";
-  return `Hörmətli ${party}, "${store}" mağazasına ${formatMoney(paid)} ödənişiniz qəbul edildi. ${rest} Təşəkkür edirik!`;
+  const receipt = receiptUrl ? `\nÖdəniş çeki: ${receiptUrl}` : "";
+  return `Hörmətli ${party}, "${store}" mağazasına ${formatMoney(paid)} ödənişiniz qəbul edildi. ${rest} Təşəkkür edirik!${receipt}`;
+}
+
+/** Message used when (re)sending a receipt from the payments list. */
+export function receiptMessageText(store: string, party: string, paid: number, receiptUrl: string): string {
+  return `Hörmətli ${party}, "${store}" mağazasına ${formatMoney(paid)} ödənişinizin çeki: ${receiptUrl}`;
 }

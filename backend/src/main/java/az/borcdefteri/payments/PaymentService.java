@@ -30,7 +30,7 @@ public class PaymentService {
     public record PaymentView(UUID id, UUID debtId, DebtType debtType, String partyName, String partyPhone, BigDecimal amount,
                               PaymentMethod paymentMethod, OffsetDateTime paidAt, String description, String note,
                               UUID recordedBy, String recordedByName, OffsetDateTime createdAt,
-                              BigDecimal remainingAfter, String debtStatusAfter) {}
+                              BigDecimal remainingAfter, String debtStatusAfter, String receiptUrl) {}
 
     private static final String PAYMENT_SELECT = """
             SELECT p.id, p.debt_id, p.amount, p.payment_method, p.paid_at, p.description, p.note,
@@ -49,15 +49,17 @@ public class PaymentService {
     private final LedgerWriter ledger;
     private final AuditService audit;
     private final Clock clock;
+    private final ReceiptLinks links;
 
     public PaymentService(JdbcClient jdbc, TenantService tenant, DebtService debts, LedgerWriter ledger,
-                          AuditService audit, Clock clock) {
+                          AuditService audit, Clock clock, ReceiptLinks links) {
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.debts = debts;
         this.ledger = ledger;
         this.audit = audit;
         this.clock = clock;
+        this.links = links;
     }
 
     /**
@@ -116,7 +118,8 @@ public class PaymentService {
         audit.log(m.storeId(), m.userId(), "PAYMENT_RECORDED", "PAYMENT", paymentId.toString(),
                 req.paymentMethod() + " " + amount + " AZN, borc " + debtId);
         return new PaymentView(paymentId, debtId, debt.debtType(), debt.partyName(), debt.partyPhone(), amount, req.paymentMethod(),
-                paidAt, blank(req.description()), blank(req.note()), m.userId(), null, now, newRemaining, status);
+                paidAt, blank(req.description()), blank(req.note()), m.userId(), null, now, newRemaining, status,
+                links.url(paymentId));
     }
 
     /** Payments across the debt types the caller may see. */
@@ -176,7 +179,8 @@ public class PaymentService {
                 rs.getString("recorded_by_name"),
                 rs.getObject("created_at", OffsetDateTime.class),
                 null,
-                null)).list();
+                null,
+                links.url(rs.getObject("id", UUID.class)))).list();
     }
 
     /** Everything printed on a payment receipt (çek). */
@@ -188,7 +192,24 @@ public class PaymentService {
     /** Store-scoped: a payment of another store is reported as not found. */
     public PaymentReceipt receipt(UUID paymentId) {
         CurrentMember m = tenant.requireBusinessMember();
-        PaymentReceipt r = jdbc.sql("""
+        PaymentReceipt r = loadReceipt(paymentId, m.storeId());
+        debts.requireAccess(m, r.debtType());
+        return r;
+    }
+
+    /** Shareable link of one payment's receipt; same access rules as {@link #receipt(UUID)}. */
+    public String shareLink(UUID paymentId) {
+        return links.url(receipt(paymentId).id());
+    }
+
+    /** Receipt opened from a shared link; the caller has already verified the link's HMAC token. */
+    public PaymentReceipt receiptForSharedLink(UUID paymentId) {
+        return loadReceipt(paymentId, null);
+    }
+
+    private PaymentReceipt loadReceipt(UUID paymentId, UUID storeId) {
+        String storeFilter = storeId == null ? "" : " AND p.store_id = :storeId";
+        var spec = jdbc.sql("""
                 SELECT p.id, s.name AS store_name, s.phone AS store_phone, s.address AS store_address, d.debt_type,
                        COALESCE(c.name, co.name) AS party_name, COALESCE(c.phone, co.phone) AS party_phone,
                        p.amount, p.payment_method, p.paid_at, p.description, u.full_name AS recorded_by,
@@ -200,9 +221,11 @@ public class PaymentService {
                 JOIN users u ON u.id = p.recorded_by
                 LEFT JOIN customers c ON c.id = d.customer_id
                 LEFT JOIN companies co ON co.id = d.company_id
-                WHERE p.id = :id AND p.store_id = :storeId
-                """).param("id", paymentId).param("storeId", m.storeId())
-                .query((rs, n) -> new PaymentReceipt(
+                WHERE p.id = :id""" + storeFilter).param("id", paymentId);
+        if (storeId != null) {
+            spec = spec.param("storeId", storeId);
+        }
+        return spec.query((rs, n) -> new PaymentReceipt(
                         rs.getObject("id", UUID.class), rs.getString("store_name"), rs.getString("store_phone"),
                         rs.getString("store_address"), DebtType.valueOf(rs.getString("debt_type")),
                         rs.getString("party_name"), rs.getString("party_phone"), Money.of(rs.getBigDecimal("amount")),
@@ -211,8 +234,6 @@ public class PaymentService {
                         rs.getString("recorded_by"), Money.of(rs.getBigDecimal("debt_amount")),
                         Money.of(rs.getBigDecimal("balance_after")), rs.getObject("debt_date", LocalDate.class)))
                 .optional().orElseThrow(() -> ApiException.notFound("Ödəniş tapılmadı"));
-        debts.requireAccess(m, r.debtType());
-        return r;
     }
 
     private static String blank(String s) {

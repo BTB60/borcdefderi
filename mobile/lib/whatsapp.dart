@@ -22,7 +22,12 @@ String debtReminderText(String store, String party, double remaining, DateTime? 
   return 'Hörmətli $party, "$store" mağazasına qalıq borcunuz ${formatMoney(remaining)} təşkil edir.$dueText Təşəkkür edirik!';
 }
 
-String paymentConfirmationText(String store, String party, double paid, double remaining) {
+/// Payment confirmation; with [receiptUrl] the customer can open the PDF receipt (çek) straight from WhatsApp.
+String paymentConfirmationText(String store, String party, double paid, double remaining, [String? receiptUrl]) {
   final rest = remaining > 0 ? 'Qalıq borcunuz: ${formatMoney(remaining)}.' : 'Borcunuz tam ödənilib.';
-  return 'Hörmətli $party, "$store" mağazasına ${formatMoney(paid)} ödənişiniz qəbul edildi. $rest Təşəkkür edirik!';
+  final receipt = receiptUrl == null ? '' : '\nÖdəniş çeki: $receiptUrl';
+  return 'Hörmətli $party, "$store" mağazasına ${formatMoney(paid)} ödənişiniz qəbul edildi. $rest Təşəkkür edirik!$receipt';
 }
+
+String receiptMessageText(String store, String party, double paid, String receiptUrl) =>
+    'Hörmətli $party, "$store" mağazasına ${formatMoney(paid)} ödənişinizin çeki: $receiptUrl';

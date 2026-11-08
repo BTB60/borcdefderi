@@ -26,6 +26,12 @@ public class PaymentController {
         return payments.record(debtId, req);
     }
 
+    /** Shareable receipt link (for WhatsApp). Store-scoped: other stores' payments are not found. */
+    @GetMapping("/payments/{id}/share-link")
+    public java.util.Map<String, String> shareLink(@PathVariable UUID id) {
+        return java.util.Map.of("url", payments.shareLink(id));
+    }
+
     @GetMapping("/payments")
     public List<PaymentView> list(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

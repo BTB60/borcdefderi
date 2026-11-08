@@ -82,6 +82,42 @@ class ProductionHardeningTest extends IntegrationTestBase {
     }
 
     @Test
+    void receiptCanBeSharedByLinkWithoutLoginButLinksCannotBeForged() throws Exception {
+        String owner = register("WhatsApp Çek " + UUID.randomUUID());
+        String other = register("Başqa WhatsApp Çek " + UUID.randomUUID());
+        activateSubscription(owner, "MONTHLY");
+        activateSubscription(other, "MONTHLY");
+        UUID c = createCustomer(owner, "Səbinə", "+994501119988");
+        UUID debt = debtIdOf(owner, "CUSTOMER_DEBT", c, "60.00");
+        JsonNode payment = body(pay(owner, debt, "25.00", "CASH"));
+        String url = payment.get("receiptUrl").asText();
+        assertTrue(url.contains("/api/public/receipts/" + payment.get("id").asText() + "/"), url);
+        String path = java.net.URI.create(url).getPath();
+
+        // The customer opens the link from WhatsApp: no login, PDF shown inline in the browser.
+        byte[] pdf = get(null, path).andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"))
+                .andExpect(header().string("Content-Disposition", startsWith("inline")))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertEquals("%PDF", new String(Arrays.copyOf(pdf, 4)));
+
+        // Payments list carries the same link; the share-link endpoint is store-scoped.
+        get(owner, "/api/payments?debtId=" + debt).andExpect(jsonPath("$[0].receiptUrl", is(url)));
+        get(owner, "/api/payments/" + payment.get("id").asText() + "/share-link").andExpect(jsonPath("$.url", is(url)));
+        get(other, "/api/payments/" + payment.get("id").asText() + "/share-link").andExpect(status().isNotFound());
+
+        // Forged / altered / reused tokens are rejected without revealing anything.
+        String token = path.substring(path.lastIndexOf('/') + 1);
+        String forged = (token.charAt(0) == 'A' ? 'B' : 'A') + token.substring(1);
+        get(null, path.replace(token, forged)).andExpect(status().isNotFound());
+        get(null, "/api/public/receipts/" + payment.get("id").asText() + "/short").andExpect(status().isNotFound());
+        UUID debt2 = debtIdOf(owner, "CUSTOMER_DEBT", c, "10.00");
+        String otherPayment = body(pay(owner, debt2, "5.00", "CARD")).get("id").asText();
+        get(null, "/api/public/receipts/" + otherPayment + "/" + token).andExpect(status().isNotFound());
+        get(null, "/api/public/receipts/" + UUID.randomUUID() + "/" + token).andExpect(status().isNotFound());
+    }
+
+    @Test
     void paymentsReportNeedsReportsPermissionAndCoversTheRange() throws Exception {
         String owner = register("Hesabat Mağazası " + UUID.randomUUID());
         activateSubscription(owner, "MONTHLY");

@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Input, PageHeader, Select, Spinner, Table, Td, Th } from "@/components/ui";
 import { ApiError, api, download } from "@/lib/api";
+import { receiptMessageText, waLink } from "@/lib/whatsapp";
 import { useAuth } from "@/lib/auth";
 import { DEBT_TYPE_LABEL, METHOD_LABEL, METHOD_TONE, formatDateTime, formatMoney, todayBaku } from "@/lib/format";
 import type { Payment, PaymentMethod } from "@/lib/types";
@@ -10,7 +11,7 @@ import type { Payment, PaymentMethod } from "@/lib/types";
 const METHODS: PaymentMethod[] = ["CASH", "CARD", "TRANSFER", "OTHER"];
 
 export default function PaymentsPage() {
-  const { can } = useAuth();
+  const { can, me } = useAuth();
   const [filters, setFilters] = useState({ from: "", to: "", method: "" });
   const [applied, setApplied] = useState(filters);
   const [items, setItems] = useState<Payment[] | null>(null);
@@ -122,12 +123,24 @@ export default function PaymentsPage() {
                   <Td className="text-slate-500">{p.recordedByName ?? "—"}</Td>
                   <Td className="text-right font-semibold tabular-nums">{formatMoney(p.amount)}</Td>
                   <Td className="text-right">
-                    <button
-                      className="text-xs font-medium text-gold-600 hover:text-gold-500"
-                      onClick={() => download(`/api/payments/${p.id}/receipt`, "cek.pdf").catch((e) => setError(e instanceof ApiError ? e.message : "Çek yüklənmədi"))}
-                    >
-                      PDF
-                    </button>
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        className="text-xs font-medium text-gold-600 hover:text-gold-500"
+                        onClick={() => download(`/api/payments/${p.id}/receipt`, "cek.pdf").catch((e) => setError(e instanceof ApiError ? e.message : "Çek yüklənmədi"))}
+                      >
+                        PDF
+                      </button>
+                      {(() => {
+                        const href = p.debtType !== "COMPANY_PAYABLE" && p.receiptUrl
+                          ? waLink(p.partyPhone, receiptMessageText(me?.storeName ?? "", p.partyName, p.amount, p.receiptUrl))
+                          : null;
+                        return href ? (
+                          <a href={href} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-emerald-600 hover:text-emerald-500" title="Çeki WhatsApp ilə müştəriyə göndər">
+                            WhatsApp
+                          </a>
+                        ) : null;
+                      })()}
+                    </div>
                   </Td>
                 </tr>
               ))}

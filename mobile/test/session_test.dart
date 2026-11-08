@@ -66,6 +66,16 @@ void main() {
     expect(await tokens.read(), isNull);
   });
 
+  test('receipt PDF is downloaded as bytes with the bearer token', () async {
+    final client = MockClient((req) async {
+      expect(req.headers['Authorization'], 'Bearer t');
+      return http.Response.bytes(utf8.encode('%PDF-1.4'), 200, headers: {'content-type': 'application/pdf'});
+    });
+    final api = ApiClient(baseUrl: 'http://x', httpClient: client)..setToken('t');
+    final bytes = await api.getBytes('/api/payments/p1/receipt');
+    expect(utf8.decode(bytes.take(4).toList()), '%PDF');
+  });
+
   test('logout clears the token', () async {
     final client = MockClient((_) async => http.Response(jsonEncode({'token': 't', 'expiresInSeconds': 1, 'me': _me()}), 200));
     final tokens = MemoryTokenStore();

@@ -1,0 +1,16 @@
+target/
+.env
+.env.local
+node_modules/
+.next/
+uploads/
+*.log
+.idea/
+*.iml
+.vscode/
+build/
+.dart_tool/
+.flutter-plugins*
+
+# Local tooling
+.claude/

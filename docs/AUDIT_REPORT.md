@@ -17,12 +17,12 @@ Sistem lokal mühitdə uçdan-uca işləyir: qeydiyyat → paket seçimi → M10
 | Test | Nəticə |
 |---|---|
 | Backend build (`mvn package`) | PASS |
-| Backend inteqrasiya testləri (real PostgreSQL, 9 sinif) | **PASS — 63/63** |
+| Backend inteqrasiya testləri (real PostgreSQL, 10 sinif) | **PASS — 68/68** |
 | Frontend lint (`next lint`) | PASS — 0 xəta |
 | Frontend typecheck (`tsc --noEmit`) | PASS |
 | Frontend production build (`next build`) | PASS — 12 səhifə |
 | Flutter analyze | PASS — 0 problem |
-| Flutter testləri | **PASS — 23/23** |
+| Flutter testləri | **PASS — 24/24** |
 | Android release APK (`flutter build apk --release`) | PASS — 50.6 MB |
 | Miqrasiya V2→V3 mövcud məlumatla (12 cədvəl, sətir sayı əvvəl/sonra eyni) | PASS |
 | API uçdan-uca yoxlama (işləyən server, miqrasiya olunmuş baza) | **PASS — 16/16** |
@@ -75,6 +75,15 @@ Sistem lokal mühitdə uçdan-uca işləyir: qeydiyyat → paket seçimi → M10
 | Mağaza məlumatları (yalnız sahib) | PASS |
 | Profil şəkli (PNG/JPG, 256×256, EXIF silinir, yalnız özünə görünür) | PASS. Mobil kamera/qalereya cihazda NOT TESTED |
 | Deaktiv istifadəçinin köhnə tokeni rədd olunur | PASS |
+
+### Şifrəni unutdum
+| Funksiya | Status |
+|---|---|
+| "Şifrəni unutmusunuz?" (web + mobil), cavab hesabın varlığını açmır | PASS (PasswordResetTest + canlı) |
+| Admin panelində bərpa sorğuları və müvəqqəti şifrə (WhatsApp ilə göndərmə) | PASS |
+| Mağaza sahibi işçinin şifrəsini sıfırlayır (yalnız öz işçisi) | PASS |
+| Müvəqqəti şifrə ilə girişdən sonra məcburi yeni şifrə; köhnə sessiyalar bağlanır | PASS |
+| E-poçtla bərpa linki (30 dəq, birdəfəlik) | PASS testdə (saxta SMTP ilə). Real SMTP **NOT TESTED** — `MAIL_HOST` ayarlanmalıdır |
 
 ### Abunəlik sistemi
 | Funksiya | Status |
@@ -130,7 +139,7 @@ Sistem lokal mühitdə uçdan-uca işləyir: qeydiyyat → paket seçimi → M10
 | JWT brauzerdə `localStorage`-da; geri çağırma yoxdur (12 saat etibarlı) | WARNING — deaktiv istifadəçi/mağaza hər sorğuda bazadan yoxlanır, amma XSS olarsa token oğurlana bilər |
 | Rate limit yalnız tək instans üçün (yaddaşda) | WARNING |
 | `npm audit`: Next.js daxilindəki postcss (build zamanı) | WARNING — real risk aşağıdır, Next 16-ya keçid tələb edir |
-| Şifrə bərpası (unutdum) | WARNING — funksiya yoxdur |
+| Şifrə bərpası (unutdum) | PASS — admin vasitəsilə; e-poçt linki SMTP ayarlananda |
 | Lokal test adminı `admin/admin123` | WARNING — yalnız bu kompüterdəki test bazasında; production-da ≥12 simvol tələb olunur |
 
 ## 6. Database

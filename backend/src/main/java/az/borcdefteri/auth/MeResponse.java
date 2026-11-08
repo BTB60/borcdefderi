@@ -18,5 +18,7 @@ public record MeResponse(
         String phone,
         boolean hasAvatar,
         /** Changes whenever the profile picture changes — clients use it to refresh their cached image. */
-        Long avatarVersion
+        Long avatarVersion,
+        /** True after login with a temporary password: the client must show "set a new password" first. */
+        boolean mustChangePassword
 ) {}

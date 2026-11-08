@@ -142,3 +142,16 @@ Gövdə: `{ "name", "phone?", "note?" }`.
 | GET / DELETE | `/api/profile/avatar` | Öz profil şəkli (başqasının şəkli verilmir) |
 
 Abunəlik tələb olunmur. Şifrə yoxlanan sorğular (`PUT /api/profile`, `PUT /api/profile/password`) giriş kimi rate limit-ə tabedir. `/api/auth/me` cavabında `phone`, `hasAvatar`, `avatarVersion` var.
+
+## Şifrəni unutdum
+
+| Metod | Yol | Qeyd |
+|---|---|---|
+| POST | `/api/auth/forgot-password` | Açıq. `{email}` → həmişə eyni cavab `{emailEnabled}` (hesabın olub-olmadığı bilinmir). SMTP varsa 30 dəqiqəlik birdəfəlik link göndərilir; hər halda admin üçün sorğu yaranır |
+| POST | `/api/auth/reset-password` | Açıq. `{token, newPassword}` — e-poçt linki ilə. Bazada yalnız tokenin SHA-256-sı saxlanılır; istifadə olunmuş/vaxtı keçmiş → `400 INVALID_RESET_LINK` |
+| GET | `/api/admin/password-requests` | Açıq "şifrəni unutdum" sorğuları |
+| POST | `/api/admin/password-requests/{id}/dismiss` | Sorğunu bağla |
+| POST | `/api/admin/users/{id}/reset-password` | Müvəqqəti şifrə `{temporaryPassword, email, fullName, phone}` (yalnız bir dəfə göstərilir). Platforma adminlərinə tətbiq olunmur |
+| POST | `/api/employees/{memberId}/reset-password` | Mağaza sahibi öz işçisinə müvəqqəti şifrə verir |
+
+Müvəqqəti şifrə ilə girişdən sonra `me.mustChangePassword = true`; `PUT /api/profile/password` edilənə qədər biznes endpointləri `403 PASSWORD_CHANGE_REQUIRED` qaytarır. İstənilən şifrə sıfırlaması köhnə tokenləri etibarsız edir.

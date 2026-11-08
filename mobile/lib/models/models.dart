@@ -107,6 +107,9 @@ class Me {
   /// Changes whenever the profile picture changes (cache key for the downloaded image).
   final int? avatarVersion;
 
+  /// Logged in with a temporary password: a new password must be set before using the app.
+  final bool mustChangePassword;
+
   const Me({
     required this.userId,
     required this.email,
@@ -119,6 +122,7 @@ class Me {
     this.phone,
     this.hasAvatar = false,
     this.avatarVersion,
+    this.mustChangePassword = false,
   });
 
   bool get isOwner => role == 'STORE_OWNER';
@@ -139,6 +143,7 @@ class Me {
         phone: _str(j['phone']),
         hasAvatar: j['hasAvatar'] as bool? ?? false,
         avatarVersion: (j['avatarVersion'] as num?)?.toInt(),
+        mustChangePassword: j['mustChangePassword'] as bool? ?? false,
       );
 }
 

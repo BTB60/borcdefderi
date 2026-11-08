@@ -30,6 +30,17 @@ spring:
     multipart:
       max-file-size: 5MB
       max-request-size: 6MB
+  # Optional SMTP for "Şifrəni unutdum" e-mails. Leave MAIL_HOST empty to disable (admin-assisted recovery still works).
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.connectiontimeout: 10000
+      mail.smtp.timeout: 10000
   jackson:
     default-property-inclusion: non_null
     serialization:
@@ -43,6 +54,9 @@ management:
   endpoint:
     health:
       show-details: never
+  health:
+    mail:
+      enabled: false # SMTP is optional; an unconfigured/unreachable mail server must not mark the API as down
 
 app:
   timezone: Asia/Baku
@@ -64,3 +78,8 @@ app:
     auth-requests-per-minute: ${AUTH_RATE_LIMIT_PER_MINUTE:20}
   subscription:
     reminder-days: 7
+  password-reset:
+    # Public web address used in reset links (the Vercel URL in production).
+    web-url: ${APP_WEB_URL:http://localhost:3000}
+    mail-from: ${MAIL_FROM:}
+    token-minutes: 30

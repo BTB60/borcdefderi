@@ -71,6 +71,11 @@ export default function LoginPage() {
             <Field label="Şifrə">
               <Input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </Field>
+            <div className="-mt-2 text-right">
+              <Link href="/sifre-unutdum" className="text-sm font-medium text-navy-800 underline decoration-gold-500 underline-offset-4 hover:text-gold-600">
+                Şifrəni unutmusunuz?
+              </Link>
+            </div>
             <Button type="submit" variant="primary" className="w-full py-3" disabled={busy}>
               {busy ? "Yoxlanılır…" : "Daxil ol"}
             </Button>

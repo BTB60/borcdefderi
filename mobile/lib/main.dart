@@ -4,6 +4,7 @@ import 'api/api_client.dart';
 import 'config.dart';
 import 'screens/auth_screens.dart';
 import 'screens/home_shell.dart';
+import 'screens/password_screens.dart';
 import 'state/session.dart';
 import 'theme.dart';
 
@@ -62,6 +63,9 @@ class _BorcdefteriAppState extends State<BorcdefteriApp> {
           }
           if (!session.isSignedIn) {
             return AuthScreen(session: session);
+          }
+          if (session.me!.mustChangePassword) {
+            return ForcePasswordChangeScreen(session: session);
           }
           return HomeShell(session: session);
         },

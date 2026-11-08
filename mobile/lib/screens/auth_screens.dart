@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'password_screens.dart';
 
 /// Login and registration in one screen with a toggle.
 class AuthScreen extends StatefulWidget {
@@ -126,7 +127,18 @@ class _AuthScreenState extends State<AuthScreen> {
                       decoration: InputDecoration(labelText: 'Şifrə', helperText: _register ? 'Ən azı 8 simvol' : null),
                       validator: (v) => (v == null || v.length < (_register ? 8 : 1)) ? 'Şifrə ən azı ${_register ? 8 : 1} simvol olmalıdır' : null,
                     ),
-                    const SizedBox(height: 24),
+                    if (!_register)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: _busy
+                              ? null
+                              : () => Navigator.of(context).push(MaterialPageRoute(
+                                  builder: (_) => ForgotPasswordScreen(api: widget.session.api, initialEmail: _email.text.trim()))),
+                          child: const Text('Şifrəni unutmusunuz?'),
+                        ),
+                      ),
+                    const SizedBox(height: 12),
                     FilledButton(
                       onPressed: _busy ? null : _submit,
                       child: _busy

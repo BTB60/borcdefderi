@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Spinner, Table, Td, Th } from "@/components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Spinner, Table, Td, Th, useConfirm } from "@/components/ui";
+import { TemporaryPasswordModal, type TemporaryPassword } from "@/components/PasswordReset";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { PERMISSION_LABEL } from "@/lib/format";
@@ -40,6 +41,23 @@ export default function EmployeesPage() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
   const [reload, setReload] = useState(0);
+  const [temp, setTemp] = useState<TemporaryPassword | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
+
+  async function resetPassword(e: Employee) {
+    const ok = await confirm(
+      <>
+        <strong>{e.fullName}</strong> üçün yeni müvəqqəti şifrə yaradılsın? İşçi daxil olanda özünə yeni şifrə təyin edəcək.
+      </>,
+      { title: "İşçinin şifrəsini sıfırla", confirmLabel: "Bəli, sıfırla" },
+    );
+    if (!ok) return;
+    try {
+      setTemp(await api<TemporaryPassword>(`/api/employees/${e.memberId}/reset-password`, { method: "POST" }));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Şifrə sıfırlanmadı");
+    }
+  }
 
   useEffect(() => {
     if (!isOwner) return;
@@ -95,6 +113,7 @@ export default function EmployeesPage() {
                   <Td className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" onClick={() => setEditing(e)}>İcazələr</Button>
+                      <Button variant="ghost" onClick={() => resetPassword(e)}>Şifrəni sıfırla</Button>
                       <Button variant="outline" onClick={() => toggleActive(e)}>{e.active ? "Deaktiv et" : "Aktiv et"}</Button>
                     </div>
                   </Td>
@@ -105,6 +124,8 @@ export default function EmployeesPage() {
         )}
       </Card>
 
+      {confirmDialog}
+      {temp && <TemporaryPasswordModal result={temp} onClose={() => setTemp(null)} />}
       {creating && (
         <CreateEmployeeModal
           onClose={() => setCreating(false)}

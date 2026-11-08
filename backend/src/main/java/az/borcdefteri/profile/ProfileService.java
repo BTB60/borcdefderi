@@ -136,7 +136,7 @@ public class ProfileService {
         if (newPassword.equals(currentPassword)) {
             throw ApiException.badRequest("PASSWORD_UNCHANGED", "Yeni şifrə cari şifrədən fərqli olmalıdır");
         }
-        jdbc.sql("UPDATE users SET password_hash = :hash, password_changed_at = now() WHERE id = :id")
+        jdbc.sql("UPDATE users SET password_hash = :hash, password_changed_at = now(), must_change_password = FALSE WHERE id = :id")
                 .param("hash", passwordEncoder.encode(newPassword)).param("id", userId).update();
         UUID storeId = jdbc.sql("SELECT store_id FROM store_members WHERE user_id = :id").param("id", userId)
                 .query(UUID.class).optional().orElse(null);

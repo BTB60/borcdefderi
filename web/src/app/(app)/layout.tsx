@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { AppShell } from "@/components/AppShell";
+import { ForcePasswordChange } from "@/components/PasswordReset";
 import { Spinner } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 
@@ -21,5 +22,6 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
       </div>
     );
   }
+  if (me.mustChangePassword) return <ForcePasswordChange />;
   return <AppShell><div className="page-enter">{children}</div></AppShell>;
 }

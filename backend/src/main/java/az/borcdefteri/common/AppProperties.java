@@ -10,7 +10,8 @@ public record AppProperties(
         Bootstrap bootstrap,
         Upload upload,
         RateLimit rateLimit,
-        Subscription subscription
+        Subscription subscription,
+        PasswordReset passwordReset
 ) {
     public record Jwt(String secret, long expirationMinutes) {}
 
@@ -23,4 +24,6 @@ public record AppProperties(
     public record RateLimit(int authRequestsPerMinute) {}
 
     public record Subscription(int reminderDays) {}
+
+    public record PasswordReset(String webUrl, String mailFrom, int tokenMinutes) {}
 }

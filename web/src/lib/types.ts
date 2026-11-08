@@ -37,6 +37,8 @@ export interface Me {
   hasAvatar?: boolean;
   /** Changes whenever the profile picture changes. */
   avatarVersion?: number | null;
+  /** Logged in with a temporary password: a new password must be set first. */
+  mustChangePassword?: boolean;
 }
 
 export interface Profile {

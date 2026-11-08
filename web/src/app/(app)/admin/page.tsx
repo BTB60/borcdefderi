@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
 import { ApiError, api, openProtected } from "@/lib/api";
 import { Countdown, WARN_DAYS, countdown, useNow } from "@/components/Countdown";
+import { TemporaryPasswordModal, type TemporaryPassword } from "@/components/PasswordReset";
 import { SUBSCRIPTION_STATUS_LABEL, formatDate, formatDateTime, formatMoney, planPeriodLabel } from "@/lib/format";
 import type { AdminRevenue, AdminStore, AuditEntry, Contact, Plan, SubscriptionRecord } from "@/lib/types";
 
@@ -665,38 +666,108 @@ function RevenueTab({ onError }: { onError: (m: string | null) => void }) {
   );
 }
 
+type AdminUser = { id: string; email: string; fullName: string; phone: string | null; platformRole: string; storeRole: string | null; storeName: string | null; enabled: boolean };
+type ResetRequest = { id: string; userId: string; email: string; fullName: string; phone: string | null; storeName: string | null; role: string | null; createdAt: string };
+
 function UsersTab({ onError }: { onError: (m: string | null) => void }) {
   const [q, setQ] = useState("");
   const [applied, setApplied] = useState("");
-  const [items, setItems] = useState<Array<{ id: string; email: string; fullName: string; platformRole: string; storeRole: string | null; storeName: string | null; enabled: boolean }> | null>(null);
+  const [items, setItems] = useState<AdminUser[] | null>(null);
+  const [requests, setRequests] = useState<ResetRequest[]>([]);
+  const [temp, setTemp] = useState<TemporaryPassword | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const [confirm, confirmDialog] = useConfirm();
+
   useEffect(() => {
     setItems(null);
-    api<typeof items>(`/api/admin/users${applied ? `?q=${encodeURIComponent(applied)}` : ""}`).then(setItems).catch((e) => onError(errorText(e, "İstifadəçilər yüklənmədi")));
+    api<AdminUser[]>(`/api/admin/users${applied ? `?q=${encodeURIComponent(applied)}` : ""}`).then(setItems).catch((e) => onError(errorText(e, "İstifadəçilər yüklənmədi")));
+    api<ResetRequest[]>("/api/admin/password-requests").then(setRequests).catch(() => setRequests([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applied]);
+  }, [applied, reload]);
+
+  async function reset(userId: string, name: string) {
+    const ok = await confirm(
+      <>
+        <strong>{name}</strong> üçün yeni müvəqqəti şifrə yaradılsın?
+        <span className="mt-2 block text-xs text-slate-500">Köhnə şifrə və bütün açıq girişlər dərhal etibarsız olacaq. İstifadəçi daxil olanda yeni şifrə təyin etməlidir.</span>
+      </>,
+      { title: "Şifrəni sıfırla", confirmLabel: "Bəli, sıfırla" },
+    );
+    if (!ok) return;
+    setBusyId(userId);
+    onError(null);
+    try {
+      setTemp(await api<TemporaryPassword>(`/api/admin/users/${userId}/reset-password`, { method: "POST" }));
+      setReload((r) => r + 1);
+    } catch (e) {
+      onError(errorText(e, "Şifrə sıfırlanmadı"));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function dismiss(id: string) {
+    try {
+      await api(`/api/admin/password-requests/${id}/dismiss`, { method: "POST" });
+      setReload((r) => r + 1);
+    } catch (e) {
+      onError(errorText(e, "Sorğu bağlanmadı"));
+    }
+  }
+
   return (
-    <Card>
-      <form onSubmit={(e: FormEvent) => { e.preventDefault(); setApplied(q.trim()); }} className="mb-5 flex gap-2">
-        <Input placeholder="Ad və ya e-poçt" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Axtarış" />
-        <Button type="submit" variant="outline">Axtar</Button>
-      </form>
-      {!items ? <Spinner /> : items.length === 0 ? <EmptyState title="İstifadəçi tapılmadı" /> : (
-        <Table>
-          <thead className="bg-slate-50/70"><tr><Th>Ad</Th><Th>E-poçt</Th><Th>Rol</Th><Th>Mağaza</Th><Th>Status</Th></tr></thead>
-          <tbody className="divide-y divide-slate-100">
-            {items.map((u) => (
-              <tr key={u.id} className="hover:bg-gold-500/5">
-                <Td className="font-medium text-navy-800">{u.fullName}</Td>
-                <Td>{u.email}</Td>
-                <Td>{u.platformRole === "SUPER_ADMIN" ? <Badge tone="gold">Administrator</Badge> : <Badge tone="navy">{u.storeRole === "EMPLOYEE" ? "İşçi" : u.storeRole === "STORE_OWNER" ? "Sahib" : "—"}</Badge>}</Td>
-                <Td className="text-slate-500">{u.storeName ?? "—"}</Td>
-                <Td><Badge tone={u.enabled ? "emerald" : "rose"}>{u.enabled ? "Aktiv" : "Deaktiv"}</Badge></Td>
-              </tr>
+    <>
+      {requests.length > 0 && (
+        <Card className="mb-6 border-amber-300">
+          <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Şifrə bərpası sorğuları ({requests.length})</h2>
+          <p className="mb-4 text-sm text-slate-500">“Şifrəni unutdum” basan istifadəçilər. Kimliyi telefonla təsdiqləyin, sonra müvəqqəti şifrə verin.</p>
+          <ul className="divide-y divide-slate-100">
+            {requests.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div>
+                  <p className="font-medium text-navy-800">{r.fullName} <span className="text-xs font-normal text-slate-400">· {r.storeName ?? "—"}</span></p>
+                  <p className="text-xs text-slate-500">{r.email}{r.phone ? ` · ${r.phone}` : ""} · {formatDateTime(r.createdAt)}</p>
+                </div>
+                <div className="flex gap-1">
+                  <Button variant="ghost" onClick={() => dismiss(r.id)}>Bağla</Button>
+                  <Button variant="gold" disabled={busyId === r.userId} onClick={() => reset(r.userId, r.fullName)}>Müvəqqəti şifrə ver</Button>
+                </div>
+              </li>
             ))}
-          </tbody>
-        </Table>
+          </ul>
+        </Card>
       )}
-    </Card>
+      <Card>
+        <form onSubmit={(e: FormEvent) => { e.preventDefault(); setApplied(q.trim()); }} className="mb-5 flex gap-2">
+          <Input placeholder="Ad və ya e-poçt" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Axtarış" />
+          <Button type="submit" variant="outline">Axtar</Button>
+        </form>
+        {!items ? <Spinner /> : items.length === 0 ? <EmptyState title="İstifadəçi tapılmadı" /> : (
+          <Table>
+            <thead className="bg-slate-50/70"><tr><Th>Ad</Th><Th>E-poçt</Th><Th>Rol</Th><Th>Mağaza</Th><Th>Status</Th><Th className="text-right">Şifrə</Th></tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {items.map((u) => (
+                <tr key={u.id} className="hover:bg-gold-500/5">
+                  <Td className="font-medium text-navy-800">{u.fullName}{u.phone && <div className="text-xs font-normal text-slate-400">{u.phone}</div>}</Td>
+                  <Td>{u.email}</Td>
+                  <Td>{u.platformRole === "SUPER_ADMIN" ? <Badge tone="gold">Administrator</Badge> : <Badge tone="navy">{u.storeRole === "EMPLOYEE" ? "İşçi" : u.storeRole === "STORE_OWNER" ? "Sahib" : "—"}</Badge>}</Td>
+                  <Td className="text-slate-500">{u.storeName ?? "—"}</Td>
+                  <Td><Badge tone={u.enabled ? "emerald" : "rose"}>{u.enabled ? "Aktiv" : "Deaktiv"}</Badge></Td>
+                  <Td className="text-right">
+                    {u.platformRole !== "SUPER_ADMIN" && (
+                      <Button variant="ghost" disabled={busyId === u.id} onClick={() => reset(u.id, u.fullName)}>Şifrəni sıfırla</Button>
+                    )}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </Card>
+      {confirmDialog}
+      {temp && <TemporaryPasswordModal result={temp} onClose={() => setTemp(null)} />}
+    </>
   );
 }
 

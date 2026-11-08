@@ -101,11 +101,16 @@ public class AuthService {
     }
 
     public MeResponse me(UUID userId) {
-        record Base(String email, String fullName, String platformRole, String phone, java.time.OffsetDateTime avatarAt) {}
-        Base base = jdbc.sql("SELECT email, full_name, platform_role, phone, avatar_updated_at FROM users WHERE id = :id")
+        record Base(String email, String fullName, String platformRole, String phone, java.time.OffsetDateTime avatarAt,
+                    boolean mustChangePassword) {}
+        Base base = jdbc.sql("""
+                SELECT email, full_name, platform_role, phone, avatar_updated_at, must_change_password
+                FROM users WHERE id = :id
+                """)
                 .param("id", userId)
                 .query((rs, n) -> new Base(rs.getString("email"), rs.getString("full_name"), rs.getString("platform_role"),
-                        rs.getString("phone"), rs.getObject("avatar_updated_at", java.time.OffsetDateTime.class)))
+                        rs.getString("phone"), rs.getObject("avatar_updated_at", java.time.OffsetDateTime.class),
+                        rs.getBoolean("must_change_password")))
                 .single();
 
         CurrentMember member = null;
@@ -130,7 +135,8 @@ public class AuthService {
                 subscription,
                 base.phone(),
                 base.avatarAt() != null,
-                base.avatarAt() == null ? null : base.avatarAt().toInstant().toEpochMilli()
+                base.avatarAt() == null ? null : base.avatarAt().toInstant().toEpochMilli(),
+                base.mustChangePassword()
         );
     }
 

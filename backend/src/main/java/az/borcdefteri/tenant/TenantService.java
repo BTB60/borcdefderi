@@ -59,10 +59,12 @@ public class TenantService {
     public CurrentMember requireMember() {
         AuthenticatedUser principal = currentPrincipal();
         record Row(UUID memberId, UUID storeId, String storeName, String storeStatus, String role,
-                   boolean memberActive, boolean userEnabled, String platformRole, String permissions) {}
+                   boolean memberActive, boolean userEnabled, String platformRole, String permissions,
+                   boolean mustChangePassword) {}
         Row row = jdbc.sql("""
                 SELECT m.id AS member_id, s.id AS store_id, s.name AS store_name, s.status AS store_status,
                        m.role, m.active AS member_active, u.enabled AS user_enabled, u.platform_role,
+                       u.must_change_password,
                        COALESCE((SELECT string_agg(p.permission, ',') FROM member_permissions p
                                  WHERE p.member_id = m.id), '') AS permissions
                 FROM users u
@@ -80,12 +82,17 @@ public class TenantService {
                         rs.getBoolean("member_active"),
                         rs.getBoolean("user_enabled"),
                         rs.getString("platform_role"),
-                        rs.getString("permissions")))
+                        rs.getString("permissions"),
+                        rs.getBoolean("must_change_password")))
                 .optional()
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Hesab tapılmadı"));
 
         if (!row.userEnabled()) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "ACCOUNT_DISABLED", "Hesab deaktiv edilib");
+        }
+        if (row.mustChangePassword()) {
+            // Logged in with a temporary password from the admin / store owner: only the settings page works.
+            throw ApiException.forbidden("PASSWORD_CHANGE_REQUIRED", "Davam etmək üçün yeni şifrə təyin edin");
         }
         if (row.memberId() == null) {
             throw ApiException.forbidden("NO_STORE", "Bu hesab heç bir mağazaya bağlı deyil");

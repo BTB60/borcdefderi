@@ -21,6 +21,15 @@ void main() {
     });
     expect(me.hasAvatar, isFalse);
     expect(me.avatarVersion, isNull);
+    expect(me.mustChangePassword, isFalse);
+  });
+
+  test('temporary password login is flagged so the app forces a new password', () {
+    final me = Me.fromJson({
+      'userId': 'u', 'email': 'o@x.az', 'fullName': 'Nigar', 'platformRole': 'USER', 'role': 'STORE_OWNER',
+      'storeName': 'Market', 'permissions': [], 'subscription': null, 'mustChangePassword': true,
+    });
+    expect(me.mustChangePassword, isTrue);
   });
 
   test('profile picture is uploaded as multipart with the bearer token', () async {

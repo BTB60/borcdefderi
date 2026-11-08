@@ -28,6 +28,8 @@ Kök qovluqdakı `render.yaml` Blueprint-dir (servis: `borcdefteri-api`, `rootDi
    | `DATABASE_USERNAME` / `DATABASE_PASSWORD` | Neon istifadəçisi |
    | `JWT_SECRET` | Ən azı 32 simvol. Məs: `openssl rand -base64 48` |
    | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | İlk Super Admin (şifrə ≥12 simvol). Hesab yalnız ilk işə salınmada yaradılır |
+   | `APP_WEB_URL` | Vercel URL-i (şifrə bərpa linkləri üçün), məs. `https://borcdefteri.vercel.app` |
+   | `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` | **İstəyə bağlı** — "Şifrəni unutdum" e-poçtu üçün SMTP (Gmail app password, Brevo, Mailgun və s.). Boşdursa istifadəçilər şifrəni administrator vasitəsilə bərpa edir |
    | `CORS_ALLOWED_ORIGINS` | Vercel URL-i, məs. `https://borcdefteri.vercel.app` (vergüllə bir neçə dəyər ola bilər) |
 
 3. Health check: `/api/health` (`render.yaml`-da təyin olunub).

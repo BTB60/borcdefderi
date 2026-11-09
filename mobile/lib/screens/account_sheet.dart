@@ -24,7 +24,7 @@ enum AccountMode { charge, pay }
 
 /// Opens "Borc əlavə et" / "Borc ödə" for a customer or company. Returns a message when something was saved.
 Future<String?> openAccountSheet(BuildContext context,
-    {required Session session, required bool isCustomer, required String partyId, required AccountMode mode}) {
+    {required Session session, required bool isCustomer, required String partyId, required AccountMode mode, String? initialType}) {
   return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
@@ -32,18 +32,19 @@ Future<String?> openAccountSheet(BuildContext context,
     useSafeArea: true,
     builder: (ctx) => Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-      child: _AccountSheet(session: session, isCustomer: isCustomer, partyId: partyId, mode: mode),
+      child: _AccountSheet(session: session, isCustomer: isCustomer, partyId: partyId, mode: mode, initialType: initialType),
     ),
   );
 }
 
 class _AccountSheet extends StatefulWidget {
-  const _AccountSheet({required this.session, required this.isCustomer, required this.partyId, required this.mode});
+  const _AccountSheet({required this.session, required this.isCustomer, required this.partyId, required this.mode, this.initialType});
 
   final Session session;
   final bool isCustomer;
   final String partyId;
   final AccountMode mode;
+  final String? initialType;
 
   @override
   State<_AccountSheet> createState() => _AccountSheetState();
@@ -55,6 +56,7 @@ class _AccountSheetState extends State<_AccountSheet> {
   final _receipt = TextEditingController();
   final _note = TextEditingController();
   DateTime _date = DateTime.now();
+  DateTime? _due;
   String _method = 'CASH';
   String? _type;
   String? _partyName;
@@ -104,6 +106,10 @@ class _AccountSheetState extends State<_AccountSheet> {
         _partyName = party['name'] as String?;
         _partyPhone = party['phone'] as String?;
         final types = _types;
+        if (widget.initialType != null && types.contains(widget.initialType)) {
+          _type = widget.initialType;
+          return;
+        }
         _type = _isCharge
             ? (types.isEmpty ? null : types.first)
             : types.firstWhere((t) => (balances[t] ?? 0) > 0, orElse: () => types.isEmpty ? '' : types.first);
@@ -140,6 +146,7 @@ class _AccountSheetState extends State<_AccountSheet> {
           'date': _iso(_date),
           'receiptNumber': _receipt.text.trim().isEmpty ? null : _receipt.text.trim(),
           'note': _note.text.trim().isEmpty ? null : _note.text.trim(),
+          if (_due != null) 'dueDate': _iso(_due!),
           'expectedRemaining': _balance.toStringAsFixed(2),
         }) as Map<String, dynamic>;
         if (mounted) {
@@ -274,6 +281,19 @@ class _AccountSheetState extends State<_AccountSheet> {
                 final picked = await showDatePicker(
                     context: context, initialDate: _date, firstDate: DateTime(2020), lastDate: DateTime.now(), locale: const Locale('az'));
                 if (picked != null) setState(() => _date = picked);
+              },
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Son ödəmə tarixi (istəyə bağlı)'),
+              subtitle: Text(_due == null ? 'Keçəndə borc gecikmiş sayılır' : formatDate(_due!)),
+              trailing: _due == null
+                  ? const Icon(Icons.event_outlined)
+                  : IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() => _due = null)),
+              onTap: () async {
+                final picked = await showDatePicker(
+                    context: context, initialDate: _due ?? _date, firstDate: _date, lastDate: DateTime(2100), locale: const Locale('az'));
+                if (picked != null) setState(() => _due = picked);
               },
             ),
             TextFormField(controller: _receipt, maxLength: 60, decoration: const InputDecoration(labelText: 'Çek nömrəsi (istəyə bağlı)')),

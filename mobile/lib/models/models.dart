@@ -301,8 +301,14 @@ class Party {
   final String? note;
   final double openBalance;
   final int openDebtCount;
+  final String? code;
+  final DateTime? createdAt;
+  final DateTime? lastContactAt;
+  final DateTime? lastActivityAt;
+  final int overdueDebts;
 
-  const Party({required this.id, required this.name, required this.phone, required this.openBalance, this.note, this.openDebtCount = 0});
+  const Party({required this.id, required this.name, required this.phone, required this.openBalance, this.note, this.openDebtCount = 0,
+      this.code, this.createdAt, this.lastContactAt, this.lastActivityAt, this.overdueDebts = 0});
 
   factory Party.fromJson(Map<String, dynamic> j) => Party(
         id: j['id'] as String,
@@ -311,6 +317,11 @@ class Party {
         note: _str(j['note']),
         openBalance: _num(j['openBalance']),
         openDebtCount: _num(j['openDebtCount']).toInt(),
+        code: _str(j['code']),
+        createdAt: j['createdAt'] == null ? null : DateTime.parse(j['createdAt'] as String),
+        lastContactAt: j['lastContactAt'] == null ? null : DateTime.parse(j['lastContactAt'] as String),
+        lastActivityAt: j['lastActivityAt'] == null ? null : DateTime.parse(j['lastActivityAt'] as String),
+        overdueDebts: _num(j['overdueDebts']).toInt(),
       );
 }
 

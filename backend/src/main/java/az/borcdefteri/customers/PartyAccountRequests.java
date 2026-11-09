@@ -29,7 +29,9 @@ public final class PartyAccountRequests {
             LocalDate date,
             @Size(max = 60, message = "Çek nömrəsi ən çox 60 simvol ola bilər") String receiptNumber,
             @Size(max = 255, message = "Qeyd ən çox 255 simvol ola bilər") String note,
-            BigDecimal expectedRemaining
+            BigDecimal expectedRemaining,
+            /** Optional "son ödəmə tarixi": after it the account shows as overdue (gecikmiş). */
+            LocalDate dueDate
     ) {}
 
     /** "Borc ödə": paid against the party's total balance, oldest debt first. */

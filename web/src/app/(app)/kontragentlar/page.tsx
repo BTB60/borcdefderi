@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { Alert, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Spinner, Table, Td, Th } from "@/components/ui";
 import { AccountModal } from "@/components/debts/AccountModals";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, download } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatMoney } from "@/lib/format";
 import type { Party } from "@/lib/types";
@@ -14,6 +15,15 @@ type FormState = { name: string; phone: string; note: string };
 const EMPTY: FormState = { name: "", phone: "", note: "" };
 
 export default function PartiesPage() {
+  return (
+    <Suspense fallback={<Spinner />}>
+      <PartiesList />
+    </Suspense>
+  );
+}
+
+function PartiesList() {
+  const search = useSearchParams();
   const { can, isOwner } = useAuth();
   const canCustomers = isOwner || can("CUSTOMER_DEBTS");
   const canCompanies = isOwner || can("COMPANY_RECEIVABLES") || can("COMPANY_PAYABLES");
@@ -23,7 +33,7 @@ export default function PartiesPage() {
   const [items, setItems] = useState<Party[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Party | "new" | null>(null);
+  const [editing, setEditing] = useState<Party | "new" | null>(() => (search.get("yeni") ? "new" : null));
   const [account, setAccount] = useState<{ mode: "charge" | "pay"; party: Party } | null>(null);
   const [reload, setReload] = useState(0);
 
@@ -42,7 +52,12 @@ export default function PartiesPage() {
       <PageHeader
         title="Müştəri və şirkətlər"
         subtitle="Borc və alacaq qeydlərində istifadə olunan tərəflər"
-        actions={<Button variant="gold" onClick={() => setEditing("new")}>+ {label} əlavə et</Button>}
+        actions={
+          <>
+            <Button variant="outline" onClick={() => download(`/api/reports/${tab}/export`, `${tab}.xlsx`).catch((e) => setError(e instanceof ApiError ? e.message : "Excel hazırlanmadı"))}>Excel</Button>
+            <Button variant="gold" onClick={() => setEditing("new")}>+ {label} əlavə et</Button>
+          </>
+        }
       />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
@@ -57,7 +72,7 @@ export default function PartiesPage() {
           )}
         </div>
         <form onSubmit={(e: FormEvent) => { e.preventDefault(); setApplied(q.trim()); }} className="flex flex-1 gap-2">
-          <Input placeholder="Ad və ya telefon üzrə axtar" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Axtarış" />
+          <Input placeholder={tab === "customers" ? "Ad, telefon və ya müştəri kodu (HP-…)" : "Ad və ya telefon üzrə axtar"} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Axtarış" />
           <Button type="submit" variant="outline">Axtar</Button>
         </form>
       </div>
@@ -70,14 +85,16 @@ export default function PartiesPage() {
         ) : (
           <Table>
             <thead className="bg-slate-50/70">
-              <tr><Th>Ad</Th><Th>Telefon</Th>{tab === "customers" && <Th className="text-right">Açıq borc</Th>}<Th>Qeyd</Th><Th className="text-right">Əməliyyat</Th></tr>
+              <tr><Th>Ad</Th>{tab === "customers" && <Th>Kod</Th>}<Th>Telefon</Th>{tab === "customers" && <Th className="text-right">Açıq borc</Th>}<Th>Qeyd</Th><Th className="text-right">Əməliyyat</Th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {items.map((p) => (
                 <tr key={p.id} className="transition-colors hover:bg-gold-500/5">
                   <Td className="font-medium text-navy-800">
                     <Link href={`/kontragentlar/${tab === "customers" ? "musteri" : "sirket"}/${p.id}`} className="hover:text-gold-600 hover:underline">{p.name}</Link>
+                    {(p.overdueDebts ?? 0) > 0 && <span className="ml-2 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-600">gecikmiş</span>}
                   </Td>
+                  {tab === "customers" && <Td className="text-xs text-slate-500">{p.code ?? "—"}</Td>}
                   <Td>{p.phone ?? "—"}</Td>
                   {tab === "customers" && <Td className="text-right tabular-nums">{formatMoney(p.openBalance)}</Td>}
                   <Td className="max-w-[18rem] truncate text-slate-500">{p.note ?? "—"}</Td>

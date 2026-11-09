@@ -19,8 +19,10 @@ import java.util.UUID;
 @Service
 public class PartyService {
 
+    /** code: "HP-000001" for customers (null for companies); lastActivityAt: latest debt change or payment. */
     public record Party(UUID id, String name, String phone, String note, OffsetDateTime createdAt,
-                        BigDecimal openBalance, long openDebtCount) {}
+                        BigDecimal openBalance, long openDebtCount, String code, OffsetDateTime lastContactAt,
+                        OffsetDateTime lastActivityAt, long overdueDebts) {}
 
     private final JdbcClient jdbc;
     private final TenantService tenant;
@@ -112,18 +114,24 @@ public class PartyService {
     private List<Party> list(String table, String fkColumn, CurrentMember m, String q, String debtType) {
         String like = az.borcdefteri.common.Search.contains(q);
         String typeFilter = debtType == null ? "" : " AND d.debt_type = '" + debtType + "'";
-        return jdbc.sql("""
-                SELECT p.id, p.name, p.phone, p.note, p.created_at,
+        boolean customers = "customers".equals(table);
+        // table, fkColumn and debtType are constants chosen by this class, never user input
+        String code = customers ? "p.code" : "NULL";
+        String contact = customers ? "p.last_contact_at" : "CAST(NULL AS timestamptz)";
+        return jdbc.sql("SELECT p.id, p.name, p.phone, p.note, p.created_at, " + code + " AS code, " + contact
+                + " AS last_contact_at, "
+                + """
                        COALESCE(SUM(d.remaining_amount) FILTER (WHERE d.status <> 'PAID'), 0) AS open_balance,
-                       COUNT(d.id) FILTER (WHERE d.status <> 'PAID') AS open_count
-                FROM\s""" + table + """
-                 p
-                LEFT JOIN debts d ON d.""" + fkColumn + " = p.id AND d.store_id = p.store_id" + typeFilter + " " + """
-                WHERE p.store_id = :storeId AND (LOWER(p.name) LIKE LOWER(:q) OR COALESCE(p.phone, '') LIKE :q)
-                GROUP BY p.id, p.name, p.phone, p.note, p.created_at
-                ORDER BY p.name
-                """)
-                .param("storeId", m.storeId()).param("q", like)
+                       COUNT(d.id) FILTER (WHERE d.status <> 'PAID') AS open_count,
+                       COUNT(d.id) FILTER (WHERE d.remaining_amount > 0 AND d.due_date < :today) AS overdue_debts,
+                       GREATEST(MAX(d.updated_at), (SELECT MAX(pp.paid_at) FROM payments pp JOIN debts d2 ON d2.id = pp.debt_id
+                                                      WHERE d2.""" + fkColumn + " = p.id)) AS last_activity_at "
+                + "FROM " + table + " p LEFT JOIN debts d ON d." + fkColumn + " = p.id AND d.store_id = p.store_id" + typeFilter
+                + " WHERE p.store_id = :storeId AND (LOWER(p.name) LIKE LOWER(:q) OR COALESCE(p.phone, '') LIKE :q"
+                + (customers ? " OR LOWER(p.code) LIKE LOWER(:q)" : "") + ")"
+                + " GROUP BY p.id, p.name, p.phone, p.note, p.created_at" + (customers ? ", p.code, p.last_contact_at" : "")
+                + " ORDER BY p.name")
+                .param("storeId", m.storeId()).param("q", like).param("today", tenant.today())
                 .query((rs, n) -> mapParty(rs))
                 .list();
     }
@@ -171,7 +179,11 @@ public class PartyService {
                 rs.getString("note"),
                 rs.getObject("created_at", OffsetDateTime.class),
                 Money.of(rs.getBigDecimal("open_balance")),
-                rs.getLong("open_count"));
+                rs.getLong("open_count"),
+                rs.getString("code"),
+                rs.getObject("last_contact_at", OffsetDateTime.class),
+                rs.getObject("last_activity_at", OffsetDateTime.class),
+                rs.getLong("overdue_debts"));
     }
 
     private static String blankToNull(String s) {

@@ -54,14 +54,16 @@ public class PartyAccountService {
 
         DebtView result;
         if (all.isEmpty()) {
-            String receipt = blankToNull(req.receiptNumber());
             result = debts.create(new DebtRequest(type, partyId, req.amount(),
-                    req.date() != null ? req.date() : tenant.today(), null, blankToNull(req.note()),
-                    receipt == null ? null : "Çek: " + receipt));
+                    req.date() != null ? req.date() : tenant.today(), req.dueDate(), blankToNull(req.note()), null),
+                    req.receiptNumber());
         } else {
             // the latest debt of the account carries the running balance
             DebtView target = all.get(all.size() - 1);
             result = debts.increaseLocked(m, target, req.amount(), req.date(), req.receiptNumber(), req.note());
+            if (req.dueDate() != null) {
+                result = debts.setDueDateLocked(m, result, req.dueDate());
+            }
         }
         return new ChargeResult(type, before, Money.of(before.add(Money.of(req.amount()))), result);
     }

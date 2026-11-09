@@ -37,3 +37,38 @@ export function paymentConfirmationText(store: string, party: string, paid: numb
 export function receiptMessageText(store: string, party: string, paid: number, receiptUrl: string): string {
   return `Hörmətli ${party}, "${store}" mağazasına ${formatMoney(paid)} ödənişinizin çeki: ${receiptUrl}`;
 }
+
+/** WhatsApp Web (for computers without the WhatsApp app). */
+export function waWebLink(phone: string | null | undefined, text: string): string | null {
+  const n = waNumber(phone);
+  return n ? `https://web.whatsapp.com/send?phone=${n}&text=${encodeURIComponent(text)}` : null;
+}
+
+export type TemplateKey = "reminder" | "payment" | "balance" | "thanks" | "custom";
+
+export const TEMPLATE_LABEL: Record<TemplateKey, string> = {
+  reminder: "Borc xatırlatması",
+  payment: "Ödəniş təsdiqi",
+  balance: "Qalıq borc məlumatı",
+  thanks: "Təşəkkür mesajı",
+  custom: "Fərdi mesaj",
+};
+
+/** Editable starting texts for the customer card's WhatsApp button. */
+export function templateText(
+  key: TemplateKey,
+  v: { store: string; name: string; total: number; paid: number; remaining: number; lastPayment?: number | null },
+): string {
+  switch (key) {
+    case "reminder":
+      return `Salam, ${v.name}.\n"${v.store}" mağazasına qalıq borcunuz ${formatMoney(v.remaining)} təşkil edir. Zəhmət olmasa, ödənişi yaxın vaxtda edin.\nTəşəkkür edirik!`;
+    case "payment":
+      return `Salam, ${v.name}.\n${v.lastPayment ? formatMoney(v.lastPayment) + " məbləğində " : ""}ödənişiniz qəbul edildi. Qalıq borcunuz: ${formatMoney(v.remaining)}.\nTəşəkkür edirik!`;
+    case "balance":
+      return `Salam, ${v.name}.\nHesabPro sistemində borc məlumatınız:\nÜmumi borc: ${formatMoney(v.total)}\nÖdənilmiş: ${formatMoney(v.paid)}\nQalıq borc: ${formatMoney(v.remaining)}\nƏlavə məlumat üçün bizimlə əlaqə saxlaya bilərsiniz.\n${v.store}`;
+    case "thanks":
+      return `Salam, ${v.name}.\nBizi seçdiyiniz üçün təşəkkür edirik! Hər zaman xidmətinizdəyik.\n${v.store}`;
+    default:
+      return `Salam, ${v.name}.\n`;
+  }
+}

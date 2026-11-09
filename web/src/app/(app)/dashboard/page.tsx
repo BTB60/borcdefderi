@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { DEBT_STATUS_LABEL, DEBT_TYPE_LABEL, METHOD_LABEL, METHOD_TONE, formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { Dashboard } from "@/lib/types";
 import { Alert, Badge, Card, EmptyState, PageHeader, Spinner, StatCard, Table, Td, Th } from "@/components/ui";
+import { FinanceCards } from "@/components/dashboard/FinanceCards";
 
 function BarChart({ data, label }: { data: { label: string; value: number; cash: number; card: number; other: number }[]; label: string }) {
   const max = Math.max(1, ...data.map((d) => d.value));
@@ -71,6 +72,10 @@ export default function DashboardPage() {
   return (
     <>
       <PageHeader title="Panel" subtitle="Bütün rəqəmlər birbaşa veritabanından hesablanır" />
+
+      <FinanceCards />
+
+      <h2 className="mb-3 mt-2 font-serif text-lg font-semibold text-navy-800">Ödəniş üsulları və dinamika</h2>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Əsas göstəricilər">
         <StatCard label="Müştəri borcları" value={formatMoney(s.customerDebts)} hint="Qalıq məbləğ" tone="navy" />

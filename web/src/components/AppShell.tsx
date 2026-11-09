@@ -22,8 +22,10 @@ const STORE_NAV: NavItem[] = [
   { href: "/borclar/kreditorlar", label: "Şirkət borcları", icon: "M4 4h16v16H4V4Zm4 4h8M8 12h8M8 16h5", permission: "COMPANY_PAYABLES" },
   { href: "/odenisler", label: "Ödənişlər", icon: "M4 7h16v10H4V7Zm0 3h16" },
   { href: "/kontragentlar", label: "Müştəri və şirkətlər", icon: "M16 11a4 4 0 1 0-8 0M3 21a9 9 0 0 1 18 0" },
+  { href: "/hesabatlar", label: "Hesabatlar", icon: "M7 3h7l5 5v13H7V3Zm7 0v5h5M10 13h6M10 17h6" },
   { href: "/abunelik", label: "Abunəlik", icon: "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z" },
   { href: "/isciler", label: "İşçilər", icon: "M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 8a6 6 0 0 1 12 0", ownerOnly: true },
+  { href: "/fealiyyet", label: "İşçi fəaliyyəti", icon: "M4 19h16M7 16V9m5 7V5m5 11v-4", ownerOnly: true },
   { href: "/profil", label: "Parametrlər", icon: SETTINGS_ICON },
 ];
 

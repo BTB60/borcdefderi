@@ -122,6 +122,12 @@ public class DebtService {
 
     @Transactional
     public DebtView create(DebtRequest req) {
+        return create(req, null);
+    }
+
+    /** Same, with the receipt (çek) number kept on the first ledger entry (searchable, shown in history). */
+    @Transactional
+    public DebtView create(DebtRequest req, String receiptNumber) {
         CurrentMember m = tenant.requireBusinessMember();
         requireAccess(m, req.debtType());
         LocalDate debtDate = req.debtDate();
@@ -150,7 +156,8 @@ public class DebtService {
                 .param("description", blankToNull(req.description())).param("note", blankToNull(req.note()))
                 .param("by", m.userId())
                 .update();
-        ledger.append(m.storeId(), id, null, "DEBT_CREATED", amount, amount, m.userId());
+        ledger.append(m.storeId(), id, null, "DEBT_CREATED", amount, amount, m.userId(),
+                debtDate, blankToNull(receiptNumber), null);
         audit.log(m.storeId(), m.userId(), "DEBT_CREATED", "DEBT", id.toString(),
                 req.debtType() + " " + amount + " AZN");
         return load(m, id);
@@ -244,6 +251,17 @@ public class DebtService {
         audit.log(m.storeId(), m.userId(), "DEBT_INCREASED", "DEBT", id.toString(),
                 current.partyName() + ": " + current.amount() + " -> " + newAmount + " AZN (+" + add + ")");
         return load(m, id);
+    }
+
+    /** Sets the "son ödəmə tarixi" of a debt the caller has locked. */
+    public DebtView setDueDateLocked(CurrentMember m, DebtView debt, LocalDate due) {
+        if (due.isBefore(debt.debtDate())) {
+            throw ApiException.badRequest("INVALID_DUE_DATE", "Son ödəmə tarixi borc tarixindən əvvəl ola bilməz");
+        }
+        jdbc.sql("UPDATE debts SET due_date = :due, updated_at = now(), version = version + 1 WHERE id = :id AND store_id = :s")
+                .param("due", due).param("id", debt.id()).param("s", m.storeId()).update();
+        audit.log(m.storeId(), m.userId(), "DEBT_DUE_DATE_SET", "DEBT", debt.id().toString(), String.valueOf(due));
+        return load(m, debt.id());
     }
 
     /** Locks every debt of one party in one section (oldest first) for a balance-changing operation. */

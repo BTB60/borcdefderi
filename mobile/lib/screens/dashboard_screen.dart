@@ -4,6 +4,7 @@ import '../format.dart';
 import '../models/models.dart';
 import '../state/session.dart';
 import 'common.dart';
+import 'finance_cards.dart';
 import 'notifications_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   late Future<Map<String, dynamic>> _data;
+  final _cards = GlobalKey<FinanceCardsState>();
 
   @override
   void initState() {
@@ -29,6 +31,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _refresh() async {
+    _cards.currentState?.reload();
     setState(_load);
     await _data;
   }
@@ -60,6 +63,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                FinanceCards(key: _cards, session: widget.session),
+                const SizedBox(height: 22),
+                const Text('Ödəniş üsulları', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
                 GridView.count(
                   crossAxisCount: 2,
                   mainAxisSpacing: 12,

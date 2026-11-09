@@ -93,9 +93,11 @@ public class DashboardService {
         LocalDate lo = from != null ? from : LocalDate.of(1900, 1, 1);
         LocalDate hi = to != null ? to : LocalDate.of(9999, 12, 31);
         jdbc.sql("""
-                SELECT payment_method, COALESCE(SUM(amount), 0) AS total FROM payments
-                WHERE store_id = :s AND (paid_at AT TIME ZONE :tz)::date BETWEEN :from AND :to
-                GROUP BY payment_method""")
+                SELECT p.payment_method, COALESCE(SUM(p.amount), 0) AS total FROM payments p
+                JOIN debts d ON d.id = p.debt_id AND d.store_id = p.store_id
+                WHERE p.store_id = :s AND d.debt_type <> 'COMPANY_PAYABLE'
+                  AND (p.paid_at AT TIME ZONE :tz)::date BETWEEN :from AND :to
+                GROUP BY p.payment_method""")
                 .param("s", storeId).param("tz", TZ).param("from", lo).param("to", hi)
                 .query((rs, n) -> {
                     out.put(rs.getString("payment_method"), Money.of(rs.getBigDecimal("total")));
@@ -108,8 +110,10 @@ public class DashboardService {
         LocalDate from = today.minusDays(13);
         Map<LocalDate, Map<String, BigDecimal>> data = new HashMap<>();
         jdbc.sql("""
-                SELECT (paid_at AT TIME ZONE :tz)::date AS d, payment_method, COALESCE(SUM(amount), 0) AS total
-                FROM payments WHERE store_id = :s AND (paid_at AT TIME ZONE :tz)::date BETWEEN :from AND :to
+                SELECT (p.paid_at AT TIME ZONE :tz)::date AS d, p.payment_method, COALESCE(SUM(p.amount), 0) AS total
+                FROM payments p JOIN debts dd ON dd.id = p.debt_id AND dd.store_id = p.store_id
+                WHERE p.store_id = :s AND dd.debt_type <> 'COMPANY_PAYABLE'
+                  AND (p.paid_at AT TIME ZONE :tz)::date BETWEEN :from AND :to
                 GROUP BY 1, 2""")
                 .param("tz", TZ).param("s", storeId).param("from", from).param("to", today)
                 .query((rs, n) -> {
@@ -132,9 +136,11 @@ public class DashboardService {
         LocalDate from = today.withDayOfMonth(1).minusMonths(5);
         Map<YearMonth, Map<String, BigDecimal>> data = new HashMap<>();
         jdbc.sql("""
-                SELECT date_trunc('month', paid_at AT TIME ZONE :tz)::date AS m, payment_method,
-                       COALESCE(SUM(amount), 0) AS total
-                FROM payments WHERE store_id = :s AND (paid_at AT TIME ZONE :tz)::date >= :from
+                SELECT date_trunc('month', p.paid_at AT TIME ZONE :tz)::date AS m, p.payment_method,
+                       COALESCE(SUM(p.amount), 0) AS total
+                FROM payments p JOIN debts dd ON dd.id = p.debt_id AND dd.store_id = p.store_id
+                WHERE p.store_id = :s AND dd.debt_type <> 'COMPANY_PAYABLE'
+                  AND (p.paid_at AT TIME ZONE :tz)::date >= :from
                 GROUP BY 1, 2""")
                 .param("tz", TZ).param("s", storeId).param("from", from)
                 .query((rs, n) -> {

@@ -23,7 +23,7 @@ export const DIRECTION_LABEL: Record<DebtType, string> = {
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
 type Mode = "charge" | "pay";
-type Props = { mode: Mode; isCustomer: boolean; partyId: string; onClose: () => void; onSaved: (message: string) => void };
+type Props = { mode: Mode; isCustomer: boolean; partyId: string; initialType?: DebtType; onClose: () => void; onSaved: (message: string) => void };
 
 /** Remaining balance per section for this party, loaded fresh when the dialog opens. */
 function useBalances(isCustomer: boolean, partyId: string) {
@@ -43,16 +43,16 @@ function useBalances(isCustomer: boolean, partyId: string) {
 }
 
 /** "Borc əlavə et" and "Borc ödə" on the customer / company account. */
-export function AccountModal({ mode, isCustomer, partyId, onClose, onSaved }: Props) {
+export function AccountModal({ mode, isCustomer, partyId, initialType, onClose, onSaved }: Props) {
   const { can, me } = useAuth();
   const { profile, balances, error: loadError } = useBalances(isCustomer, partyId);
   const candidates: DebtType[] = isCustomer ? ["CUSTOMER_DEBT"] : ["COMPANY_RECEIVABLE", "COMPANY_PAYABLE"];
   const types = candidates.filter((t) => can(PERM[t]));
-  const [type, setType] = useState<DebtType | null>(null);
+  const [type, setType] = useState<DebtType | null>(initialType ?? null);
   const current: DebtType | undefined = type ?? (mode === "pay" ? types.find((t) => (balances[t] ?? 0) > 0) : undefined) ?? types[0];
   const balance = current ? balances[current] ?? 0 : 0;
 
-  const [form, setForm] = useState({ amount: "", date: todayBaku(), receiptNumber: "", note: "", method: "CASH" as PaymentMethod });
+  const [form, setForm] = useState({ amount: "", date: todayBaku(), dueDate: "", receiptNumber: "", note: "", method: "CASH" as PaymentMethod });
   const [error, setError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -80,6 +80,7 @@ export function AccountModal({ mode, isCustomer, partyId, onClose, onSaved }: Pr
             date: form.date || null,
             receiptNumber: form.receiptNumber.trim() || null,
             note: form.note.trim() || null,
+            dueDate: form.dueDate || null,
             expectedRemaining: balance.toFixed(2),
           },
         });
@@ -228,9 +229,14 @@ export function AccountModal({ mode, isCustomer, partyId, onClose, onSaved }: Pr
               </Field>
             )}
             {mode === "charge" && (
-              <Field label="Çek nömrəsi" hint="İstəyə bağlı" error={errors.receiptNumber}>
-                <Input maxLength={60} value={form.receiptNumber} onChange={(e) => setForm({ ...form, receiptNumber: e.target.value })} />
-              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Çek nömrəsi" hint="İstəyə bağlı" error={errors.receiptNumber}>
+                  <Input maxLength={60} value={form.receiptNumber} onChange={(e) => setForm({ ...form, receiptNumber: e.target.value })} />
+                </Field>
+                <Field label="Son ödəmə tarixi" hint="İstəyə bağlı — keçəndə gecikmiş sayılır" error={errors.dueDate}>
+                  <Input type="date" min={form.date} value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+                </Field>
+              </div>
             )}
             <Field label="Qeyd" hint={mode === "charge" ? "Məs: 2 kisə un" : "İstəyə bağlı"} error={errors.note ?? errors.description}>
               <Input maxLength={255} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
@@ -238,6 +244,44 @@ export function AccountModal({ mode, isCustomer, partyId, onClose, onSaved }: Pr
           </form>
         </>
       )}
+    </Modal>
+  );
+}
+
+/** Pick a customer or company first (dashboard "+ ƏLAVƏ ET" and quick actions), then the account dialog opens. */
+export function PickPartyModal({ isCustomer, title, onPick, onClose }: { isCustomer: boolean; title: string; onPick: (id: string) => void; onClose: () => void }) {
+  const [q, setQ] = useState("");
+  const [items, setItems] = useState<{ id: string; name: string; phone: string | null; code?: string | null; openBalance: number }[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      api<{ id: string; name: string; phone: string | null; code?: string | null; openBalance: number }[]>(
+        `/api/${isCustomer ? "customers" : "companies"}${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`,
+      )
+        .then(setItems)
+        .catch((e) => setError(e instanceof ApiError ? e.message : "Siyahı yüklənmədi"));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q, isCustomer]);
+  return (
+    <Modal open title={title} onClose={onClose}>
+      <Input autoFocus placeholder={isCustomer ? "Ad, telefon və ya müştəri kodu" : "Şirkət adı və ya telefon"} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Axtarış" />
+      {error && <div className="mt-3"><Alert>{error}</Alert></div>}
+      {!items && !error && <Spinner />}
+      {items && items.length === 0 && <p className="mt-4 text-sm text-slate-500">Tapılmadı. Əvvəlcə “Müştəri və şirkətlər” bölməsində əlavə edin.</p>}
+      <ul className="mt-3 max-h-80 divide-y divide-slate-100 overflow-y-auto">
+        {items?.map((p) => (
+          <li key={p.id}>
+            <button type="button" onClick={() => onPick(p.id)} className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-slate-50">
+              <span>
+                <span className="block font-medium text-navy-800">{p.name}</span>
+                <span className="text-xs text-slate-500">{[p.code, p.phone].filter(Boolean).join(" · ") || "—"}</span>
+              </span>
+              <span className="text-sm tabular-nums text-slate-600">{formatMoney(p.openBalance)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </Modal>
   );
 }

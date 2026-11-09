@@ -152,6 +152,85 @@ export interface Party {
   createdAt: string;
   openBalance: number;
   openDebtCount: number;
+  /** "HP-000001" for customers, null for companies */
+  code?: string | null;
+  lastContactAt?: string | null;
+  lastActivityAt?: string | null;
+  overdueDebts?: number;
+}
+
+// ----- HesabPro 2.0 -----
+
+export interface Figure { count: number; sum: number }
+
+export interface DashboardOverview {
+  customerDebts: Figure;
+  companyReceivables: Figure;
+  companyPayables: Figure;
+  activeCustomers: Figure;
+  todayDebts: Figure;
+  activeDebts: Figure;
+  closedDebts: Figure;
+  overdueDebts: Figure;
+  paymentsOut: Figure;
+  paymentsIn: Figure;
+  today: string;
+}
+
+export type DashboardListKind =
+  | "customer-debts" | "company-receivables" | "company-payables" | "active-customers" | "today-debts"
+  | "active-debts" | "closed-debts" | "overdue-debts" | "payments-out" | "payments-in";
+
+export interface ListPage<T> { kind: string; items: T[]; total: number; sum: number; page: number; size: number }
+
+export interface PartyRow {
+  partyId: string; partyKind: "CUSTOMER" | "COMPANY"; debtType: DebtType; name: string; code: string | null; phone: string | null;
+  totalDebt: number; paid: number; remaining: number; lastActivityAt: string | null; lastPaymentAt: string | null; overdueDebts: number;
+}
+
+export interface DebtRow {
+  debtId: string; debtType: DebtType; partyId: string; partyKind: "CUSTOMER" | "COMPANY"; name: string; code: string | null;
+  phone: string | null; debtDate: string; dueDate: string | null; overdueDays: number; amount: number; paid: number;
+  remaining: number; status: DebtStatus; lastPaymentAt: string | null; receiptNumber: string | null; createdByName: string | null;
+}
+
+export interface EntryRow {
+  entryId: string; debtId: string; debtType: DebtType; partyId: string; partyKind: "CUSTOMER" | "COMPANY"; name: string;
+  code: string | null; phone: string | null; createdAt: string; entryDate: string; receiptNumber: string | null; note: string | null;
+  amount: number; debtPaid: number; debtRemaining: number; actorName: string;
+}
+
+export interface PaymentRow {
+  paymentId: string; debtId: string; debtType: DebtType; partyId: string; partyKind: "CUSTOMER" | "COMPANY"; name: string;
+  code: string | null; phone: string | null; paidAt: string; amount: number; paymentMethod: PaymentMethod;
+  recordedByName: string; description: string | null;
+}
+
+export interface HistoryEntry {
+  id: string; debtId: string; debtType: DebtType; type: LedgerEntry["type"]; amount: number; balanceAfter: number;
+  paymentId: string | null; paymentMethod: PaymentMethod | null; entryDate: string | null; receiptNumber: string | null;
+  note: string | null; actorName: string; createdAt: string;
+}
+
+export interface CustomerNote { id: string; body: string; authorName: string; createdAt: string }
+
+export interface PortalLink {
+  id: string; createdAt: string; expiresAt: string | null; revokedAt: string | null; lastUsedAt: string | null;
+  createdByName: string; active: boolean;
+}
+
+export interface PortalView {
+  storeName: string; storePhone: string | null; storeAddress: string | null; customerName: string; customerCode: string;
+  totalDebt: number; paid: number; remaining: number;
+  debts: { debtDate: string; dueDate: string | null; amount: number; paid: number; remaining: number; status: DebtStatus; overdueDays: number }[];
+  history: { date: string | null; type: LedgerEntry["type"]; amount: number; balanceAfter: number; paymentMethod: PaymentMethod | null; receiptNumber: string | null; note: string | null }[];
+  expiresAt: string | null; generatedAt: string;
+}
+
+export interface Activity {
+  from: string; to: string;
+  employees: { userId: string; fullName: string; role: string; debtEntries: number; debtAmount: number; paymentsReceived: number; paymentsAmount: number; actions: number }[];
+  entries: { id: number; at: string; actorId: string | null; actorName: string | null; action: string; entityType: string | null; entityId: string | null; details: string | null }[];
 }
 
 export interface DashboardSummary {

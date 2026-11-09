@@ -1,0 +1,4 @@
+# Only backend/pom.xml and backend/src are needed by the root Dockerfile.
+*
+!backend/pom.xml
+!backend/src

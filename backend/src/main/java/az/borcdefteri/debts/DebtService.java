@@ -34,7 +34,8 @@ public class DebtService {
     public record DebtPage(List<DebtView> items, long total, int page, int size, Totals totals) {}
 
     public record LedgerEntry(UUID id, String type, BigDecimal amount, BigDecimal balanceAfter,
-                              UUID paymentId, UUID actorId, String actorName, OffsetDateTime createdAt) {}
+                              UUID paymentId, UUID actorId, String actorName, OffsetDateTime createdAt,
+                              LocalDate entryDate, String receiptNumber, String note) {}
 
     static final String SELECT = """
             SELECT d.id, d.debt_type, d.customer_id, d.company_id,
@@ -99,7 +100,7 @@ public class DebtService {
         requireAccess(m, load(m, id).debtType());
         return jdbc.sql("""
                 SELECT t.id, t.transaction_type, t.amount, t.balance_after, t.payment_id, t.actor_id,
-                       u.full_name AS actor_name, t.created_at
+                       u.full_name AS actor_name, t.created_at, t.entry_date, t.receipt_number, t.note
                 FROM financial_transactions t JOIN users u ON u.id = t.actor_id
                 WHERE t.debt_id = :debtId AND t.store_id = :storeId
                 ORDER BY t.created_at, t.id
@@ -112,7 +113,10 @@ public class DebtService {
                         rs.getObject("payment_id", UUID.class),
                         rs.getObject("actor_id", UUID.class),
                         rs.getString("actor_name"),
-                        rs.getObject("created_at", OffsetDateTime.class)))
+                        rs.getObject("created_at", OffsetDateTime.class),
+                        rs.getObject("entry_date", LocalDate.class),
+                        rs.getString("receipt_number"),
+                        rs.getString("note")))
                 .list();
     }
 
@@ -188,6 +192,89 @@ public class DebtService {
         audit.log(m.storeId(), m.userId(), "DEBT_UPDATED", "DEBT", id.toString(),
                 "amount " + current.amount() + " -> " + newAmount);
         return load(m, id);
+    }
+
+    /**
+     * "Borc artır": the party took more on credit. Amount and remaining grow by the same value; what was
+     * already paid stays. One ledger row records the date, receipt number and note, so history is kept.
+     */
+    @Transactional
+    public DebtView increase(UUID id, DebtIncreaseRequest req) {
+        CurrentMember m = tenant.requireBusinessMember();
+        DebtView current = lockAndLoad(m, id);
+        requireAccess(m, current.debtType());
+        if (current.version() != req.version()) {
+            throw ApiException.conflict("VERSION_CONFLICT", "Qeyd başqa istifadəçi tərəfindən dəyişdirilib. Yenidən yükləyin");
+        }
+        return increaseLocked(m, current, req.amount(), req.date(), req.receiptNumber(), req.note());
+    }
+
+    /**
+     * Adds to a debt the caller has already locked ({@link #lockAndLoad}) and may write.
+     * Amount and remaining grow together; what was already paid stays; one ledger row keeps the details.
+     */
+    public DebtView increaseLocked(CurrentMember m, DebtView current, BigDecimal amount, LocalDate entryDate,
+                                   String receiptNumber, String note) {
+        UUID id = current.id();
+        BigDecimal add = Money.of(amount);
+        if (add.signum() <= 0) {
+            throw ApiException.badRequest("INVALID_AMOUNT", "Məbləğ 0-dan böyük olmalıdır");
+        }
+        LocalDate today = tenant.today();
+        LocalDate date = entryDate != null ? entryDate : today;
+        if (date.isAfter(today)) {
+            throw ApiException.badRequest("FUTURE_DATE", "Tarix gələcəkdə ola bilməz");
+        }
+        BigDecimal newAmount = Money.of(current.amount().add(add));
+        BigDecimal newRemaining = Money.of(current.remainingAmount().add(add));
+        if (newAmount.precision() - newAmount.scale() > 12) {
+            throw ApiException.badRequest("AMOUNT_TOO_LARGE", "Borc məbləği çox böyükdür");
+        }
+        String status = statusFor(current.paidAmount(), newRemaining);
+        jdbc.sql("""
+                UPDATE debts SET amount = :amount, remaining_amount = :remaining, status = :status,
+                       updated_at = now(), version = version + 1
+                WHERE id = :id AND store_id = :storeId AND version = :version
+                """)
+                .param("amount", newAmount).param("remaining", newRemaining).param("status", status)
+                .param("id", id).param("storeId", m.storeId()).param("version", current.version())
+                .update();
+        ledger.append(m.storeId(), id, null, "DEBT_INCREASED", add, newRemaining, m.userId(),
+                date, blankToNull(receiptNumber), blankToNull(note));
+        audit.log(m.storeId(), m.userId(), "DEBT_INCREASED", "DEBT", id.toString(),
+                current.partyName() + ": " + current.amount() + " -> " + newAmount + " AZN (+" + add + ")");
+        return load(m, id);
+    }
+
+    /** Locks every debt of one party in one section (oldest first) for a balance-changing operation. */
+    public List<DebtView> lockForParty(CurrentMember m, DebtType type, UUID partyId) {
+        String column = type.isCustomer() ? "customer_id" : "company_id";
+        List<UUID> ids = jdbc.sql("SELECT id FROM debts WHERE store_id = :s AND debt_type = :t AND " + column
+                        + " = :p ORDER BY debt_date, created_at, id FOR UPDATE")
+                .param("s", m.storeId()).param("t", type.name()).param("p", partyId)
+                .query(UUID.class).list();
+        List<DebtView> out = new ArrayList<>();
+        for (UUID id : ids) {
+            out.add(load(m, id));
+        }
+        return out;
+    }
+
+    /** Debts of one customer or company, limited to the sections the member may see. Newest first. */
+    public List<DebtView> forParty(CurrentMember m, boolean customer, UUID partyId) {
+        List<String> types = new ArrayList<>();
+        for (DebtType t : DebtType.values()) {
+            if (t.isCustomer() == customer && m.has(t.permission())) {
+                types.add(t.name());
+            }
+        }
+        if (types.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql(SELECT + " WHERE d.store_id = :storeId AND d." + (customer ? "customer_id" : "company_id")
+                        + " = :partyId AND d.debt_type IN (:types) ORDER BY d.debt_date DESC, d.created_at DESC LIMIT 1000")
+                .param("storeId", m.storeId()).param("partyId", partyId).param("types", types)
+                .query((rs, n) -> map(rs)).list();
     }
 
     // ----- helpers -----

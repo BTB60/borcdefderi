@@ -104,13 +104,24 @@ export interface DebtPage {
 
 export interface LedgerEntry {
   id: string;
-  type: "DEBT_CREATED" | "DEBT_ADJUSTED" | "PAYMENT_CASH" | "PAYMENT_CARD" | "PAYMENT_TRANSFER" | "PAYMENT_OTHER";
+  type: "DEBT_CREATED" | "DEBT_ADJUSTED" | "DEBT_INCREASED" | "PAYMENT_CASH" | "PAYMENT_CARD" | "PAYMENT_TRANSFER" | "PAYMENT_OTHER";
   amount: number;
   balanceAfter: number;
   paymentId: string | null;
   actorId: string;
   actorName: string;
   createdAt: string;
+  entryDate?: string | null;
+  receiptNumber?: string | null;
+  note?: string | null;
+}
+
+/** GET /api/customers/{id}/profile and /api/companies/{id}/profile */
+export interface PartyProfile {
+  party: Party;
+  totals: { totalDebt: number; paid: number; remaining: number; debtCount: number; openDebtCount: number };
+  debts: Debt[];
+  payments: Payment[];
 }
 
 export interface Payment {

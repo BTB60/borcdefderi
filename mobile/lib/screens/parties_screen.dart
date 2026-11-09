@@ -7,6 +7,8 @@ import '../models/models.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'account_sheet.dart';
+import 'party_profile_screen.dart';
 
 String _endpoint(bool isCustomer) => isCustomer ? '/api/customers' : '/api/companies';
 
@@ -44,6 +46,14 @@ class _PartiesScreenState extends State<PartiesScreen> {
   void dispose() {
     _debounce?.cancel();
     super.dispose();
+  }
+
+  Future<void> _account(Party party, AccountMode mode) async {
+    final msg = await openAccountSheet(context,
+        session: widget.session, isCustomer: widget.isCustomer, partyId: party.id, mode: mode);
+    if (msg == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    _reload();
   }
 
   Future<void> _open([Party? party]) async {
@@ -98,7 +108,8 @@ class _PartiesScreenState extends State<PartiesScreen> {
                   itemBuilder: (context, i) {
                     final p = items[i];
                     return Card(
-                      child: ListTile(
+                      child: Column(children: [
+                        ListTile(
                         leading: CircleAvatar(
                           backgroundColor: navy,
                           foregroundColor: gold,
@@ -113,8 +124,34 @@ class _PartiesScreenState extends State<PartiesScreen> {
                           formatMoney(p.openBalance),
                           style: TextStyle(fontWeight: FontWeight.w700, color: p.openBalance > 0 ? Colors.red.shade700 : Colors.green.shade700),
                         ),
-                        onTap: () => _open(p),
+                        onTap: () async {
+                          await Navigator.of(context).push(MaterialPageRoute(
+                              builder: (_) => PartyProfileScreen(session: widget.session, isCustomer: widget.isCustomer, partyId: p.id)));
+                          _reload();
+                        },
+                        onLongPress: () => _open(p),
                       ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                          child: Row(children: [
+                            Expanded(
+                              child: FilledButton.tonalIcon(
+                                onPressed: () => _account(p, AccountMode.charge),
+                                icon: const Icon(Icons.add, size: 18),
+                                label: const FittedBox(child: Text('Borc əlavə et')),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: () => _account(p, AccountMode.pay),
+                                icon: const Icon(Icons.payments_outlined, size: 18),
+                                label: const FittedBox(child: Text('Borc ödə')),
+                              ),
+                            ),
+                          ]),
+                        ),
+                      ]),
                     );
                   },
                 );

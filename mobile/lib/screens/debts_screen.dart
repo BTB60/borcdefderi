@@ -11,6 +11,8 @@ import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'debt_edit_sheet.dart';
+import 'debt_increase_sheet.dart';
+import 'party_profile_screen.dart';
 import 'parties_screen.dart';
 
 const _sectionPermission = {
@@ -254,6 +256,34 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
     }
   }
 
+  Future<void> _increase() async {
+    final updated = await openDebtIncrease(context, session: widget.session, debt: _debt);
+    if (updated == null || !mounted) return;
+    setState(() {
+      _debt = updated;
+      _changed = true;
+      _history = _loadHistory();
+    });
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Borc artırıldı. Yeni qalıq: ${formatMoney(updated.remainingAmount)}')));
+  }
+
+  Future<void> _openProfile() async {
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => PartyProfileScreen(
+            session: widget.session, isCustomer: _debt.debtType == 'CUSTOMER_DEBT', partyId: _debt.partyId)));
+    // the profile may have changed this debt (payment / increase): reload it
+    try {
+      final fresh = await widget.session.api.get('/api/debts/${_debt.id}') as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _debt = Debt.fromJson(fresh);
+        _changed = true;
+        _history = _loadHistory();
+      });
+    } catch (_) {}
+  }
+
   Future<void> _edit() async {
     final updated = await showModalBottomSheet<Debt>(
       context: context,
@@ -376,6 +406,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
   static const _labels = {
     'DEBT_CREATED': 'Borc yaradıldı',
     'DEBT_ADJUSTED': 'Məbləğ dəyişdirildi',
+    'DEBT_INCREASED': 'Borc artırıldı',
     'PAYMENT_CASH': 'Nağd ödəniş',
     'PAYMENT_CARD': 'Kart ödənişi',
     'PAYMENT_TRANSFER': 'Köçürmə ilə ödəniş',
@@ -384,7 +415,8 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final canPay = !_debt.isPaid && widget.session.me!.can(_sectionPermission[_debt.debtType]!);
+    final canWrite = widget.session.me!.can(_sectionPermission[_debt.debtType]!);
+    final canPay = !_debt.isPaid && canWrite;
     return Scaffold(
         appBar: AppBar(
           title: Text(_debt.partyName),
@@ -403,16 +435,30 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
               ),
           ],
         ),
-        bottomNavigationBar: canPay
+        bottomNavigationBar: canWrite
             ? SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: navy),
-                    onPressed: _pay,
-                    icon: const Icon(Icons.payments_outlined),
-                    label: const Text('Ödəniş qəbul et'),
-                  ),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: Row(children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _increase,
+                        icon: const Icon(Icons.add),
+                        label: const FittedBox(child: Text('Borc artır')),
+                      ),
+                    ),
+                    if (canPay) ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: navy),
+                          onPressed: _pay,
+                          icon: const Icon(Icons.payments_outlined),
+                          label: const FittedBox(child: Text('Ödəniş qəbul et')),
+                        ),
+                      ),
+                    ],
+                  ]),
                 ),
               )
             : null,
@@ -435,6 +481,15 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                   _line('Son ödəmə', formatDate(_debt.dueDate)),
                   _line('Telefon', _debt.partyPhone ?? '—'),
                   if (_debt.description != null) _line('Təsvir', _debt.description!),
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _openProfile,
+                      icon: const Icon(Icons.person_outline, size: 18),
+                      label: Text(_debt.debtType == 'CUSTOMER_DEBT' ? 'Müştərinin bütün borcları' : 'Şirkətin bütün borcları'),
+                    ),
+                  ),
                 ]),
               ),
             ),
@@ -458,9 +513,14 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                         color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green : navy,
                       ),
                       title: Text(_labels[e['type']] ?? '${e['type']}'),
-                      subtitle: Text('${formatDateTime(DateTime.parse(e['createdAt'] as String))} · ${e['actorName']}'),
+                      subtitle: Text([
+                        '${formatDateTime(DateTime.parse(e['createdAt'] as String))} · ${e['actorName']}',
+                        if (e['entryDate'] != null) 'Tarix: ${formatDate(DateTime.parse(e['entryDate'] as String))}',
+                        if (e['receiptNumber'] != null) 'Çek: ${e['receiptNumber']}',
+                        if (e['note'] != null) '${e['note']}',
+                      ].join('\n')),
                       trailing: Text(
-                        '${formatMoney((e['amount'] as num).toDouble())}\nqalıq ${formatMoney((e['balanceAfter'] as num).toDouble())}',
+                        '${e['type'] == 'DEBT_INCREASED' ? '+' : ''}${formatMoney((e['amount'] as num).toDouble())}\nqalıq ${formatMoney((e['balanceAfter'] as num).toDouble())}',
                         textAlign: TextAlign.right,
                         style: const TextStyle(fontSize: 12),
                       ),
@@ -586,10 +646,13 @@ class _PaymentSheetState extends State<PaymentSheet> {
 }
 
 class AddDebtScreen extends StatefulWidget {
-  const AddDebtScreen({super.key, required this.session, required this.debtType});
+  const AddDebtScreen({super.key, required this.session, required this.debtType, this.initialPartyId});
 
   final Session session;
   final String debtType;
+
+  /// Opened from a customer / company profile: that party is already selected.
+  final String? initialPartyId;
 
   @override
   State<AddDebtScreen> createState() => _AddDebtScreenState();
@@ -600,7 +663,7 @@ class _AddDebtScreenState extends State<AddDebtScreen> {
   final _amount = TextEditingController();
   final _description = TextEditingController();
   late Future<List<Party>> _parties;
-  String? _partyId;
+  late String? _partyId = widget.initialPartyId;
   DateTime _debtDate = DateTime.now();
   DateTime? _dueDate;
   bool _busy = false;
@@ -655,13 +718,12 @@ class _AddDebtScreenState extends State<AddDebtScreen> {
       _error = null;
     });
     try {
-      await widget.session.api.post('/api/debts', {
+      // Adds to the party's account: an existing balance grows instead of a separate new debt appearing.
+      await widget.session.api.post('/api/${_isCustomer ? 'customers' : 'companies'}/$_partyId/charge', {
         'debtType': widget.debtType,
-        'partyId': _partyId,
         'amount': double.parse(_amount.text.replaceAll(',', '.')).toStringAsFixed(2),
-        'debtDate': _iso(_debtDate),
-        if (_dueDate != null) 'dueDate': _iso(_dueDate!),
-        if (_description.text.trim().isNotEmpty) 'description': _description.text.trim(),
+        'date': _iso(_debtDate),
+        if (_description.text.trim().isNotEmpty) 'note': _description.text.trim(),
       });
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -674,7 +736,7 @@ class _AddDebtScreenState extends State<AddDebtScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isCustomer ? 'Yeni müştəri borcu' : 'Yeni şirkət borcu')),
+      appBar: AppBar(title: const Text('Borc əlavə et')),
       body: FutureBuilder<List<Party>>(
         future: _parties,
         builder: (context, snap) {
@@ -718,15 +780,14 @@ class _AddDebtScreenState extends State<AddDebtScreen> {
                 trailing: const Icon(Icons.calendar_today_outlined),
                 onTap: () => _pickDate(false),
               ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Son ödəmə tarixi (istəyə bağlı)'),
-                subtitle: Text(formatDate(_dueDate)),
-                trailing: const Icon(Icons.event_outlined),
-                onTap: () => _pickDate(true),
-              ),
               const SizedBox(height: 6),
-              TextFormField(controller: _description, decoration: const InputDecoration(labelText: 'Təsvir')),
+              TextFormField(
+                controller: _description,
+                maxLength: 255,
+                decoration: const InputDecoration(labelText: 'Qeyd', hintText: 'Məs: 2 kisə un'),
+              ),
+              Text('Müştərinin artıq borcu varsa, məbləğ onun ümumi borcunun üstünə gəlir.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: _busy ? null : _save,

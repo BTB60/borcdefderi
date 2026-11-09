@@ -13,9 +13,47 @@ import java.util.UUID;
 public class PartyController {
 
     private final PartyService parties;
+    private final PartyProfileService profiles;
+    private final PartyAccountService accounts;
 
-    public PartyController(PartyService parties) {
+    public PartyController(PartyService parties, PartyProfileService profiles, PartyAccountService accounts) {
         this.parties = parties;
+        this.profiles = profiles;
+        this.accounts = accounts;
+    }
+
+    /** "Borc əlavə et" on the customer's account. */
+    @PostMapping("/customers/{id}/charge")
+    public PartyAccountService.ChargeResult chargeCustomer(@PathVariable UUID id, @Valid @RequestBody PartyAccountRequests.Charge req) {
+        return accounts.charge(true, id, req);
+    }
+
+    /** "Borc ödə" on the customer's account (oldest debt first). */
+    @PostMapping("/customers/{id}/pay")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PartyAccountService.PayResult payCustomer(@PathVariable UUID id, @Valid @RequestBody PartyAccountRequests.Pay req) {
+        return accounts.pay(true, id, req);
+    }
+
+    @PostMapping("/companies/{id}/charge")
+    public PartyAccountService.ChargeResult chargeCompany(@PathVariable UUID id, @Valid @RequestBody PartyAccountRequests.Charge req) {
+        return accounts.charge(false, id, req);
+    }
+
+    @PostMapping("/companies/{id}/pay")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PartyAccountService.PayResult payCompany(@PathVariable UUID id, @Valid @RequestBody PartyAccountRequests.Pay req) {
+        return accounts.pay(false, id, req);
+    }
+
+    @GetMapping("/customers/{id}/profile")
+    public PartyProfileService.Profile customerProfile(@PathVariable UUID id) {
+        return profiles.customer(id);
+    }
+
+    @GetMapping("/companies/{id}/profile")
+    public PartyProfileService.Profile companyProfile(@PathVariable UUID id) {
+        return profiles.company(id);
     }
 
     @GetMapping("/customers")

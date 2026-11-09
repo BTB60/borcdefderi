@@ -53,4 +53,10 @@ public class DebtController {
     public DebtView update(@PathVariable UUID id, @Valid @RequestBody DebtUpdateRequest req) {
         return debts.update(id, req);
     }
+
+    /** "Borc artır": add more to an existing debt (kept as its own history entry). */
+    @PostMapping("/{id}/increase")
+    public DebtView increase(@PathVariable UUID id, @Valid @RequestBody DebtIncreaseRequest req) {
+        return debts.increase(id, req);
+    }
 }

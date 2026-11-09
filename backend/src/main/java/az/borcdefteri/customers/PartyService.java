@@ -59,6 +59,22 @@ public class PartyService {
         return find("customers", "customer_id", m, id, "CUSTOMER_DEBT");
     }
 
+    /** One customer of the caller's store (another store's customer is "not found"). */
+    public Party customer(CurrentMember m, UUID id) {
+        if (!m.has(TenantService.PERM_CUSTOMER_DEBTS)) {
+            throw ApiException.forbidden("PERMISSION_DENIED", "Bu modul üçün icazəniz yoxdur");
+        }
+        return find("customers", "customer_id", m, id, "CUSTOMER_DEBT");
+    }
+
+    /** One company of the caller's store. */
+    public Party company(CurrentMember m, UUID id) {
+        if (!m.has(TenantService.PERM_COMPANY_RECEIVABLES) && !m.has(TenantService.PERM_COMPANY_PAYABLES)) {
+            throw ApiException.forbidden("PERMISSION_DENIED", "Bu modul üçün icazəniz yoxdur");
+        }
+        return find("companies", "company_id", m, id, null);
+    }
+
     // ----- companies (shared by receivables and payables) -----
 
     public List<Party> companies(String q) {

@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Spinner, Table, Td, Th } from "@/components/ui";
+import { AccountModal } from "@/components/debts/AccountModals";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatMoney } from "@/lib/format";
@@ -22,6 +24,7 @@ export default function PartiesPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<Party | "new" | null>(null);
+  const [account, setAccount] = useState<{ mode: "charge" | "pay"; party: Party } | null>(null);
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
@@ -72,11 +75,20 @@ export default function PartiesPage() {
             <tbody className="divide-y divide-slate-100">
               {items.map((p) => (
                 <tr key={p.id} className="transition-colors hover:bg-gold-500/5">
-                  <Td className="font-medium text-navy-800">{p.name}</Td>
+                  <Td className="font-medium text-navy-800">
+                    <Link href={`/kontragentlar/${tab === "customers" ? "musteri" : "sirket"}/${p.id}`} className="hover:text-gold-600 hover:underline">{p.name}</Link>
+                  </Td>
                   <Td>{p.phone ?? "—"}</Td>
                   {tab === "customers" && <Td className="text-right tabular-nums">{formatMoney(p.openBalance)}</Td>}
                   <Td className="max-w-[18rem] truncate text-slate-500">{p.note ?? "—"}</Td>
-                  <Td className="text-right"><Button variant="ghost" onClick={() => setEditing(p)}>Redaktə</Button></Td>
+                  <Td className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="gold" className="px-3 py-1.5" onClick={() => setAccount({ mode: "charge", party: p })}>+ Borc əlavə et</Button>
+                      <Button variant="primary" className="px-3 py-1.5" onClick={() => setAccount({ mode: "pay", party: p })}>Borc ödə</Button>
+                      <Link href={`/kontragentlar/${tab === "customers" ? "musteri" : "sirket"}/${p.id}`}><Button variant="outline" className="px-3 py-1.5">Profil</Button></Link>
+                      <Button variant="ghost" onClick={() => setEditing(p)}>Redaktə</Button>
+                    </div>
+                  </Td>
                 </tr>
               ))}
             </tbody>
@@ -84,6 +96,19 @@ export default function PartiesPage() {
         )}
       </Card>
 
+      {account && (
+        <AccountModal
+          mode={account.mode}
+          isCustomer={tab === "customers"}
+          partyId={account.party.id}
+          onClose={() => setAccount(null)}
+          onSaved={(msg) => {
+            setAccount(null);
+            setNotice(msg);
+            setReload((r) => r + 1);
+          }}
+        />
+      )}
       {editing && (
         <PartyModal
           tab={tab}

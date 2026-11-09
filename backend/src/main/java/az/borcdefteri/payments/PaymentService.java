@@ -132,7 +132,17 @@ public class PaymentService {
         return list(m, from, to, null, null, 10_000);
     }
 
+    /** Payments of one customer or company (all their debts), limited to the sections the member may see. */
+    public List<PaymentView> listForParty(CurrentMember m, boolean customer, UUID partyId) {
+        return list(m, null, null, null, null, 1000, customer ? "d.customer_id" : "d.company_id", partyId);
+    }
+
     private List<PaymentView> list(CurrentMember m, LocalDate from, LocalDate to, PaymentMethod method, UUID debtId, int limit) {
+        return list(m, from, to, method, debtId, limit, null, null);
+    }
+
+    private List<PaymentView> list(CurrentMember m, LocalDate from, LocalDate to, PaymentMethod method, UUID debtId,
+                                   int limit, String partyColumn, UUID partyId) {
         String allowed = Arrays.stream(DebtType.values())
                 .filter(t -> m.has(t.permission()))
                 .map(t -> "'" + t.name() + "'")
@@ -158,6 +168,11 @@ public class PaymentService {
         if (debtId != null) {
             where.append(" AND p.debt_id = :debtId");
             params.put("debtId", debtId);
+        }
+        if (partyColumn != null) {
+            // partyColumn is one of two constants chosen by listForParty, never user input
+            where.append(" AND ").append(partyColumn).append(" = :partyId");
+            params.put("partyId", partyId);
         }
         var spec = jdbc.sql(PAYMENT_SELECT + where
                 + " ORDER BY p.paid_at DESC, p.id DESC LIMIT " + limit);

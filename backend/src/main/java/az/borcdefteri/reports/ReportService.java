@@ -126,7 +126,7 @@ public class ReportService {
             Font cellFont = new Font(base, 9, Font.NORMAL, Color.BLACK);
             Font headFont = new Font(boldBase, 9, Font.NORMAL, Color.WHITE);
 
-            Paragraph title = new Paragraph("BORCDEFTERI — " + title(type), titleFont);
+            Paragraph title = new Paragraph("HesabPro — " + title(type), titleFont);
             title.setSpacingAfter(4);
             doc.add(title);
             doc.add(new Paragraph("Hesabat tarixi: " + LocalDate.now(clock).format(DATE) + "   |   Qeyd sayı: " + rows.size(), small));

@@ -4,11 +4,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "BORCDEFTERI — Borc və mühasibat idarəetməsi",
-    template: "%s · BORCDEFTERI",
+    default: "HesabPro — Borc və mühasibat idarəetməsi",
+    template: "%s · HesabPro",
   },
   description: "Mağazalar üçün borc, ödəniş və mühasibat idarəetmə platforması.",
-  applicationName: "BORCDEFTERI",
+  applicationName: "HesabPro",
   robots: { index: false, follow: false },
 };
 

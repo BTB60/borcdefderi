@@ -531,7 +531,7 @@ class PaymentRequest {
 }
 
 /// Default WhatsApp message; the admin can replace it (placeholders in square brackets).
-const defaultWhatsappTemplate = 'Salam. BORCDEFTERI platformasında abunəlik paketi almaq istəyirəm.\n'
+const defaultWhatsappTemplate = 'Salam. HesabPro platformasında abunəlik paketi almaq istəyirəm.\n'
     'Mağaza adı: [Mağaza adı]\n'
     'Seçilmiş paket: [Paket adı]\n'
     'Müddət: [Müddət]\n'

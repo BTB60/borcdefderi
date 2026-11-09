@@ -146,7 +146,7 @@ public class PaymentReportService {
             sum.addCell(rv);
             doc.add(sum);
 
-            Paragraph foot = new Paragraph("BORCDEFTERI · Bu çek elektron qaydada yaradılıb", small);
+            Paragraph foot = new Paragraph("HesabPro · Bu çek elektron qaydada yaradılıb", small);
             foot.setAlignment(Element.ALIGN_CENTER);
             foot.setSpacingBefore(18);
             doc.add(foot);

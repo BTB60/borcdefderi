@@ -31,7 +31,7 @@ class _BorcdefteriAppState extends State<BorcdefteriApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BORCDEFTERI',
+      title: 'HesabPro',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       locale: const Locale('az'),

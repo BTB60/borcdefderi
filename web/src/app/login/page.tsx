@@ -37,8 +37,8 @@ export default function LoginPage() {
         <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-gold-500/10 blur-3xl" />
         <div className="absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-gold-500/10 blur-3xl" />
         <div className="relative flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gold-500 font-serif text-xl font-bold text-navy-900">B</div>
-          <span className="font-serif text-xl font-semibold tracking-wide">BORCDEFTERI</span>
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gold-500 font-serif text-xl font-bold text-navy-900">H</div>
+          <span className="font-serif text-xl font-semibold tracking-wide">HesabPro</span>
         </div>
         <div className="relative max-w-md">
           <h2 className="font-serif text-4xl font-semibold leading-tight">Borclarınızı nəzarətdə saxlayın.</h2>
@@ -51,14 +51,14 @@ export default function LoginPage() {
             <li className="flex items-center gap-3"><span className="h-1.5 w-1.5 rounded-full bg-gold-500" />PDF və Excel hesabatları</li>
           </ul>
         </div>
-        <p className="relative text-xs text-white/40">© {new Date().getFullYear()} BORCDEFTERI</p>
+        <p className="relative text-xs text-white/40">© {new Date().getFullYear()} HesabPro</p>
       </aside>
 
       <main className="flex items-center justify-center p-6 sm:p-12">
         <div className="page-enter w-full max-w-md">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy-800 font-serif text-lg font-bold text-gold-500">B</div>
-            <span className="font-serif text-lg font-semibold text-navy-800">BORCDEFTERI</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy-800 font-serif text-lg font-bold text-gold-500">H</div>
+            <span className="font-serif text-lg font-semibold text-navy-800">HesabPro</span>
           </div>
           <h1 className="font-serif text-3xl font-semibold text-navy-800">Xoş gəlmisiniz</h1>
           <p className="mt-2 text-sm text-slate-500">Hesabınıza daxil olun</p>

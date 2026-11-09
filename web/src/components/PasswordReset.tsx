@@ -20,7 +20,7 @@ export interface TemporaryPassword {
  */
 export function TemporaryPasswordModal({ result, onClose }: { result: TemporaryPassword; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-  const text = `Salam, ${result.fullName}! BORCDEFTERI üçün müvəqqəti şifrəniz: ${result.temporaryPassword}\nGiriş: ${result.email}\nDaxil olduqdan sonra yeni şifrə təyin etməyiniz tələb olunacaq.`;
+  const text = `Salam, ${result.fullName}! HesabPro üçün müvəqqəti şifrəniz: ${result.temporaryPassword}\nGiriş: ${result.email}\nDaxil olduqdan sonra yeni şifrə təyin etməyiniz tələb olunacaq.`;
   const wa = waLink(result.phone, text);
 
   async function copy() {

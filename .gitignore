@@ -14,3 +14,6 @@ build/
 
 # Local tooling
 .claude/
+
+# Built Android packages
+*.apk

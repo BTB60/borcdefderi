@@ -1,4 +1,4 @@
-# BORCDEFTERI
+# HesabPro (BORCDEFTERI)
 
 Çoxmərtəbəli (multi-tenant) borc və mühasibat idarəetmə platforması — Azərbaycandakı müstəqil mağazalar üçün.
 

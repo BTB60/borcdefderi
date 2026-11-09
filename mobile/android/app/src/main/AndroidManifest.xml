@@ -2,7 +2,7 @@
     <!-- Required in RELEASE builds too (debug/profile manifests add it only for development). -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="BORCDEFTERI"
+        android:label="HesabPro"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

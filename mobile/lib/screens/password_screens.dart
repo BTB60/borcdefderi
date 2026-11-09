@@ -120,7 +120,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 child: FilledButton.icon(
                   style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600),
                   onPressed: () => _open(Uri.https('wa.me', '/${contact.whatsapp}', {
-                    'text': 'Salam! BORCDEFTERI hesabımın şifrəsini unutmuşam. E-poçtum: ${_email.text.trim()}',
+                    'text': 'Salam! HesabPro hesabımın şifrəsini unutmuşam. E-poçtum: ${_email.text.trim()}',
                   })),
                   icon: const Icon(Icons.chat),
                   label: const Text('WhatsApp'),

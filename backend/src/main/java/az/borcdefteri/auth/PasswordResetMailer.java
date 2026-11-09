@@ -48,11 +48,11 @@ public class PasswordResetMailer {
         SimpleMailMessage msg = new SimpleMailMessage();
         msg.setFrom(from != null && !from.isBlank() ? from : username);
         msg.setTo(to);
-        msg.setSubject("BORCDEFTERI — şifrənin bərpası");
+        msg.setSubject("HesabPro — şifrənin bərpası");
         msg.setText("""
                 Salam, %s!
 
-                BORCDEFTERI hesabınız üçün şifrənin bərpası istənilib. Yeni şifrə təyin etmək üçün linkə keçin:
+                HesabPro hesabınız üçün şifrənin bərpası istənilib. Yeni şifrə təyin etmək üçün linkə keçin:
 
                 %s
 

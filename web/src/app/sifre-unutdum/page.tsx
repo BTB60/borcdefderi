@@ -30,14 +30,14 @@ export default function ForgotPasswordPage() {
     }
   }
 
-  const waText = `Salam! BORCDEFTERI hesabımın şifrəsini unutmuşam. E-poçtum: ${email.trim() || "…"}`;
+  const waText = `Salam! HesabPro hesabımın şifrəsini unutmuşam. E-poçtum: ${email.trim() || "…"}`;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-canvas p-6">
       <div className="page-enter w-full max-w-md">
         <div className="mb-8 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy-800 font-serif text-lg font-bold text-gold-500">B</div>
-          <span className="font-serif text-lg font-semibold text-navy-800">BORCDEFTERI</span>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy-800 font-serif text-lg font-bold text-gold-500">H</div>
+          <span className="font-serif text-lg font-semibold text-navy-800">HesabPro</span>
         </div>
         <h1 className="font-serif text-3xl font-semibold text-navy-800">Şifrəni unutmusunuz?</h1>
         <p className="mt-2 text-sm text-slate-500">Hesabınızın e-poçtunu yazın — şifrəni bərpa etməyə kömək edək.</p>

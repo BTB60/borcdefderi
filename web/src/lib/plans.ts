@@ -40,7 +40,7 @@ export function findOption(plan: Plan, period: string | null | undefined): Perio
 }
 
 export const DEFAULT_WHATSAPP_TEMPLATE =
-  "Salam. BORCDEFTERI platformasında abunəlik paketi almaq istəyirəm.\n" +
+  "Salam. HesabPro platformasında abunəlik paketi almaq istəyirəm.\n" +
   "Mağaza adı: [Mağaza adı]\n" +
   "Seçilmiş paket: [Paket adı]\n" +
   "Müddət: [Müddət]\n" +

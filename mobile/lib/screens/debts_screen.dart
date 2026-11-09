@@ -10,6 +10,8 @@ import '../models/models.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'debt_edit_sheet.dart';
+import 'parties_screen.dart';
 
 const _sectionPermission = {
   'CUSTOMER_DEBT': 'CUSTOMER_DEBTS',
@@ -252,6 +254,26 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
     }
   }
 
+  Future<void> _edit() async {
+    final updated = await showModalBottomSheet<Debt>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: EditDebtSheet(session: widget.session, debt: _debt),
+      ),
+    );
+    if (updated == null || !mounted) return;
+    setState(() {
+      _debt = updated;
+      _changed = true;
+      _history = _loadHistory();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Borc yeniləndi')));
+  }
+
   Future<void> _pay() async {
     final payment = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
@@ -368,6 +390,8 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
           title: Text(_debt.partyName),
           leading: BackButton(onPressed: () => Navigator.of(context).pop(_changed)),
           actions: [
+            if (widget.session.me!.can(_sectionPermission[_debt.debtType]!))
+              IconButton(tooltip: 'Redaktə et', icon: const Icon(Icons.edit_outlined), onPressed: _edit),
             if (_canNotify && !_debt.isPaid && waNumber(_debt.partyPhone) != null)
               IconButton(
                 tooltip: 'WhatsApp ilə borc xatırlatması',
@@ -612,6 +636,15 @@ class _AddDebtScreenState extends State<AddDebtScreen> {
 
   String _iso(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  Future<void> _addParty(List<Party> current) async {
+    final created = await openPartyForm(context, session: widget.session, isCustomer: _isCustomer);
+    if (created == null || !mounted) return;
+    setState(() {
+      _parties = Future.value([created, ...current.where((p) => p.id != created.id)]);
+      _partyId = created.id;
+    });
+  }
+
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false) || _partyId == null) {
       setState(() => _error = 'Tərəfi və məbləği daxil edin');
@@ -651,17 +684,22 @@ class _AddDebtScreenState extends State<AddDebtScreen> {
             child: ListView(padding: const EdgeInsets.all(16), children: [
               if (_error != null) ErrorBanner(_error!),
               DropdownButtonFormField<String>(
+                key: ValueKey('party-${parties.length}-$_partyId'),
                 initialValue: _partyId,
+                isExpanded: true,
                 decoration: InputDecoration(labelText: _isCustomer ? 'Müştəri' : 'Şirkət'),
-                items: [for (final p in parties) DropdownMenuItem(value: p.id, child: Text(p.name))],
+                items: [for (final p in parties) DropdownMenuItem(value: p.id, child: Text(p.name, overflow: TextOverflow.ellipsis))],
                 onChanged: (v) => setState(() => _partyId = v),
                 validator: (v) => v == null ? 'Seçin' : null,
               ),
-              if (snap.connectionState == ConnectionState.done && parties.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text('Əvvəlcə ${_isCustomer ? 'müştəri' : 'şirkət'} əlavə edin (veb paneldə).', style: TextStyle(color: Colors.grey.shade700)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _busy ? null : () => _addParty(parties),
+                  icon: const Icon(Icons.person_add_alt_1_outlined, size: 18),
+                  label: Text('Yeni ${_isCustomer ? 'müştəri' : 'şirkət'} əlavə et'),
                 ),
+              ),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _amount,

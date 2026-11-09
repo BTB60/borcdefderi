@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -43,7 +44,7 @@ export default function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-canvas p-6">
       <div className="page-enter w-full max-w-2xl rounded-3xl border border-slate-200/70 bg-white p-8 shadow-card sm:p-10">
         <div className="mb-8 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy-800 font-serif text-lg font-bold text-gold-500">H</div>
+          <Image src="/logo-mark.png" alt="HesabPro" width={64} height={64} priority className="h-10 w-10 object-contain" />
           <div>
             <h1 className="font-serif text-2xl font-semibold text-navy-800">Mağaza qeydiyyatı</h1>
             <p className="text-sm text-slate-500">Mağazanız üçün ayrıca, təhlükəsiz iş sahəsi yaradılır</p>

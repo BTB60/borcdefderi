@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -37,7 +38,7 @@ export default function LoginPage() {
         <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-gold-500/10 blur-3xl" />
         <div className="absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-gold-500/10 blur-3xl" />
         <div className="relative flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gold-500 font-serif text-xl font-bold text-navy-900">H</div>
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white p-1.5"><Image src="/logo-mark.png" alt="" width={64} height={64} priority className="h-full w-full object-contain" /></div>
           <span className="font-serif text-xl font-semibold tracking-wide">HesabPro</span>
         </div>
         <div className="relative max-w-md">
@@ -57,8 +58,7 @@ export default function LoginPage() {
       <main className="flex items-center justify-center p-6 sm:p-12">
         <div className="page-enter w-full max-w-md">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy-800 font-serif text-lg font-bold text-gold-500">H</div>
-            <span className="font-serif text-lg font-semibold text-navy-800">HesabPro</span>
+            <Image src="/logo.png" alt="HesabPro" width={800} height={392} priority className="h-12 w-auto" />
           </div>
           <h1 className="font-serif text-3xl font-semibold text-navy-800">Xoş gəlmisiniz</h1>
           <p className="mt-2 text-sm text-slate-500">Hesabınıza daxil olun</p>

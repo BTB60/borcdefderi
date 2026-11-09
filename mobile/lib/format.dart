@@ -44,7 +44,7 @@ String friendlyError(String code, String fallback) {
     case 'STORE_SUSPENDED':
       return 'Mağazanız dayandırılıb. Dəstək ilə əlaqə saxlayın.';
     case 'NETWORK':
-      return 'Serverlə əlaqə qurula bilmədi. İnternet bağlantınızı yoxlayın.';
+      return fallback.isNotEmpty ? fallback : 'Serverlə əlaqə qurula bilmədi. İnternet bağlantınızı yoxlayın.';
     default:
       return fallback;
   }

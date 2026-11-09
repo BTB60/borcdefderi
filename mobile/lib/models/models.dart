@@ -201,6 +201,7 @@ class Debt {
   final DateTime debtDate;
   final DateTime? dueDate;
   final String? description;
+  final String? note;
   final int version;
 
   const Debt({
@@ -216,6 +217,7 @@ class Debt {
     required this.debtDate,
     required this.dueDate,
     required this.description,
+    this.note,
     required this.version,
   });
 
@@ -234,6 +236,7 @@ class Debt {
         debtDate: DateTime.parse(j['debtDate'] as String),
         dueDate: _date(j['dueDate']),
         description: _str(j['description']),
+        note: _str(j['note']),
         version: (j['version'] as num?)?.toInt() ?? 0,
       );
 }
@@ -295,15 +298,19 @@ class Party {
   final String id;
   final String name;
   final String? phone;
+  final String? note;
   final double openBalance;
+  final int openDebtCount;
 
-  const Party({required this.id, required this.name, required this.phone, required this.openBalance});
+  const Party({required this.id, required this.name, required this.phone, required this.openBalance, this.note, this.openDebtCount = 0});
 
   factory Party.fromJson(Map<String, dynamic> j) => Party(
         id: j['id'] as String,
         name: j['name'] as String,
         phone: _str(j['phone']),
+        note: _str(j['note']),
         openBalance: _num(j['openBalance']),
+        openDebtCount: _num(j['openDebtCount']).toInt(),
       );
 }
 

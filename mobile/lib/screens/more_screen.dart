@@ -7,7 +7,9 @@ import '../models/models.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'employees_screen.dart';
 import 'notifications_screen.dart';
+import 'parties_screen.dart';
 import 'profile_screen.dart';
 import 'subscription_screen.dart';
 
@@ -55,6 +57,38 @@ class MoreScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: ErrorBanner('Abunəliyinizin müddəti ${sub.daysRemaining} gün sonra bitir. Abunəlik bölməsindən yeniləyin.'),
+          ),
+        if (me.isOwner)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.badge_outlined, color: navy),
+              title: const Text('İşçilər'),
+              subtitle: const Text('Əlavə et, icazələr, şifrə sıfırlama'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EmployeesScreen(session: session))),
+            ),
+          ),
+        if (me.can('CUSTOMER_DEBTS'))
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.people_alt_outlined, color: navy),
+              title: const Text('Müştərilər'),
+              subtitle: const Text('Əlavə et, redaktə et, axtar'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => PartiesScreen(session: session, isCustomer: true))),
+            ),
+          ),
+        if (me.can('COMPANY_RECEIVABLES') || me.can('COMPANY_PAYABLES'))
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.business_outlined, color: navy),
+              title: const Text('Şirkətlər'),
+              subtitle: const Text('Əlavə et, redaktə et, axtar'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => PartiesScreen(session: session, isCustomer: false))),
+            ),
           ),
         Card(
           child: ListTile(

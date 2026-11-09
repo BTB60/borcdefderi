@@ -9,7 +9,8 @@ import 'state/session.dart';
 import 'theme.dart';
 
 void main() {
-  runApp(BorcdefteriApp(session: Session(api: ApiClient(baseUrl: apiBaseUrl), tokens: SecureTokenStore())));
+  final api = ApiClient(baseUrl: apiBaseUrl)..warmUp();
+  runApp(BorcdefteriApp(session: Session(api: api, tokens: SecureTokenStore())));
 }
 
 class BorcdefteriApp extends StatefulWidget {

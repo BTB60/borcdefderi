@@ -27,6 +27,14 @@ class ApiClient {
 
   void setToken(String? token) => _token = token;
 
+  /// The free hosting plan sleeps when idle and needs up to ~1 minute to wake, so requests wait long enough.
+  static const _timeout = Duration(seconds: 90);
+
+  /// Fire-and-forget ping on app start so the server is already waking while the user types.
+  void warmUp() {
+    _http.get(_uri('/api/health')).timeout(_timeout).then((_) {}, onError: (_) {});
+  }
+
   /// Called when a signed-in request gets 401 (token expired or account disabled); the session signs out.
   void Function()? onUnauthorized;
 
@@ -48,7 +56,7 @@ class ApiClient {
   Future<List<int>> getBytes(String path) async {
     final http.Response res;
     try {
-      res = await _http.get(_uri(path), headers: _headers()).timeout(const Duration(seconds: 25));
+      res = await _http.get(_uri(path), headers: _headers()).timeout(_timeout);
     } on http.ClientException {
       throw const ApiException(0, 'NETWORK', 'Serverlə əlaqə qurula bilmədi. İnternet bağlantınızı yoxlayın.');
     } on TimeoutException {
@@ -74,11 +82,14 @@ class ApiClient {
   Future<dynamic> _send(Future<http.Response> Function() call) async {
     final http.Response res;
     try {
-      res = await call().timeout(const Duration(seconds: 25));
+      res = await call().timeout(_timeout);
     } on http.ClientException {
       throw const ApiException(0, 'NETWORK', 'Serverlə əlaqə qurula bilmədi. İnternet bağlantınızı yoxlayın.');
     } on TimeoutException {
       throw const ApiException(0, 'NETWORK', 'Serverlə əlaqə qurula bilmədi. İnternet bağlantınızı yoxlayın.');
+    }
+    if (res.statusCode == 502 || res.statusCode == 503 || res.statusCode == 504) {
+      throw const ApiException(0, 'NETWORK', 'Server oyanır. Bir neçə saniyədən sonra yenidən cəhd edin.');
     }
     final body = res.body.isEmpty ? null : utf8.decode(res.bodyBytes);
     if (res.statusCode >= 200 && res.statusCode < 300) {

@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -72,7 +73,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
       >
         <div className="flex items-center gap-3 border-b border-white/10 px-6 py-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gold-500 font-serif text-lg font-bold text-navy-900">H</div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white p-1.5"><Image src="/logo-mark.png" alt="" width={64} height={64} priority className="h-full w-full object-contain" /></div>
           <div>
             <p className="font-serif text-lg font-semibold tracking-wide">HesabPro</p>
             <p className="text-xs text-white/50">{me?.storeName ?? "Platforma"}</p>

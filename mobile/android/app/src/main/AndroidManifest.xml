@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Required in RELEASE builds too (debug/profile manifests add it only for development). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+: needed to show notifications with sound. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
     <application
         android:label="HesabPro"
         android:name="${applicationName}"

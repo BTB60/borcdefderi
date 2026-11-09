@@ -348,16 +348,23 @@ class DashboardSummary {
 }
 
 class AppNotification {
+  final String type;
   final String severity;
   final String title;
   final String message;
+  final String? date;
 
-  const AppNotification({required this.severity, required this.title, required this.message});
+  const AppNotification({required this.severity, required this.title, required this.message, this.type = '', this.date});
+
+  /// Stable identity used to alert only once per notification.
+  String get key => '$type|$title|$message|${date ?? ''}';
 
   factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification(
+        type: j['type'] as String? ?? '',
         severity: j['severity'] as String? ?? 'INFO',
         title: j['title'] as String? ?? '',
         message: j['message'] as String? ?? '',
+        date: j['date'] as String?,
       );
 }
 

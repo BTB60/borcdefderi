@@ -5,12 +5,16 @@ import 'config.dart';
 import 'screens/auth_screens.dart';
 import 'screens/home_shell.dart';
 import 'screens/password_screens.dart';
+import 'state/notification_alerts.dart';
 import 'state/session.dart';
 import 'theme.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   final api = ApiClient(baseUrl: apiBaseUrl)..warmUp();
-  runApp(BorcdefteriApp(session: Session(api: api, tokens: SecureTokenStore())));
+  final session = Session(api: api, tokens: SecureTokenStore());
+  NotificationAlerts(session).start();
+  runApp(BorcdefteriApp(session: session));
 }
 
 class BorcdefteriApp extends StatefulWidget {

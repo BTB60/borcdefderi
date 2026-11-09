@@ -33,7 +33,7 @@ Kök qovluqdakı `render.yaml` Blueprint-dir (servis: `borcdefteri-api`, `rootDi
    | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | İlk Super Admin (şifrə ≥12 simvol). Hesab yalnız ilk işə salınmada yaradılır |
    | `APP_WEB_URL` | Vercel URL-i (şifrə bərpa linkləri üçün), məs. `https://borcdefteri.vercel.app` |
    | `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` | **İstəyə bağlı** — "Şifrəni unutdum" e-poçtu üçün SMTP (Gmail app password, Brevo, Mailgun və s.). Boşdursa istifadəçilər şifrəni administrator vasitəsilə bərpa edir |
-   | `CORS_ALLOWED_ORIGINS` | Vercel URL-i, məs. `https://borcdefteri.vercel.app` (vergüllə bir neçə dəyər ola bilər) |
+   | `CORS_ALLOWED_ORIGINS` | Vercel URL-i, məs. `https://borcdefderi.vercel.app`. Vergüllə bir neçə dəyər ola bilər; `*` nümunəsi də qəbul olunur — Vercel preview linkləri üçün: `https://borcdefderi.vercel.app,https://borcdefderi-*-btb60s-projects.vercel.app` |
 
 3. Health check: `/api/health` (`render.yaml`-da təyin olunub).
 4. **Qəbz faylları:** abunəlik çekləri **PostgreSQL-də** saxlanılır (`subscription_receipts.content`, V3 miqrasiyası), ona görə Render diskinin deploy zamanı silinməsi onlara təsir etmir. Persistent Disk lazım deyil. `UPLOAD_DIR` yalnız V3-dən əvvəl diskə yazılmış köhnə qəbzləri oxumaq üçün qalıb.

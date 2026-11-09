@@ -71,6 +71,8 @@ public abstract class IntegrationTestBase {
         registry.add("spring.datasource.url", () -> PG.getJdbcUrl("postgres", "postgres"));
         registry.add("spring.datasource.username", () -> "postgres");
         registry.add("spring.datasource.password", () -> "postgres");
+        registry.add("app.cors.allowed-origins",
+                () -> "https://borcdefderi.vercel.app, https://borcdefderi-*-btb60s-projects.vercel.app");
     }
 
     @TestConfiguration

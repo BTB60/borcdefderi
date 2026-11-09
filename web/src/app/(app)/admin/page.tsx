@@ -1,23 +1,28 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
-import { ApiError, api, openProtected } from "@/lib/api";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
+import { ApiError, api } from "@/lib/api";
 import { Countdown, WARN_DAYS, countdown, useNow } from "@/components/Countdown";
 import { TemporaryPasswordModal, type TemporaryPassword } from "@/components/PasswordReset";
-import { SUBSCRIPTION_STATUS_LABEL, formatDate, formatDateTime, formatMoney, planPeriodLabel } from "@/lib/format";
-import type { AdminRevenue, AdminStore, AuditEntry, Contact, Plan, SubscriptionRecord } from "@/lib/types";
+import { PlansTab } from "@/components/admin/PlansTab";
+import { PaymentSettingsTab } from "@/components/admin/PaymentSettingsTab";
+import { PaymentRequestsTab } from "@/components/admin/PaymentRequestsTab";
+import { optionLabel } from "@/lib/plans";
+import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
+import type { AdminRevenue, AdminStore, AuditEntry, Plan } from "@/lib/types";
 
 type Tab = "stores" | "subscriptions" | "plans" | "revenue" | "users" | "audit" | "settings";
 
+
 const TABS: { key: Tab; label: string }[] = [
   { key: "stores", label: "Mağazalar" },
-  { key: "subscriptions", label: "Abunəlik sorğuları" },
-  { key: "plans", label: "Paketlər" },
+  { key: "subscriptions", label: "Ödəniş sorğuları" },
+  { key: "plans", label: "Abunəlik paketləri" },
   { key: "revenue", label: "Gəlir" },
   { key: "users", label: "İstifadəçilər" },
   { key: "audit", label: "Audit jurnalı" },
-  { key: "settings", label: "Ayarlar" },
+  { key: "settings", label: "Ödəniş və əlaqə" },
 ];
 
 export default function AdminPage() {
@@ -45,12 +50,12 @@ export default function AdminPage() {
       {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
 
       {tab === "stores" && <StoresTab onError={setError} onNotice={setNotice} />}
-      {tab === "subscriptions" && <SubscriptionsTab onError={setError} onNotice={setNotice} />}
+      {tab === "subscriptions" && <PaymentRequestsTab onError={setError} onNotice={setNotice} />}
       {tab === "plans" && <PlansTab onError={setError} onNotice={setNotice} />}
       {tab === "revenue" && <RevenueTab onError={setError} />}
       {tab === "users" && <UsersTab onError={setError} />}
       {tab === "audit" && <AuditTab onError={setError} />}
-      {tab === "settings" && <SettingsTab onError={setError} onNotice={setNotice} />}
+      {tab === "settings" && <PaymentSettingsTab onError={setError} onNotice={setNotice} />}
     </>
   );
 }
@@ -272,6 +277,7 @@ function StoresTab({ onError, onNotice }: TabProps) {
 function ActivateModal({ store, onClose, onDone, onError }: { store: AdminStore; onClose: () => void; onDone: (planName: string) => void; onError: (m: string) => void }) {
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [code, setCode] = useState(store.pendingPlanCode ?? "");
+  const [period, setPeriod] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -285,13 +291,14 @@ function ActivateModal({ store, onClose, onDone, onError }: { store: AdminStore;
   }, []);
 
   const plan = plans?.find((p) => p.code === code);
+  const option = plan?.options.find((o) => o.period === period) ?? plan?.options[0];
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!plan) return;
     setBusy(true);
     try {
-      await api(`/api/admin/stores/${store.id}/subscription`, { method: "POST", json: { planCode: plan.code } });
+      await api(`/api/admin/stores/${store.id}/subscription`, { method: "POST", json: { planCode: plan.code, period: option?.period } });
       onDone(plan.name);
     } catch (err) {
       onError(errorText(err, "Aktivləşdirmə alınmadı"));
@@ -318,14 +325,30 @@ function ActivateModal({ store, onClose, onDone, onError }: { store: AdminStore;
                 key={p.id}
                 role="radio"
                 aria-checked={code === p.code}
-                onClick={() => setCode(p.code)}
+                onClick={() => { setCode(p.code); setPeriod(""); }}
                 className={`rounded-xl border px-3 py-3 text-left transition ${code === p.code ? "border-gold-500 bg-gold-500/10 shadow-glow" : "border-slate-300 hover:border-slate-400"}`}
               >
                 <p className="text-sm font-semibold text-navy-800">{p.name}</p>
-                <p className="text-xs text-slate-500">{planPeriodLabel(p.durationMonths)} · {formatMoney(p.price)}</p>
+                <p className="text-xs text-slate-500">{p.options.length > 1 ? `${p.options.length} müddət` : p.options[0] ? `${optionLabel(p.options[0])} · ${formatMoney(p.options[0].price)}` : "—"}</p>
               </button>
             ))}
           </div>
+          {plan && plan.options.length > 1 && (
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Müddət">
+              {plan.options.map((o) => (
+                <button
+                  type="button"
+                  key={o.period}
+                  role="radio"
+                  aria-checked={option?.period === o.period}
+                  onClick={() => setPeriod(o.period)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${option?.period === o.period ? "border-navy-800 bg-navy-800 text-white" : "border-slate-300 text-slate-700 hover:border-slate-400"}`}
+                >
+                  {optionLabel(o)} · {formatMoney(o.price)}
+                </button>
+              ))}
+            </div>
+          )}
           <p className="text-xs text-slate-500">
             {store.activePlan
               ? `Mağazanın aktiv abunəliyi var — yeni dövr cari bitmə tarixindən (${formatDate(store.subscriptionEnd)}) sonra başlayacaq.`
@@ -334,57 +357,6 @@ function ActivateModal({ store, onClose, onDone, onError }: { store: AdminStore;
         </form>
       )}
     </Modal>
-  );
-}
-
-function SettingsTab({ onError, onNotice }: TabProps) {
-  const [form, setForm] = useState<{ phone: string; m10Account: string; m10Recipient: string; paymentNote: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const fill = (c: Contact) => setForm({ phone: c.phone ?? "", m10Account: c.m10Account ?? "", m10Recipient: c.m10Recipient ?? "", paymentNote: c.paymentNote ?? "" });
-
-  useEffect(() => {
-    api<Contact>("/api/public/contact").then(fill).catch((e) => onError(errorText(e, "Ayarlar yüklənmədi")));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    if (!form) return;
-    setBusy(true);
-    try {
-      fill(await api<Contact>("/api/admin/settings/contact", { method: "PUT", json: form }));
-      onNotice?.("Ödəniş və əlaqə məlumatları yadda saxlanıldı");
-    } catch (err) {
-      onError(errorText(err, "Yadda saxlanılmadı"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!form) return <Spinner />;
-  return (
-    <Card className="max-w-2xl">
-      <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Abunəlik ödənişi və əlaqə</h2>
-      <p className="mb-5 text-sm text-slate-500">Mağaza sahibi “Abunə ol” düyməsini basanda bu məlumatlar göstərilir.</p>
-      <form onSubmit={save} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="M10 nömrəsi / hesab" hint="Ödənişin göndəriləcəyi M10 hesabı">
-            <Input value={form.m10Account} maxLength={60} onChange={(e) => setForm({ ...form, m10Account: e.target.value })} placeholder="+994 50 123 45 67" />
-          </Field>
-          <Field label="Alanın adı" hint="M10-da görünən ad">
-            <Input value={form.m10Recipient} maxLength={120} onChange={(e) => setForm({ ...form, m10Recipient: e.target.value })} />
-          </Field>
-        </div>
-        <Field label="Əlavə qeyd" hint="Məs: təyinat hissəsinə mağaza adını yazın">
-          <Input value={form.paymentNote} maxLength={500} onChange={(e) => setForm({ ...form, paymentNote: e.target.value })} />
-        </Field>
-        <Field label="Əlaqə telefonu (zəng və WhatsApp)" hint="Məs: +994 50 123 45 67">
-          <Input value={form.phone} maxLength={30} inputMode="tel" onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+994 50 123 45 67" />
-        </Field>
-        <Button type="submit" variant="primary" disabled={busy}>{busy ? "Saxlanılır…" : "Yadda saxla"}</Button>
-      </form>
-    </Card>
   );
 }
 
@@ -443,193 +415,6 @@ function ExtendModal({ store, onClose, onDone, onError }: { store: AdminStore; o
         </Field>
       </form>
     </Modal>
-  );
-}
-
-function SubscriptionsTab({ onError, onNotice }: TabProps) {
-  const [status, setStatus] = useState("PENDING");
-  const [items, setItems] = useState<SubscriptionRecord[] | null>(null);
-  const [rejecting, setRejecting] = useState<SubscriptionRecord | null>(null);
-  const [reload, setReload] = useState(0);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [confirm, confirmDialog] = useConfirm();
-
-  useEffect(() => {
-    setItems(null);
-    api<SubscriptionRecord[]>(`/api/admin/subscriptions${status ? `?status=${status}` : ""}`)
-      .then(setItems)
-      .catch((e) => onError(errorText(e, "Sorğular yüklənmədi")));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, reload]);
-
-  async function approve(s: SubscriptionRecord) {
-    const ok = await confirm(
-      <>
-        <strong>{s.storeName}</strong> — {s.planName} ({formatMoney(s.amount)}) ödənişini təsdiqləyirsiniz?
-        {s.payerReference && <span className="mt-2 block text-xs text-slate-500">M10 / istinad: {s.payerReference}</span>}
-        <span className="mt-2 block text-xs text-slate-500">Təsdiqdən sonra mağaza dərhal aktiv olacaq və sayğac başlayacaq.</span>
-      </>,
-      { title: "Ödənişi təsdiqlə", confirmLabel: "Bəli, təsdiqlə və aktiv et" },
-    );
-    if (!ok) return;
-    setBusyId(s.id);
-    onError(null);
-    try {
-      await api(`/api/admin/subscriptions/${s.id}/approve`, { method: "POST" });
-      onNotice?.("Abunəlik təsdiqləndi və aktivləşdirildi");
-      setReload((r) => r + 1);
-    } catch (e) {
-      onError(errorText(e, "Təsdiq alınmadı"));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  return (
-    <>
-      <Card>
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="max-w-xs" aria-label="Status filtri">
-            <option value="PENDING">Təsdiq gözləyənlər</option>
-            <option value="ACTIVE">Aktivlər</option>
-            <option value="REJECTED">Rədd edilənlər</option>
-            <option value="EXPIRED">Müddəti bitənlər</option>
-            <option value="">Hamısı</option>
-          </Select>
-          <p className="text-sm text-slate-500">{items ? `${items.length} sorğu` : ""}</p>
-        </div>
-        {!items ? <Spinner /> : items.length === 0 ? <EmptyState title="Sorğu yoxdur" /> : (
-          <Table>
-            <thead className="bg-slate-50/70">
-              <tr><Th>Mağaza</Th><Th>Plan</Th><Th className="text-right">Məbləğ</Th><Th>Sorğu tarixi</Th><Th>M10 / istinad</Th><Th>Status</Th><Th className="text-right">Əməliyyat</Th></tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {items.map((s) => (
-                <tr key={s.id} className="transition-colors hover:bg-gold-500/5">
-                  <Td className="font-medium text-navy-800">{s.storeName}</Td>
-                  <Td>{s.planName}</Td>
-                  <Td className="text-right tabular-nums">{formatMoney(s.amount)}</Td>
-                  <Td>{formatDateTime(s.requestedAt)}</Td>
-                  <Td className="text-slate-500">{s.payerReference ?? "—"}</Td>
-                  <Td>
-                    <Badge tone={s.status === "ACTIVE" ? "emerald" : s.status === "PENDING" ? "amber" : s.status === "REJECTED" ? "rose" : "slate"}>
-                      {SUBSCRIPTION_STATUS_LABEL[s.status]}
-                    </Badge>
-                  </Td>
-                  <Td className="text-right">
-                    <div className="flex justify-end gap-1">
-                      {s.hasReceipt && <Button variant="ghost" onClick={() => openProtected(`/api/admin/subscriptions/${s.id}/receipt`).catch((e) => onError(errorText(e, "Qəbz açılmadı")))}>Qəbz</Button>}
-                      {s.status === "PENDING" && (
-                        <>
-                          <Button variant="outline" onClick={() => setRejecting(s)}>Rədd et</Button>
-                          <Button variant="gold" disabled={busyId === s.id} onClick={() => approve(s)}>{busyId === s.id ? "Təsdiqlənir…" : "Təsdiqlə"}</Button>
-                        </>
-                      )}
-                    </div>
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-      </Card>
-      {confirmDialog}
-      {rejecting && (
-        <RejectModal
-          sub={rejecting}
-          onClose={() => setRejecting(null)}
-          onDone={() => {
-            setRejecting(null);
-            onNotice?.("Sorğu rədd edildi");
-            setReload((r) => r + 1);
-          }}
-          onError={(m) => onError(m)}
-        />
-      )}
-    </>
-  );
-}
-
-function RejectModal({ sub, onClose, onDone, onError }: { sub: SubscriptionRecord; onClose: () => void; onDone: () => void; onError: (m: string) => void }) {
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await api(`/api/admin/subscriptions/${sub.id}/reject`, { method: "POST", json: { reason } });
-      onDone();
-    } catch (err) {
-      onError(errorText(err, "Rədd edilmədi"));
-      onClose();
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Modal open title="Sorğunu rədd et" onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Ləğv et</Button><Button type="submit" variant="danger" form="reject-form" disabled={busy || !reason.trim()}>Rədd et</Button></>}>
-      <form id="reject-form" onSubmit={submit}>
-        <Field label="Səbəb" hint="Mağaza sahibi bu səbəbi görəcək">
-          <Input required maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
-        </Field>
-      </form>
-    </Modal>
-  );
-}
-
-function PlansTab({ onError, onNotice }: TabProps) {
-  const [plans, setPlans] = useState<Plan[] | null>(null);
-  const [draft, setDraft] = useState<Record<string, { name: string; price: string; durationMonths: number; active: boolean }>>({});
-
-  useEffect(() => {
-    api<Plan[]>("/api/admin/plans")
-      .then((p) => {
-        setPlans(p);
-        setDraft(Object.fromEntries(p.map((x) => [x.id, { name: x.name, price: String(x.price), durationMonths: x.durationMonths, active: x.active }])));
-      })
-      .catch((e) => onError(errorText(e, "Planlar yüklənmədi")));
-  }, [onError]);
-
-  async function save(id: string) {
-    const d = draft[id];
-    try {
-      const updated = await api<Plan>(`/api/admin/plans/${id}`, { method: "PUT", json: { name: d.name, price: d.price, durationMonths: d.durationMonths, active: d.active } });
-      setPlans((list) => list?.map((p) => (p.id === id ? updated : p)) ?? null);
-      onNotice?.(`“${updated.name}” planı yeniləndi`);
-    } catch (e) {
-      onError(errorText(e, "Plan yadda saxlanmadı"));
-    }
-  }
-
-  if (!plans) return <Spinner />;
-  return (
-    <Card>
-      <p className="mb-5 text-sm text-slate-500">Qiymət dəyişikliyi yalnız yeni abunəlik sorğularına təsir edir. Mövcud aktiv abunəliklər öz məbləğini saxlayır.</p>
-      <div className="grid gap-4 lg:grid-cols-2">
-        {plans.map((p) => {
-          const d = draft[p.id];
-          if (!d) return null;
-          return (
-            <div key={p.id} className="rounded-2xl border border-slate-200 p-5 transition hover:border-gold-500/50">
-              <div className="mb-4 flex items-center justify-between">
-                <span className="font-mono text-xs text-slate-400">{p.code}</span>
-                <Badge tone={d.active ? "emerald" : "slate"}>{d.active ? "Aktiv" : "Gizli"}</Badge>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Ad"><Input value={d.name} onChange={(e) => setDraft({ ...draft, [p.id]: { ...d, name: e.target.value } })} /></Field>
-                <Field label="Qiymət (₼)"><Input type="number" step="0.01" min="0" value={d.price} onChange={(e) => setDraft({ ...draft, [p.id]: { ...d, price: e.target.value } })} /></Field>
-                <Field label="Müddət (ay)"><Input type="number" min={1} max={60} value={d.durationMonths} onChange={(e) => setDraft({ ...draft, [p.id]: { ...d, durationMonths: Number(e.target.value) } })} /></Field>
-                <label className="flex items-end gap-2 pb-2 text-sm text-slate-700">
-                  <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={d.active} onChange={(e) => setDraft({ ...draft, [p.id]: { ...d, active: e.target.checked } })} />
-                  Satışda
-                </label>
-              </div>
-              <div className="mt-4 flex justify-end"><Button variant="primary" onClick={() => save(p.id)}>Yadda saxla</Button></div>
-            </div>
-          );
-        })}
-      </div>
-    </Card>
   );
 }
 

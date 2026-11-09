@@ -62,8 +62,8 @@ Dockerfile: `backend/Dockerfile` (multi-stage, JRE 17, qeyri-root istifadəçi, 
 ## 4. İlk girişdən sonra (Super Admin)
 
 1. `ADMIN_EMAIL` / `ADMIN_PASSWORD` ilə `/login`-dən daxil olun → **Platforma idarəetməsi**.
-2. **Ayarlar**: M10 nömrəsi/hesabı, alanın adı, əlavə qeyd və əlaqə telefonu (WhatsApp) yazın. Mağaza sahibi “Abunə ol” basanda bunları görür.
-3. **Paketlər**: Aylıq / 6 aylıq / İllik qiymətlərini yoxlayın (başlanğıc: 19 / 99 / 179 AZN).
+2. **Ödəniş və əlaqə**: M10 nömrəsi, hesab sahibi, bank kartı (nömrə, sahib, bank), WhatsApp nömrəsi, əlavə əlaqə, WhatsApp mesaj şablonu və ödəniş təlimatı yazın. Bu məlumatlar yalnız bazada saxlanılır (kodda və GitHub-da yoxdur).
+3. **Abunəlik paketləri**: paket yaradın/redaktə edin — 1/3/6/12 aylıq və xüsusi müddət qiymətləri, üstünlüklər, işçi/müştəri limiti, rənglər (canlı önizləmə ilə). Köhnə paketlər (Aylıq / 6 aylıq / İllik) miqrasiyadan sonra olduğu kimi qalır.
 
 ## 5. Mobil tətbiq (Android APK / iOS)
 

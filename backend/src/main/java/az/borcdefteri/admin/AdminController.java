@@ -1,7 +1,9 @@
 package az.borcdefteri.admin;
 
 import az.borcdefteri.subscriptions.SubscriptionService;
-import az.borcdefteri.subscriptions.SubscriptionService.PlanView;
+import az.borcdefteri.subscriptions.PlanService;
+import az.borcdefteri.subscriptions.PlanService.PlanInput;
+import az.borcdefteri.subscriptions.PlanService.PlanView;
 import az.borcdefteri.subscriptions.SubscriptionService.ReceiptFile;
 import az.borcdefteri.subscriptions.SubscriptionService.SubscriptionView;
 import jakarta.validation.Valid;
@@ -20,23 +22,56 @@ import java.util.UUID;
 @RequestMapping("/api/admin")
 public class AdminController {
 
+    /**
+     * Package create / update. New admin form: period prices, features, limits, colours (see {@link PlanInput}).
+     * Older clients may still send only name + price + durationMonths + active.
+     */
     public record PlanUpdate(@NotBlank @Size(max = 100) String name,
-                             @NotNull @DecimalMin("0.00") @Digits(integer = 10, fraction = 2) BigDecimal price,
-                             @Min(1) @Max(60) int durationMonths,
-                             boolean active) {}
+                             @DecimalMin("0.00") @Digits(integer = 10, fraction = 2) BigDecimal price,
+                             @Min(1) @Max(60) Integer durationMonths,
+                             Boolean active,
+                             @Size(max = 500) String description,
+                             @Size(max = 20) List<@Size(max = 200) String> features,
+                             @DecimalMin("0.00") @Digits(integer = 6, fraction = 2) BigDecimal priceMonthly,
+                             @DecimalMin("0.00") @Digits(integer = 6, fraction = 2) BigDecimal priceQuarterly,
+                             @DecimalMin("0.00") @Digits(integer = 6, fraction = 2) BigDecimal priceSemiAnnual,
+                             @DecimalMin("0.00") @Digits(integer = 6, fraction = 2) BigDecimal priceYearly,
+                             @Min(1) @Max(3660) Integer customDays,
+                             @DecimalMin("0.00") @Digits(integer = 6, fraction = 2) BigDecimal customPrice,
+                             @Min(0) Integer maxEmployees,
+                             @Min(0) Integer maxCustomers,
+                             Boolean recommended,
+                             String primaryColor, String secondaryColor, String backgroundColor,
+                             String textColor, String buttonColor) {
+
+        boolean legacy() {
+            return priceMonthly == null && priceQuarterly == null && priceSemiAnnual == null && priceYearly == null
+                    && customDays == null && customPrice == null && price != null && durationMonths != null;
+        }
+
+        PlanInput toInput() {
+            return new PlanInput(name, description, features, priceMonthly, priceQuarterly, priceSemiAnnual,
+                    priceYearly, customDays, customPrice, maxEmployees, maxCustomers, active, recommended,
+                    primaryColor, secondaryColor, backgroundColor, textColor, buttonColor);
+        }
+    }
+
+    public record PlanOrder(@NotNull @Size(min = 1, max = 200) List<@NotNull UUID> ids) {}
 
     public record RejectRequest(@NotBlank @Size(max = 500) String reason) {}
 
     public record ExtendRequest(@Min(1) @Max(366) int days) {}
 
-    public record ActivateRequest(@NotBlank String planCode) {}
+    public record ActivateRequest(@NotBlank String planCode, String period) {}
 
     private final AdminService admin;
     private final SubscriptionService subscriptions;
+    private final PlanService plans;
 
-    public AdminController(AdminService admin, SubscriptionService subscriptions) {
+    public AdminController(AdminService admin, SubscriptionService subscriptions, PlanService plans) {
         this.admin = admin;
         this.subscriptions = subscriptions;
+        this.plans = plans;
     }
 
     @GetMapping("/stores")
@@ -62,12 +97,13 @@ public class AdminController {
     /** Activates (or renews) the store's subscription with the chosen package after the payment receipt is checked. */
     @PostMapping("/stores/{id}/subscription")
     public SubscriptionView activateSubscription(@PathVariable UUID id, @Valid @RequestBody ActivateRequest req) {
-        return subscriptions.adminActivate(id, req.planCode());
+        return subscriptions.adminActivate(id, req.planCode(), req.period());
     }
 
     @GetMapping("/subscriptions")
-    public List<SubscriptionView> subscriptions(@RequestParam(required = false) String status) {
-        return subscriptions.listByStatus(status);
+    public List<SubscriptionView> subscriptions(@RequestParam(required = false) String status,
+                                                @RequestParam(required = false) UUID storeId) {
+        return subscriptions.listByStatus(status, storeId);
     }
 
     @GetMapping("/subscriptions/{id}/receipt")
@@ -87,13 +123,39 @@ public class AdminController {
     }
 
     @GetMapping("/plans")
-    public List<PlanView> plans() {
-        return subscriptions.allPlans();
+    public List<PlanView> plans(@RequestParam(defaultValue = "false") boolean archived) {
+        return plans.allPlans(archived);
+    }
+
+    @PostMapping("/plans")
+    @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+    public PlanView createPlan(@Valid @RequestBody PlanUpdate req) {
+        return plans.create(req.toInput());
+    }
+
+    @PutMapping("/plans/order")
+    public List<PlanView> reorderPlans(@Valid @RequestBody PlanOrder req) {
+        return plans.reorder(req.ids());
     }
 
     @PutMapping("/plans/{id}")
     public PlanView updatePlan(@PathVariable UUID id, @Valid @RequestBody PlanUpdate req) {
-        return subscriptions.updatePlan(id, req.name(), req.price(), req.durationMonths(), req.active());
+        if (req.legacy()) {
+            return plans.updateLegacy(id, req.name(), req.price(), req.durationMonths(),
+                    req.active() == null || req.active());
+        }
+        return plans.update(id, req.toInput());
+    }
+
+    /** Deletes an unused package; one that stores already used is archived (hidden, history kept). */
+    @DeleteMapping("/plans/{id}")
+    public Map<String, String> deletePlan(@PathVariable UUID id) {
+        return Map.of("result", plans.delete(id));
+    }
+
+    @PostMapping("/plans/{id}/restore")
+    public PlanView restorePlan(@PathVariable UUID id) {
+        return plans.restore(id);
     }
 
     @GetMapping("/revenue")

@@ -46,11 +46,14 @@ public class DashboardService {
     private final JdbcClient jdbc;
     private final TenantService tenant;
     private final PaymentService payments;
+    private final az.borcdefteri.notifications.NotificationService stored;
 
-    public DashboardService(JdbcClient jdbc, TenantService tenant, PaymentService payments) {
+    public DashboardService(JdbcClient jdbc, TenantService tenant, PaymentService payments,
+                            az.borcdefteri.notifications.NotificationService stored) {
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.payments = payments;
+        this.stored = stored;
     }
 
     public Dashboard dashboard() {
@@ -214,15 +217,26 @@ public class DashboardService {
                             "Abunəliyiniz " + ended + " tarixində bitib. Borc və ödəniş bölmələri bağlıdır — abunəliyi yeniləyin",
                             ended)));
         }
+        // Latest payment request, if it is still pending or was rejected (with the admin's reason).
+        record Req(String status, String reason) {}
         jdbc.sql("""
-                SELECT s.status FROM subscriptions s WHERE s.store_id = :s AND s.status IN ('PENDING', 'REJECTED')
+                SELECT s.status, s.reject_reason FROM subscriptions s WHERE s.store_id = :s
                 ORDER BY s.requested_at DESC LIMIT 1
-                """).param("s", m.storeId()).query(String.class).optional().ifPresent(status -> out.add(
-                "PENDING".equals(status)
+                """).param("s", m.storeId())
+                .query((rs, n) -> new Req(rs.getString("status"), rs.getString("reject_reason")))
+                .optional().filter(r -> "PENDING".equals(r.status()) || "REJECTED".equals(r.status()))
+                .ifPresent(r -> out.add("PENDING".equals(r.status())
                         ? new Notification("SUBSCRIPTION_PENDING", "INFO", "Ödəniş təsdiqi gözlənilir",
-                        "Abunəlik sorğunuz təsdiq gözləyir", today)
-                        : new Notification("SUBSCRIPTION_REJECTED", "DANGER", "Abunəlik rədd edildi",
-                        "Son abunəlik sorğunuz rədd edilib. Yenidən göndərə bilərsiniz", today)));
+                        "Ödəniş sorğunuz yoxlanılır", today)
+                        : new Notification("SUBSCRIPTION_REJECTED", "DANGER", "Ödəniş sorğunuz rədd edildi",
+                        (r.reason() != null ? "Səbəb: " + r.reason() + ". " : "") + "Yenidən göndərə bilərsiniz", today)));
+        // Approvals of the last 7 days ("Ödənişiniz təsdiqləndi").
+        for (var n : stored.recent(m.storeId(), java.time.OffsetDateTime.now().minusDays(7))) {
+            if (!"PAYMENT_REJECTED".equals(n.kind())) {
+                out.add(new Notification(n.kind(), "INFO", n.title(), n.message(),
+                        n.createdAt().atZoneSameInstant(java.time.ZoneId.of("Asia/Baku")).toLocalDate()));
+            }
+        }
 
         jdbc.sql("""
                 SELECT d.debt_type, COALESCE(c.name, co.name) AS party_name, d.remaining_amount, d.due_date

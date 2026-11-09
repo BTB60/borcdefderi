@@ -15,12 +15,26 @@ export interface SubscriptionSummary {
   expiresAt?: string | null;
 }
 
+/** Payment & contact settings managed by the SUPER_ADMIN (card details only when signed in). */
 export interface Contact {
+  /** WhatsApp number as entered. */
   phone: string | null;
+  /** WhatsApp number in international digits for wa.me links. */
   whatsapp: string | null;
   m10Account: string | null;
   m10Recipient: string | null;
+  /** M10 payment instructions. */
   paymentNote: string | null;
+  cardNumber: string | null;
+  cardHolder: string | null;
+  cardBank: string | null;
+  /** Card payment instructions. */
+  cardNote: string | null;
+  extraPhone: string | null;
+  extraContact: string | null;
+  whatsappTemplate: string | null;
+  paymentInstructions: string | null;
+  afterPaymentText: string | null;
 }
 
 export interface Me {
@@ -162,13 +176,39 @@ export interface Notification {
   date: string;
 }
 
+export type PeriodCode = "MONTHLY" | "QUARTERLY" | "SEMI_ANNUAL" | "YEARLY" | "CUSTOM";
+
+/** One purchasable period of a package: calendar months, or a number of days for CUSTOM. */
+export interface PeriodOption {
+  period: PeriodCode;
+  months: number | null;
+  days: number | null;
+  price: number;
+}
+
 export interface Plan {
   id: string;
   code: string;
   name: string;
+  /** Price of the first offered period (kept for older screens). */
   price: number;
   durationMonths: number;
   active: boolean;
+  description: string | null;
+  features: string[];
+  maxEmployees: number | null;
+  maxCustomers: number | null;
+  sortOrder: number;
+  recommended: boolean;
+  archived: boolean;
+  options: PeriodOption[];
+  primaryColor: string;
+  secondaryColor: string;
+  backgroundColor: string;
+  textColor: string;
+  buttonColor: string;
+  /** A store already requested or paid for it: deleting archives it instead. */
+  inUse: boolean;
 }
 
 export interface SubscriptionRecord {
@@ -178,6 +218,8 @@ export interface SubscriptionRecord {
   planCode: string;
   planName: string;
   status: "PENDING" | "ACTIVE" | "EXPIRED" | "REJECTED";
+  /** Payment request status: ACTIVE and EXPIRED were approved. */
+  requestStatus: "PENDING" | "APPROVED" | "REJECTED";
   amount: number;
   startDate: string | null;
   endDate: string | null;
@@ -186,6 +228,19 @@ export interface SubscriptionRecord {
   requestedAt: string;
   reviewedAt: string | null;
   hasReceipt: boolean;
+  periodCode: PeriodCode | null;
+  periodMonths: number | null;
+  periodDays: number | null;
+  paymentMethod: "M10" | "CARD" | null;
+  payerName: string | null;
+  declaredAmount: number | null;
+  paymentDate: string | null;
+  note: string | null;
+  ownerName: string | null;
+  ownerEmail: string | null;
+  ownerPhone: string | null;
+  storePhone: string | null;
+  reviewedByName: string | null;
 }
 
 export interface Employee {

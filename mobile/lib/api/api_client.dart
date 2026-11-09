@@ -106,10 +106,12 @@ class ApiClient {
   Future<dynamic> delete(String path) => _send(() => _http.delete(_uri(path), headers: _headers()));
 
   /// Multipart upload of one file (e.g. the profile picture).
-  Future<dynamic> upload(String path, String field, List<int> bytes, String fileName, String contentType) =>
+  Future<dynamic> upload(String path, String field, List<int> bytes, String fileName, String contentType,
+          {Map<String, String> fields = const {}}) =>
       _send(() async {
         final req = http.MultipartRequest('POST', _uri(path))
           ..headers.addAll(_headers())
+          ..fields.addAll(fields)
           ..files.add(http.MultipartFile.fromBytes(field, bytes, filename: fileName, contentType: MediaType.parse(contentType)));
         return http.Response.fromStream(await _http.send(req));
       });

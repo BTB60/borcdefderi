@@ -25,8 +25,11 @@ public class PartyService {
     private final JdbcClient jdbc;
     private final TenantService tenant;
     private final AuditService audit;
+    private final az.borcdefteri.subscriptions.PlanService plans;
 
-    public PartyService(JdbcClient jdbc, TenantService tenant, AuditService audit) {
+    public PartyService(JdbcClient jdbc, TenantService tenant, AuditService audit,
+                        az.borcdefteri.subscriptions.PlanService plans) {
+        this.plans = plans;
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.audit = audit;
@@ -116,6 +119,17 @@ public class PartyService {
     }
 
     private void insert(String table, UUID id, CurrentMember m, PartyRequest req) {
+        if ("customers".equals(table)) {
+            Integer maxCustomers = plans.limitsFor(m.storeId()).maxCustomers();
+            if (maxCustomers != null) {
+                long current = jdbc.sql("SELECT COUNT(*) FROM customers WHERE store_id = :s")
+                        .param("s", m.storeId()).query(Long.class).single();
+                if (current >= maxCustomers) {
+                    throw ApiException.conflict("PLAN_LIMIT_CUSTOMERS",
+                            "Paketinizdə ən çox " + maxCustomers + " müştəri ola bilər. Daha çox müştəri üçün paketi yüksəldin.");
+                }
+            }
+        }
         jdbc.sql("INSERT INTO " + table + " (id, store_id, name, phone, note, created_by) VALUES (:id, :storeId, :name, :phone, :note, :by)")
                 .param("id", id).param("storeId", m.storeId())
                 .param("name", req.name().trim()).param("phone", blankToNull(req.phone()))

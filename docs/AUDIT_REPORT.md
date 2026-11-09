@@ -98,6 +98,27 @@ Sistem lokal mühitdə uçdan-uca işləyir: qeydiyyat → paket seçimi → M10
 | Sayğac (sahib və admin), az qalan/bitən qırmızı | PASS |
 | Bitmə bildirişi SMS/e-poçt ilə | **WARNING** — yalnız tətbiqdaxili; SMS/e-poçt provayderi yoxdur |
 
+### Abunəlik paketləri, ödəniş parametrləri və ödəniş sorğuları (V7)
+
+| Ssenari | Nəticə | Necə yoxlanıldı |
+|---|---|---|
+| Super Admin paket yaradır (qiymətlər, üstünlüklər, limitlər) | PASS | `SubscriptionPaymentFlowTest`, canlı API, brauzer |
+| Hazır palitra + xüsusi HEX rəng, canlı önizləmə | PASS | test (HEX yoxlaması), brauzer |
+| Paketi redaktə, deaktiv, sıralama, sil / arxivləşdir | PASS | test |
+| M10, kart, WhatsApp parametrləri; kart girişsiz gizli | PASS | test, canlı API |
+| Mağaza paketləri rəngləri ilə görür, düzgün qiymət | PASS | test, brauzer |
+| WhatsApp düyməsi `wa.me/994…` + hazır mesaj | PASS | brauzer (link yoxlandı) |
+| Ödəniş sorğusu + çek yüklənməsi (məzmun yoxlanır) | PASS | test, canlı API (saxta şəkil rədd edildi) |
+| Təsdiq → abunəlik və mağaza aktiv, bildiriş | PASS | test, canlı API |
+| İkinci təsdiq mümkün deyil | PASS | test (`409`) |
+| Rədd → aktivləşmir, səbəb mağazaya görünür | PASS | test |
+| Mağaza yalnız öz sorğu/çeklərini görür | PASS | test |
+| Paket limitləri (işçi, müştəri) | PASS | test |
+| Məbləğ serverdə hesablanır (client-in məbləği yalnız göstərilir) | PASS | test, canlı API |
+| Mobil tətbiq: paketlər, ödəniş səhifəsi, sorğularım | PASS (unit test + analyze) | real cihazda yoxlanmayıb — NOT TESTED |
+
+Qayda: aktiv abunəlik varken yeni ödəniş təsdiqlənsə, yeni dövr cari bitmə tarixinin ertəsindən başlayır — ödənilmiş vaxt itmir. Standart müddətlər təqvim ayı ilə (1/3/6/12 ay), xüsusi müddət dəqiq gün ilə hesablanır.
+
 ### Super Admin paneli
 | Funksiya | Status |
 |---|---|

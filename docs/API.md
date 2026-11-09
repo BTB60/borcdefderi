@@ -38,15 +38,15 @@ Qeydiyyat yalnız mağaza sahibi yaradır; mağaza abunəlik təsdiqlənənə q�
 
 | Metod | Yol | Qeyd |
 |---|---|---|
-| GET | `/api/public/plans` | Satışda olan paketlər: `MONTHLY` (Aylıq), `SEMI_ANNUAL` (6 aylıq), `YEARLY` (İllik). Qiymətləri admin dəyişir |
-| GET | `/api/public/contact` | `{phone, whatsapp}` — “Abunə ol” basılanda göstərilən admin nömrəsi (`whatsapp` yalnız rəqəmlər, `wa.me` üçün) |
+| GET | `/api/public/plans` | Aktiv paketlər (admin panelində yaradılır): `name, description, features[], options[{period: MONTHLY/QUARTERLY/SEMI_ANNUAL/YEARLY/CUSTOM, months, days, price}], maxEmployees, maxCustomers, recommended, primaryColor, secondaryColor, backgroundColor, textColor, buttonColor`. Köhnə `price`/`durationMonths` sahələri qalır (ilk müddət) |
+| GET | `/api/public/contact` | Ödəniş və əlaqə parametrləri: `phone` (WhatsApp), `whatsapp` (`994…` — `wa.me` üçün), `m10Account, m10Recipient, paymentNote`, `cardNumber, cardHolder, cardBank, cardNote` (**kart yalnız daxil olmuş istifadəçiyə**), `extraPhone, extraContact, whatsappTemplate, paymentInstructions, afterPaymentText` |
 | GET | `/api/subscriptions/current` | `{active, status, planCode, planName, startDate, endDate, daysRemaining, renewalReminder, expiresAt}` — `expiresAt`: girişin bitdiyi dəqiq an (bitmə tarixindən sonrakı günün 00:00, Bakı vaxtı), sayğac üçün |
-| GET | `/api/subscriptions/history` | Sorğu tarixçəsi |
-| POST | `/api/subscriptions/request` | `{planCode}` — “Abunə ol”: qəbzsiz `PENDING` sorğu yaradır; gözləyən sorğu varsa onun paketini dəyişir. Yalnız sahib. Çek admininə WhatsApp ilə göndərilir |
-| POST | `/api/subscriptions` | (istəyə bağlı) `multipart/form-data`: `planCode`, `payerReference?`, `receipt` (PNG/JPG/PDF ≤5 MB). Məbləğ plandan götürülür, client-dən qəbul olunmur. Yalnız sahib. Gözləyən sorğu varsa `409` |
+| GET | `/api/subscriptions/history` | “Ödəniş sorğularım”: hər sorğuda `requestStatus` (`PENDING` Yoxlanılır / `APPROVED` Təsdiqlənib / `REJECTED` Rədd edilib), `periodCode, periodMonths, periodDays, paymentMethod, payerName, declaredAmount, paymentDate, note` |
+| POST | `/api/subscriptions/request` | “Ödəniş etdim” (faylsız): `{planCode, period?, paymentMethod? (M10/CARD), payerName?, paidAmount?, paymentDate?, note?, payerReference?}`. `PENDING` sorğu yaradır və ya gözləyəni yeniləyir. Yalnız sahib |
+| POST | `/api/subscriptions` | Eyni, `multipart/form-data` + `receipt` (PNG/JPG/PDF ≤5 MB, məzmunu yoxlanılır, bazada saxlanılır). **Məbləğ paketin qiymətindən serverdə hesablanır**; `paidAmount` yalnız adminə göstərilir |
 | GET | `/api/subscriptions/{id}/receipt` | Qəbz faylı (yalnız öz mağazası) |
 
-Abunəlik həyat dövrü: `PENDING` → admin təsdiqi → `ACTIVE` (dövr: bu gün və ya cari bitmə tarixinin ertəsi, plan müddəti qədər) · rədd → `REJECTED` · bitmə tarixindən sonra `EXPIRED` (hər gün 00:05 Asia/Baku-da və həm də hər sorğuda yoxlanılır).
+Abunəlik həyat dövrü: `PENDING` → admin təsdiqi → `ACTIVE` (dövr: bu gün və ya cari bitmə tarixinin ertəsi — qalan aktiv müddət itmir; standart müddətlər təqvim ayı, xüsusi müddət gün ilə; təsdiq zamanı dayandırılmış mağaza aktivləşir və mağazaya bildiriş gedir) · rədd → `REJECTED` · bitmə tarixindən sonra `EXPIRED` (hər gün 00:05 Asia/Baku-da və həm də hər sorğuda yoxlanılır).
 
 ## Müştərilər və şirkətlər
 
@@ -108,14 +108,17 @@ Gövdə: `{ "name", "phone?", "note?" }`.
 |---|---|---|
 | GET | `/api/admin/stores?q=` | Mağazalar, sahib, aktiv plan, sayğac: `subscriptionState` (ACTIVE/EXPIRED/NONE), `expiresAt`, `daysRemaining`, `expiring` (bitib və ya ≤7 gün qalıb → admin paneldə qırmızı), gözləyən sorğu (`pendingPlanCode/Name`) |
 | POST | `/api/admin/stores/{id}/suspend` · `/activate` | Dayandırma dərhal təsir edir |
-| POST | `/api/admin/stores/{id}/subscription` | `{planCode}` — çek yoxlanıldıqdan sonra mağazanı birbaşa aktiv edir (gözləyən sorğu varsa ondan istifadə olunur). Aktiv abunəlik varsa yeni dövr cari bitmədən sonra başlayır |
-| PUT | `/api/admin/settings/contact` | `{phone}` — “Abunə ol” üçün əlaqə nömrəsi |
+| POST | `/api/admin/stores/{id}/subscription` | `{planCode, period?}` — çek yoxlanıldıqdan sonra mağazanı birbaşa aktiv edir (gözləyən sorğu varsa ondan istifadə olunur). Aktiv abunəlik varsa yeni dövr cari bitmədən sonra başlayır |
+| PUT | `/api/admin/settings/contact` | Bütün ödəniş və əlaqə parametrləri (yuxarıdakı `contact` sahələri). Boş dəyər silinir |
 | POST | `/api/admin/stores/{id}/extend` | `{days: 1–366}` — aktiv abunəliyi uzadır |
-| GET | `/api/admin/subscriptions?status=PENDING` | Sorğular |
+| GET | `/api/admin/subscriptions?status=&storeId=` | Ödəniş sorğuları / tarixçə: mağaza, sahibin adı/e-poçtu/telefonu, paket, müddət, məbləğ, bildirilən məbləğ, üsul, tarix, çek, baxan admin |
 | GET | `/api/admin/subscriptions/{id}/receipt` | Qəbz |
-| POST | `/api/admin/subscriptions/{id}/approve` | `PENDING` → `ACTIVE` |
+| POST | `/api/admin/subscriptions/{id}/approve` | `PENDING` → `ACTIVE` bir tranzaksiyada (sətir kilidlənir; ikinci təsdiq `409`) |
 | POST | `/api/admin/subscriptions/{id}/reject` | `{reason}` |
-| GET | `/api/admin/plans` · PUT `/api/admin/plans/{id}` | `{name, price, durationMonths, active}` |
+| GET | `/api/admin/plans?archived=` | Paketlər (arxiv daxil olmaqla) |
+| POST | `/api/admin/plans` · PUT `/api/admin/plans/{id}` | `{name, description, features[], priceMonthly, priceQuarterly, priceSemiAnnual, priceYearly, customDays, customPrice, maxEmployees, maxCustomers, active, recommended, primaryColor…buttonColor (#RRGGBB)}`. Köhnə forma `{name, price, durationMonths, active}` da qəbul olunur |
+| DELETE | `/api/admin/plans/{id}` | İstifadə olunmayıbsa silir (`DELETED`), istifadə olunubsa arxivləşdirir (`ARCHIVED`) |
+| POST | `/api/admin/plans/{id}/restore` · PUT `/api/admin/plans/order` | Arxivdən bərpa · sıralama `{ids: [...]}` |
 | GET | `/api/admin/revenue` | Ümumi/aylıq/illik gəlir, aktiv mağaza sayı, plan üzrə |
 | GET | `/api/admin/users?q=` | İstifadəçilər |
 | GET | `/api/admin/audit-logs?storeId=&limit=` | Audit jurnalı (yalnız əlavə etmə) |

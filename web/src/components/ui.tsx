@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 
 export function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -133,7 +133,11 @@ export function EmptyState({ title, text }: { title: string; text?: string }) {
   );
 }
 
-export function Modal({ open, title, onClose, children, footer }: { open: boolean; title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={cx(inputBase, "min-h-[84px] resize-y", props.className)} />;
+}
+
+export function Modal({ open, title, onClose, children, footer, size = "md" }: { open: boolean; title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; size?: "md" | "xl" }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -147,7 +151,7 @@ export function Modal({ open, title, onClose, children, footer }: { open: boolea
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="animate-[fadeUp_.25s_ease-out] flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:max-w-lg sm:rounded-2xl"
+        className={cx("animate-[fadeUp_.25s_ease-out] flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-2xl", size === "xl" ? "sm:max-w-5xl" : "sm:max-w-lg")}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">

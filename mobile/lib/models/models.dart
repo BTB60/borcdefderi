@@ -1,3 +1,5 @@
+import 'dart:ui' show Color;
+
 double _num(Object? v) => v == null ? 0 : (v as num).toDouble();
 
 String? _str(Object? v) => v as String?;
@@ -37,14 +39,44 @@ class SubscriptionSummary {
 }
 
 /// Admin contact shown on "Abunə ol". [whatsapp] holds digits only.
+/// Payment & contact settings managed by the platform admin (card details only when signed in).
 class Contact {
+  /// WhatsApp number as entered by the admin.
   final String? phone;
+
+  /// WhatsApp number in international digits for wa.me links.
   final String? whatsapp;
   final String? m10Account;
   final String? m10Recipient;
-  final String? paymentNote;
 
-  const Contact({this.phone, this.whatsapp, this.m10Account, this.m10Recipient, this.paymentNote});
+  /// M10 payment instructions.
+  final String? paymentNote;
+  final String? cardNumber;
+  final String? cardHolder;
+  final String? cardBank;
+  final String? cardNote;
+  final String? extraPhone;
+  final String? extraContact;
+  final String? whatsappTemplate;
+  final String? paymentInstructions;
+  final String? afterPaymentText;
+
+  const Contact({
+    this.phone,
+    this.whatsapp,
+    this.m10Account,
+    this.m10Recipient,
+    this.paymentNote,
+    this.cardNumber,
+    this.cardHolder,
+    this.cardBank,
+    this.cardNote,
+    this.extraPhone,
+    this.extraContact,
+    this.whatsappTemplate,
+    this.paymentInstructions,
+    this.afterPaymentText,
+  });
 
   factory Contact.fromJson(Map<String, dynamic> j) => Contact(
         phone: _str(j['phone']),
@@ -52,6 +84,15 @@ class Contact {
         m10Account: _str(j['m10Account']),
         m10Recipient: _str(j['m10Recipient']),
         paymentNote: _str(j['paymentNote']),
+        cardNumber: _str(j['cardNumber']),
+        cardHolder: _str(j['cardHolder']),
+        cardBank: _str(j['cardBank']),
+        cardNote: _str(j['cardNote']),
+        extraPhone: _str(j['extraPhone']),
+        extraContact: _str(j['extraContact']),
+        whatsappTemplate: _str(j['whatsappTemplate']),
+        paymentInstructions: _str(j['paymentInstructions']),
+        afterPaymentText: _str(j['afterPaymentText']),
       );
 }
 
@@ -313,13 +354,78 @@ class AppNotification {
       );
 }
 
+/// One purchasable period of a package: calendar months, or a number of days for CUSTOM.
+class PeriodOption {
+  final String period;
+  final int? months;
+  final int? days;
+  final double price;
+
+  const PeriodOption({required this.period, this.months, this.days, required this.price});
+
+  static const _labels = {
+    'MONTHLY': '1 aylıq',
+    'QUARTERLY': '3 aylıq',
+    'SEMI_ANNUAL': '6 aylıq',
+    'YEARLY': 'İllik',
+  };
+
+  /// "1 aylıq", "3 aylıq", "İllik", "45 gün"
+  String get label => days != null ? '$days gün' : (_labels[period] ?? '${months ?? 1} ay');
+
+  /// "3 ay", "12 ay (1 il)", "45 gün"
+  String get durationText => days != null ? '$days gün' : (months == 12 ? '12 ay (1 il)' : '${months ?? 1} ay');
+
+  factory PeriodOption.fromJson(Map<String, dynamic> j) => PeriodOption(
+        period: j['period'] as String,
+        months: (j['months'] as num?)?.toInt(),
+        days: (j['days'] as num?)?.toInt(),
+        price: _num(j['price']),
+      );
+}
+
+/// Color from "#RRGGBB" (falls back to [fallback] when invalid).
+Color hexColor(String? hex, Color fallback) {
+  final h = (hex ?? '').replaceFirst('#', '');
+  final v = h.length == 6 ? int.tryParse(h, radix: 16) : null;
+  return v == null ? fallback : Color(0xFF000000 | v);
+}
+
+/// A subscription package designed by the platform admin (prices per period, advantages, limits, colours).
 class Plan {
   final String code;
   final String name;
   final double price;
   final int durationMonths;
+  final String? description;
+  final List<String> features;
+  final int? maxEmployees;
+  final int? maxCustomers;
+  final bool recommended;
+  final List<PeriodOption> options;
+  final String primaryColor;
+  final String secondaryColor;
+  final String backgroundColor;
+  final String textColor;
+  final String buttonColor;
 
-  const Plan({required this.code, required this.name, required this.price, required this.durationMonths});
+  const Plan({
+    required this.code,
+    required this.name,
+    required this.price,
+    required this.durationMonths,
+    this.description,
+    this.features = const [],
+    this.maxEmployees,
+    this.maxCustomers,
+    this.recommended = false,
+    this.options = const [],
+    this.primaryColor = '#101C35',
+    this.secondaryColor = '#D6AD60',
+    this.backgroundColor = '#FFFFFF',
+    this.textColor = '#101C35',
+    this.buttonColor = '#101C35',
+  });
 
   /// "Aylıq", "6 aylıq", "İllik" …
   String get periodLabel {
@@ -329,12 +435,116 @@ class Plan {
     return '$durationMonths aylıq';
   }
 
+  /// Offered periods; older servers send only price + durationMonths.
+  List<PeriodOption> get periods => options.isNotEmpty
+      ? options
+      : [PeriodOption(period: 'LEGACY', months: durationMonths, price: price)];
+
+  PeriodOption optionFor(String? period) =>
+      periods.firstWhere((o) => o.period == period, orElse: () => periods.first);
+
   factory Plan.fromJson(Map<String, dynamic> j) => Plan(
         code: j['code'] as String,
         name: j['name'] as String,
         price: _num(j['price']),
         durationMonths: (j['durationMonths'] as num).toInt(),
+        description: _str(j['description']),
+        features: ((j['features'] as List?) ?? const []).cast<String>(),
+        maxEmployees: (j['maxEmployees'] as num?)?.toInt(),
+        maxCustomers: (j['maxCustomers'] as num?)?.toInt(),
+        recommended: j['recommended'] as bool? ?? false,
+        options: ((j['options'] as List?) ?? const [])
+            .map((e) => PeriodOption.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        primaryColor: _str(j['primaryColor']) ?? '#101C35',
+        secondaryColor: _str(j['secondaryColor']) ?? '#D6AD60',
+        backgroundColor: _str(j['backgroundColor']) ?? '#FFFFFF',
+        textColor: _str(j['textColor']) ?? '#101C35',
+        buttonColor: _str(j['buttonColor']) ?? '#101C35',
       );
+}
+
+/// A store's payment request ("Ödəniş sorğularım").
+class PaymentRequest {
+  final String id;
+  final String planCode;
+  final String planName;
+  final String status;
+
+  /// PENDING / APPROVED / REJECTED
+  final String requestStatus;
+  final double amount;
+  final String? periodCode;
+  final int? periodMonths;
+  final int? periodDays;
+  final String? paymentMethod;
+  final DateTime requestedAt;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final String? rejectReason;
+
+  const PaymentRequest({
+    required this.id,
+    required this.planCode,
+    required this.planName,
+    required this.status,
+    required this.requestStatus,
+    required this.amount,
+    this.periodCode,
+    this.periodMonths,
+    this.periodDays,
+    this.paymentMethod,
+    required this.requestedAt,
+    this.startDate,
+    this.endDate,
+    this.rejectReason,
+  });
+
+  static const statusLabels = {'PENDING': 'Yoxlanılır', 'APPROVED': 'Təsdiqlənib', 'REJECTED': 'Rədd edilib'};
+
+  String get statusLabel => statusLabels[requestStatus] ?? requestStatus;
+
+  String get periodText => periodDays != null
+      ? '$periodDays gün'
+      : PeriodOption(period: periodCode ?? '', months: periodMonths, price: 0).label;
+
+  factory PaymentRequest.fromJson(Map<String, dynamic> j) {
+    final status = j['status'] as String;
+    return PaymentRequest(
+      id: j['id'] as String,
+      planCode: j['planCode'] as String,
+      planName: j['planName'] as String,
+      status: status,
+      requestStatus: _str(j['requestStatus']) ??
+          (status == 'ACTIVE' || status == 'EXPIRED' ? 'APPROVED' : status),
+      amount: _num(j['amount']),
+      periodCode: _str(j['periodCode']),
+      periodMonths: (j['periodMonths'] as num?)?.toInt(),
+      periodDays: (j['periodDays'] as num?)?.toInt(),
+      paymentMethod: _str(j['paymentMethod']),
+      requestedAt: DateTime.parse(j['requestedAt'] as String),
+      startDate: _date(j['startDate']),
+      endDate: _date(j['endDate']),
+      rejectReason: _str(j['rejectReason']),
+    );
+  }
+}
+
+/// Default WhatsApp message; the admin can replace it (placeholders in square brackets).
+const defaultWhatsappTemplate = 'Salam. BORCDEFTERI platformasında abunəlik paketi almaq istəyirəm.\n'
+    'Mağaza adı: [Mağaza adı]\n'
+    'Seçilmiş paket: [Paket adı]\n'
+    'Müddət: [Müddət]\n'
+    'Ödəniş məbləği: [Məbləğ]\n'
+    'Zəhmət olmasa, ödəniş və aktivləşdirmə barədə məlumat verin.';
+
+String fillWhatsappTemplate(String? template, {required String store, required String plan, required String period, required String amount}) {
+  final t = (template == null || template.trim().isEmpty) ? defaultWhatsappTemplate : template;
+  return t
+      .replaceAll('[Mağaza adı]', store.isEmpty ? '—' : store)
+      .replaceAll('[Paket adı]', plan)
+      .replaceAll('[Müddət]', period)
+      .replaceAll('[Məbləğ]', amount);
 }
 
 /// The signed-in user's own profile ("Parametrlər").

@@ -32,8 +32,11 @@ public class EmployeeService {
     private final TenantService tenant;
     private final PasswordEncoder passwordEncoder;
     private final AuditService audit;
+    private final az.borcdefteri.subscriptions.PlanService plans;
 
-    public EmployeeService(JdbcClient jdbc, TenantService tenant, PasswordEncoder passwordEncoder, AuditService audit) {
+    public EmployeeService(JdbcClient jdbc, TenantService tenant, PasswordEncoder passwordEncoder, AuditService audit,
+                           az.borcdefteri.subscriptions.PlanService plans) {
+        this.plans = plans;
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.passwordEncoder = passwordEncoder;
@@ -47,6 +50,16 @@ public class EmployeeService {
     @Transactional
     public EmployeeView create(String email, String password, String fullName, String phone, List<String> permissions) {
         CurrentMember owner = tenant.requireOwner();
+        Integer maxEmployees = plans.limitsFor(owner.storeId()).maxEmployees();
+        if (maxEmployees != null) {
+            jdbc.sql("SELECT id FROM stores WHERE id = :s FOR UPDATE").param("s", owner.storeId()).query(UUID.class).single();
+            long current = jdbc.sql("SELECT COUNT(*) FROM store_members WHERE store_id = :s AND role = 'EMPLOYEE' AND active")
+                    .param("s", owner.storeId()).query(Long.class).single();
+            if (current >= maxEmployees) {
+                throw ApiException.conflict("PLAN_LIMIT_EMPLOYEES",
+                        "Paketinizdə ən çox " + maxEmployees + " işçi ola bilər. Daha çox işçi üçün paketi yüksəldin.");
+            }
+        }
         Set<String> perms = validatePermissions(permissions);
         az.borcdefteri.common.Passwords.requireBcryptLength(password);
         String normalized = email.trim().toLowerCase(Locale.ROOT);

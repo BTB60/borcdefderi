@@ -356,6 +356,13 @@ public class CashService {
         return insert(storeId, accountId, direction, Money.of(amount), kind, date, null, paymentId, expenseId, note, actorId, null);
     }
 
+    /** Money of a sale or a sale refund (kind SALE / SALE_REFUND), linked to the sale. */
+    public UUID postSale(UUID storeId, UUID accountId, String direction, BigDecimal amount, String kind, LocalDate date,
+                         UUID saleId, String note, UUID actorId) {
+        lockAccount(storeId, accountId);
+        return insert(storeId, accountId, direction, Money.of(amount), kind, date, null, null, null, note, actorId, null, saleId);
+    }
+
     public BigDecimal balance(UUID storeId, UUID accountId) {
         return Money.of(jdbc.sql("""
                 SELECT COALESCE(SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END), 0)
@@ -396,15 +403,20 @@ public class CashService {
 
     private UUID insert(UUID storeId, UUID accountId, String direction, BigDecimal amount, String kind, LocalDate date,
                         UUID transferId, UUID paymentId, UUID expenseId, String note, UUID actorId, UUID requestId) {
+        return insert(storeId, accountId, direction, amount, kind, date, transferId, paymentId, expenseId, note, actorId, requestId, null);
+    }
+
+    private UUID insert(UUID storeId, UUID accountId, String direction, BigDecimal amount, String kind, LocalDate date,
+                        UUID transferId, UUID paymentId, UUID expenseId, String note, UUID actorId, UUID requestId, UUID saleId) {
         UUID id = UUID.randomUUID();
         jdbc.sql("""
                 INSERT INTO cash_transactions (id, store_id, account_id, direction, amount, kind, occurred_on, transfer_id,
-                                               payment_id, expense_id, note, actor_id, client_request_id)
-                VALUES (:id, :s, :a, :dir, :amt, :k, :d, :tr, :p, :e, :note, :actor, :req)
+                                               payment_id, expense_id, note, actor_id, client_request_id, sale_id)
+                VALUES (:id, :s, :a, :dir, :amt, :k, :d, :tr, :p, :e, :note, :actor, :req, :sale)
                 """).param("id", id).param("s", storeId).param("a", accountId).param("dir", direction)
                 .param("amt", amount).param("k", kind).param("d", date).param("tr", transferId).param("p", paymentId)
                 .param("e", expenseId).param("note", note == null || note.isBlank() ? null : note.trim())
-                .param("actor", actorId).param("req", requestId).update();
+                .param("actor", actorId).param("req", requestId).param("sale", saleId).update();
         return id;
     }
 

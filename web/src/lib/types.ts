@@ -1,7 +1,7 @@
 export type DebtType = "CUSTOMER_DEBT" | "COMPANY_RECEIVABLE" | "COMPANY_PAYABLE";
 export type DebtStatus = "OPEN" | "PARTIAL" | "PAID";
 export type PaymentMethod = "CASH" | "CARD" | "TRANSFER" | "OTHER";
-export type Permission = "CUSTOMER_DEBTS" | "COMPANY_RECEIVABLES" | "COMPANY_PAYABLES" | "REPORTS" | "CASH" | "EXPENSES";
+export type Permission = "CUSTOMER_DEBTS" | "COMPANY_RECEIVABLES" | "COMPANY_PAYABLES" | "REPORTS" | "CASH" | "EXPENSES" | "INVENTORY" | "SALES";
 
 export interface SubscriptionSummary {
   active: boolean;
@@ -435,3 +435,40 @@ export interface RecurringExpense {
 }
 
 export interface Budget { id: string; categoryId: string; categoryName: string; month: string; limit: number; actual: number; remaining: number; percent: number; state: "OK" | "NEAR" | "OVER" }
+
+// ----- ERP: inventory, sales, profit -----
+
+export interface ProductCategory { id: string; name: string; productCount: number }
+
+export interface Product {
+  id: string; code: string; barcode: string | null; name: string; categoryId: string | null; categoryName: string | null;
+  supplierId: string | null; supplierName: string | null; unit: string; purchasePrice: number; salePrice: number;
+  stockQty: number; minStock: number; active: boolean; lowStock: boolean; outOfStock: boolean; hasImage: boolean;
+  stockCostValue: number; stockSaleValue: number; version: number;
+}
+
+export interface StockMovement {
+  id: string; productId: string; productName: string; kind: "RECEIPT" | "ISSUE" | "SALE" | "SALE_RETURN" | "ADJUSTMENT" | "COUNT";
+  quantity: number; unitCost: number | null; balanceAfter: number; saleId: string | null; note: string | null; actorName: string; createdAt: string;
+}
+
+export interface InventorySummary { productCount: number; activeCount: number; lowStockCount: number; outOfStockCount: number; costValue: number; saleValue: number }
+
+export interface SaleItem { id: string; productId: string; name: string; quantity: number; unitPrice: number; discount: number; lineTotal: number; unitCost: number; returnedQty: number }
+
+export interface Sale {
+  id: string; number: string; customerId: string | null; customerName: string | null; customerCode: string | null; status: "COMPLETED" | "CANCELLED";
+  subtotal: number; discount: number; total: number; paidCash: number; paidCard: number; creditAmount: number; returnedAmount: number;
+  costTotal: number; debtId: string | null; soldOn: string; note: string | null; createdByName: string; createdAt: string; items: SaleItem[];
+  returns: { id: string; amount: number; debtReduced: number; refunded: number; returnedOn: string; reason: string | null; createdByName: string; createdAt: string }[];
+}
+
+export interface SalePage { items: Sale[]; total: number; sum: number; page: number; size: number }
+
+export interface Pnl {
+  from: string; to: string; sales: number; returns: number; netSales: number; costOfGoods: number; grossProfit: number; expenses: number;
+  netResult: number; saleCount: number; salesPaidNow: number; salesOnCredit: number; debtCollections: number; supplierPayments: number;
+  previous: { from: string; to: string; netSales: number; expenses: number; netResult: number };
+}
+
+export interface MonthPoint { month: string; netSales: number; costOfGoods: number; expenses: number; netResult: number }

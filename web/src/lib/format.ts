@@ -62,6 +62,8 @@ export const PERMISSION_LABEL: Record<Permission, string> = {
   REPORTS: "Hesabatlar və panel",
   CASH: "Kassa və bank",
   EXPENSES: "Xərclər və büdcə",
+  INVENTORY: "Anbar",
+  SALES: "Satış",
 };
 
 export const SUBSCRIPTION_STATUS_LABEL: Record<string, string> = {

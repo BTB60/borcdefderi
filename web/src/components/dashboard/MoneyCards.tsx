@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import type { FinanceOverview } from "@/lib/types";
+import type { FinanceOverview, InventorySummary, Pnl } from "@/lib/types";
 
 function Tile({ href, label, value, hint, tone }: { href: string; label: string; value: string; hint?: string; tone: string }) {
   return (
@@ -22,13 +22,17 @@ function Tile({ href, label, value, hint, tone }: { href: string; label: string;
  */
 export function MoneyCards() {
   const [o, setO] = useState<FinanceOverview | null>(null);
+  const [pnl, setPnl] = useState<Pnl | null>(null);
+  const [inv, setInv] = useState<InventorySummary | null>(null);
   useEffect(() => {
     api<FinanceOverview>("/api/cash/overview").then(setO).catch(() => setO(null));
+    api<Pnl>("/api/finance/pnl").then(setPnl).catch(() => setPnl(null));
+    api<InventorySummary>("/api/products/summary").then(setInv).catch(() => setInv(null));
   }, []);
   if (!o) return null;
   const hasCash = o.cashBalance !== undefined;
   const hasExp = o.monthExpenses !== undefined;
-  if (!hasCash && !hasExp) return null;
+  if (!hasCash && !hasExp && !pnl && !inv) return null;
   const diff = hasExp && o.previousMonthExpenses !== undefined ? (o.monthExpenses ?? 0) - (o.previousMonthExpenses ?? 0) : null;
 
   return (
@@ -57,7 +61,15 @@ export function MoneyCards() {
           </>
         )}
       </div>
-      <p className="mt-2 text-xs text-slate-400">Borc ödənişlərinin yığılması gəlir, şirkətə borc ödənişi xərc sayılmır. Xalis mənfəət satış modulu ilə əlavə olunacaq.</p>
+      {(pnl || inv) && (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {pnl && <Tile href="/satis" label="Bu ayın satışları" value={formatMoney(pnl.netSales)} hint={`${pnl.saleCount} satış`} tone="border-l-emerald-500" />}
+          {pnl && <Tile href="/maliyye" label="Xalis nəticə (bu ay)" value={formatMoney(pnl.netResult)} hint={`Satış − maya dəyəri − xərclər`} tone={pnl.netResult >= 0 ? "border-l-gold-500" : "border-l-rose-500"} />}
+          {inv && <Tile href="/anbar" label="Anbar məhsulları" value={String(inv.activeCount)} hint={`${inv.lowStockCount} az qalan, ${inv.outOfStockCount} bitən`} tone={inv.lowStockCount > 0 ? "border-l-amber-500" : "border-l-sky-500"} />}
+          {inv && <Tile href="/anbar" label="Anbarın dəyəri" value={formatMoney(inv.costValue)} hint={`Satış dəyəri ${formatMoney(inv.saleValue)}`} tone="border-l-violet-500" />}
+        </div>
+      )}
+      <p className="mt-2 text-xs text-slate-400">Köhnə borcun yığılması gəlir, şirkətə borc ödənişi xərc sayılmır; xalis nəticə yalnız satış, maya dəyəri və xərclərdən hesablanır.</p>
     </section>
   );
 }

@@ -253,6 +253,31 @@ public class DebtService {
         return load(m, id);
     }
 
+    /**
+     * Lowers a locked debt by {@code amount} (a returned credit sale): amount and remaining shrink together.
+     * Never below what is already paid. Recorded as a negative DEBT_ADJUSTED ledger entry.
+     */
+    public DebtView decreaseLocked(CurrentMember m, DebtView current, BigDecimal amount, String note) {
+        BigDecimal x = Money.of(amount);
+        if (x.signum() <= 0 || x.compareTo(current.remainingAmount()) > 0) {
+            throw ApiException.badRequest("INVALID_AMOUNT", "Azaldılacaq məbləğ qalıq borcdan çox ola bilməz");
+        }
+        BigDecimal newAmount = Money.of(current.amount().subtract(x));
+        BigDecimal newRemaining = Money.of(current.remainingAmount().subtract(x));
+        String status = statusFor(current.paidAmount(), newRemaining);
+        jdbc.sql("""
+                UPDATE debts SET amount = :amount, remaining_amount = :remaining, status = :status,
+                       updated_at = now(), version = version + 1
+                WHERE id = :id AND store_id = :storeId
+                """).param("amount", newAmount).param("remaining", newRemaining).param("status", status)
+                .param("id", current.id()).param("storeId", m.storeId()).update();
+        ledger.append(m.storeId(), current.id(), null, "DEBT_ADJUSTED", x.negate(), newRemaining, m.userId(),
+                tenant.today(), null, note);
+        audit.log(m.storeId(), m.userId(), "DEBT_DECREASED", "DEBT", current.id().toString(),
+                current.partyName() + ": " + current.amount() + " -> " + newAmount + " AZN (" + note + ")");
+        return load(m, current.id());
+    }
+
     /** Sets the "son ödəmə tarixi" of a debt the caller has locked. */
     public DebtView setDueDateLocked(CurrentMember m, DebtView debt, LocalDate due) {
         if (due.isBefore(debt.debtDate())) {

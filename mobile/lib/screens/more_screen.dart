@@ -10,6 +10,8 @@ import 'common.dart';
 import 'cash_screen.dart';
 import 'employees_screen.dart';
 import 'expenses_screen.dart';
+import 'inventory_screen.dart';
+import 'sales_screen.dart';
 import 'notifications_screen.dart';
 import 'parties_screen.dart';
 import 'profile_screen.dart';
@@ -59,6 +61,26 @@ class MoreScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: ErrorBanner('Abunəliyinizin müddəti ${sub.daysRemaining} gün sonra bitir. Abunəlik bölməsindən yeniləyin.'),
+          ),
+        if (me.can('SALES'))
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.point_of_sale, color: navy),
+              title: const Text('Satış'),
+              subtitle: const Text('Yeni satış, çek, ləğv'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SalesScreen(session: session))),
+            ),
+          ),
+        if (me.can('INVENTORY') || me.can('SALES'))
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.inventory_2_outlined, color: navy),
+              title: const Text('Anbar'),
+              subtitle: const Text('Məhsullar, qalıq, giriş / çıxış'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => InventoryScreen(session: session))),
+            ),
           ),
         if (me.can('CASH'))
           Card(

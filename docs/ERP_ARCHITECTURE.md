@@ -142,3 +142,37 @@ ikinci dəfə ödənmir); büdcə NEAR / OVER; icazələr və mağaza izolyasiya
 - Mobil dashboard-da pul kartları hələ yoxdur (kassa və xərclər ayrıca ekranlardadır).
 - Xərclərin PDF/Excel serverdə hazırlanan hesabatı (indi CSV brauzerdə) — Mərhələ 11.
 - Bu branch hələ production-a birləşdirilməyib; APK Desktop-a qoyulmayıb (canlı server bu API-ləri tanımır).
+
+## Mərhələ 7–8 — Anbar, satış, gəlir və mənfəət
+
+### Database (V11, əlavə)
+`product_categories`, `products` (kod P-000001, barkod, alış/satış qiyməti, qalıq, minimum stok, şəkil), `inventory_movements`
+(dəyişdirilməz), `sales` (S-000001, nağd/kart/borc hissələri, maya dəyəri), `sale_items`, `sale_returns`,
+`cash_transactions.sale_id`; icazələr `INVENTORY`, `SALES`. `debts.amount >= 0` (tam qaytarılan borclu satış üçün).
+
+### Mühasibat qaydası
+- Satış gəliri satış günü bir dəfə sayılır (kreditlə də). Ödənilən hissə kassaya `SALE`, ödənilməyən hissə müştəri hesabına borc.
+- Sonradan borcun ödənməsi `DEBT_COLLECTION` — gəlir deyil.
+- Qaytarma: mal anbara qayıdır; əvvəlcə satışın ödənilməmiş borcu azalır, qalanı kassadan `SALE_REFUND`.
+- Maya dəyəri = satış anındakı alış qiyməti × miqdar (anbara girişdə orta qiymət yenilənir).
+- Xalis nəticə = xalis satış − maya dəyəri − xərclər. Kassa balansı mənfəət kimi göstərilmir.
+
+### API
+`/api/products` (CRUD, `?q=&stock=LOW|OUT`, `/summary`, `/by-code/{barkod}`, `/{id}/image`), `/api/product-categories`,
+`/api/inventory/movements` (RECEIPT, ISSUE, ADJUSTMENT, COUNT), `/api/sales` (yarat, siyahı, detal), `/api/sales/{id}/returns`,
+`/api/sales/{id}/cancel`, `/api/sales/{id}/receipt` (PDF çek), `/api/finance/pnl`, `/api/finance/monthly`.
+
+### UI
+- Web: **Anbar**, **Satış** (barkod/axtarış, səbət, endirim, nağd/kart/borc, çek, siyahı, qaytarma, ləğv), **Gəlir və mənfəət**
+  (P&L, pul axını ayrıca, əvvəlki dövrlə müqayisə, 12 aylıq dinamika); dashboard-a bu ayın satışı, xalis nəticə, anbar məhsulları və dəyəri.
+- Mobil: “Daha” → **Satış** (yeni satış, çeki paylaş, ləğv), **Anbar** (məhsul, giriş/çıxış/sayım, az qalanlar).
+
+### Testlər
+Backend **117/117** (`InventorySalesTest` 6). Yerli real ssenari: nağd satış 16,30; borcla satış 35 (15 kart + 20 borc);
+2 ədəd qaytarma → borc 7 azaldı, pul qaytarılmadı; P&L: xalis satış 44,30, maya 30,00, ümumi mənfəət 14,30, xalis −20,70
+(35 xərclə) — əl ilə hesabla eynidir; anbar dəyəri 49,20; az qalan xəbərdarlığı. Brauzerdə barkodla səbətə əlavə.
+
+### Qalan
+- Mobil: qismən qaytarma (veb-də var), məhsul şəkli və barkod skaneri kamerası yoxdur.
+- Satış/anbar Excel hesabatı serverdə hazırlanmır (Mərhələ 11).
+- Maaş (Mərhələ 9), CRM qrupları və bildiriş mərkəzi (10), avtomatik backup, 2FA, dark mode hələ edilməyib.

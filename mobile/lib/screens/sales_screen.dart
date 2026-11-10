@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../format.dart';
 import '../state/session.dart';
 import '../theme.dart';
+import 'barcode_scanner.dart';
 import 'cash_screen.dart' show newRequestId;
 import 'common.dart';
 import 'finance_cards.dart' show pickParty;
@@ -184,6 +185,29 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
     });
   }
 
+  /// Camera scanning: every recognised barcode goes straight into the cart; the scanner stays open for the next item.
+  Future<void> _scan() async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => BarcodeScannerScreen(
+        title: 'Satış üçün skan',
+        onCode: (code) async {
+          try {
+            final p = await productByBarcode(widget.session, code);
+            if (p == null) return 'Tapılmadı: $code';
+            if (!mounted) return null;
+            _add(p);
+            final line = _cart.firstWhere((l) => l.product['id'] == p['id']);
+            return '✓ ${p['name']} — ${line.qty.toStringAsFixed(0)} ədəd · cəmi ${formatMoney(_subtotal)}';
+          } catch (e) {
+            return errorMessage(e);
+          }
+        },
+      ),
+    ));
+    if (mounted) setState(() {});
+  }
+
   double get _subtotal => _cart.fold<double>(0, (s, l) => s + l.total);
   double get _total => ((_subtotal - _p(_discount.text)).clamp(0, double.infinity) * 100).roundToDouble() / 100;
   double get _paid => _p(_cash.text) + _p(_card.text);
@@ -238,7 +262,9 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Yeni satış')),
+        appBar: AppBar(title: const Text('Yeni satış'), actions: [
+          IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
+        ]),
         bottomNavigationBar: SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -252,7 +278,11 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
         body: ListView(padding: const EdgeInsets.fromLTRB(12, 12, 12, 24), children: [
           TextField(
             controller: _search,
-            decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Məhsul adı, kod və ya barkod'),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search),
+              hintText: 'Məhsul adı, kod və ya barkod',
+              suffixIcon: IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
+            ),
             onChanged: _find,
           ),
           for (final p in _results)
@@ -264,7 +294,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
               onTap: () => _add(p),
             ),
           const SizedBox(height: 8),
-          if (_cart.isEmpty) const EmptyState(title: 'Səbət boşdur', text: 'Məhsul axtarıb əlavə edin.'),
+          if (_cart.isEmpty) const EmptyState(title: 'Səbət boşdur', text: 'Məhsul axtarın və ya barkodu skan edin.'),
           for (final l in _cart)
             Card(
               child: Padding(

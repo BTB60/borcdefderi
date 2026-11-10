@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../format.dart';
 import '../state/session.dart';
 import '../theme.dart';
+import 'barcode_scanner.dart';
 import 'common.dart';
 
 double _n(Object? v) => (v as num?)?.toDouble() ?? 0;
@@ -52,10 +53,49 @@ class _InventoryScreenState extends State<InventoryScreen> {
     _reload();
   }
 
+  /// Scan a product label: open its stock sheet, or offer to add a new product with that barcode.
+  Future<void> _scan() async {
+    final code = await scanBarcode(context);
+    if (code == null || !mounted) return;
+    try {
+      final p = await productByBarcode(widget.session, code);
+      if (!mounted) return;
+      if (p != null) {
+        if (_manage) {
+          await _sheet(_StockSheet(session: widget.session, product: p));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('${p['name']}: qalıq ${_q(p['stockQty'])} ${p['unit']} · satış ${formatMoney(_n(p['salePrice']))}')));
+        }
+        return;
+      }
+      if (!_manage) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Bu barkodla məhsul tapılmadı: $code')));
+        return;
+      }
+      final add = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Məhsul tapılmadı'),
+          content: Text('Barkod $code heç bir məhsula bağlı deyil. Bu barkodla yeni məhsul əlavə edilsin?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Xeyr')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Əlavə et')),
+          ],
+        ),
+      );
+      if (add == true && mounted) await _sheet(_ProductSheet(session: widget.session, barcode: code));
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Anbar')),
+      appBar: AppBar(title: const Text('Anbar'), actions: [
+        IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
+      ]),
       floatingActionButton: _manage
           ? FloatingActionButton.extended(
               onPressed: () => _sheet(_ProductSheet(session: widget.session)), icon: const Icon(Icons.add), label: const Text('Məhsul'))
@@ -77,7 +117,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 ]),
               const SizedBox(height: 10),
               TextField(
-                decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Ad, kod və ya barkod'),
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  hintText: 'Ad, kod və ya barkod',
+                  suffixIcon: IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
+                ),
                 textInputAction: TextInputAction.search,
                 onSubmitted: (v) {
                   _q2 = v.trim();
@@ -128,9 +172,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
 }
 
 class _ProductSheet extends StatefulWidget {
-  const _ProductSheet({required this.session});
+  const _ProductSheet({required this.session, this.barcode});
 
   final Session session;
+  final String? barcode;
 
   @override
   State<_ProductSheet> createState() => _ProductSheetState();
@@ -138,7 +183,7 @@ class _ProductSheet extends StatefulWidget {
 
 class _ProductSheetState extends State<_ProductSheet> {
   final _name = TextEditingController();
-  final _barcode = TextEditingController();
+  late final _barcode = TextEditingController(text: widget.barcode ?? '');
   final _buy = TextEditingController();
   final _sell = TextEditingController();
   final _stock = TextEditingController();
@@ -186,7 +231,20 @@ class _ProductSheetState extends State<_ProductSheet> {
         const Text('Yeni məhsul', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: navy)),
         if (_error != null) ErrorBanner(_error!),
         TextField(controller: _name, decoration: const InputDecoration(labelText: 'Ad')),
-        TextField(controller: _barcode, decoration: const InputDecoration(labelText: 'Barkod (istəyə bağlı)')),
+        TextField(
+          controller: _barcode,
+          decoration: InputDecoration(
+            labelText: 'Barkod (istəyə bağlı)',
+            suffixIcon: IconButton(
+              tooltip: 'Barkod skan et',
+              icon: const Icon(Icons.qr_code_scanner),
+              onPressed: () async {
+                final code = await scanBarcode(context);
+                if (code != null && mounted) setState(() => _barcode.text = code);
+              },
+            ),
+          ),
+        ),
         Row(children: [
           Expanded(child: TextField(controller: _buy, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Alış (₼)'))),
           const SizedBox(width: 10),

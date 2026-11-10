@@ -7,7 +7,9 @@ import '../models/models.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'cash_screen.dart';
 import 'employees_screen.dart';
+import 'expenses_screen.dart';
 import 'notifications_screen.dart';
 import 'parties_screen.dart';
 import 'profile_screen.dart';
@@ -57,6 +59,26 @@ class MoreScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: ErrorBanner('Abunəliyinizin müddəti ${sub.daysRemaining} gün sonra bitir. Abunəlik bölməsindən yeniləyin.'),
+          ),
+        if (me.can('CASH'))
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.account_balance_wallet_outlined, color: navy),
+              title: const Text('Kassa və bank'),
+              subtitle: const Text('Balans, mədaxil, məxaric, köçürmə, gün sonu'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CashScreen(session: session))),
+            ),
+          ),
+        if (me.can('EXPENSES'))
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.receipt_long_outlined, color: navy),
+              title: const Text('Xərclər'),
+              subtitle: const Text('Xərc, təkrarlanan xərc, büdcə'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ExpensesScreen(session: session))),
+            ),
           ),
         if (me.isOwner)
           Card(

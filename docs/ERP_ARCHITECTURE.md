@@ -114,3 +114,31 @@ ikinci dəfə ödənmir); büdcə NEAR / OVER; icazələr və mağaza izolyasiya
 - Kassa, xərclər, büdcə üçün **web və mobil ekranlar** (Mərhələ 3, 5, 6).
 - Köhnə ödənişlər kassaya geriyə yazılmayıb (qəsdən): sahib "Kassa açılışı" ilə real qalığı daxil etməlidir.
 - Avtomatik ödəniş kassanı mənfiyə sala bilər (açılış daxil edilməyibsə); əl ilə məxaric və köçürmə sala bilməz.
+
+## Mərhələ 3, 5, 6 (birinci hissə) — Kassa, Xərclər ekranları və dashboard pul kartları
+
+### Görülən iş
+- **API:** `GET /api/cash/overview` — nağd / bank / kart balansı, bu gün və bu ay daxil olan / çıxan pul (köçürmə, açılış,
+  sayım daxil deyil), bu günün / ayın / keçən ayın xərci, büdcə xəbərdarlıqları, ödənilməli təkrarlanan xərclər.
+  İcazəsi olmayan istifadəçiyə bu rəqəmlər qaytarılmır.
+- **Web `/kassa`:** balans kartları, hesablar (yarat, redaktə, əsas et, deaktiv), açılış, mədaxil, məxaric, köçürmə,
+  sayım, hərəkətlər (hesab / növ / tarix filtri), gün sonu hesabatı.
+- **Web `/xercler`:** xərc siyahısı (axtarış, kateqoriya, tarix, səhifələmə, CSV/Excel), əlavə / redaktə / sil (təsdiqlə),
+  qəbz faylı, yeni kateqoriya; təkrarlanan xərclər (yarat, redaktə, ödə); büdcə (limit, irəliləyiş, xəbərdarlıq);
+  analiz (kateqoriya, ay, gün üzrə).
+- **Web dashboard:** kassa balansı, bank və kart balansı, bu gün / bu ay pul hərəkəti, bu günün və ayın xərci (keçən ayla
+  müqayisə), büdcə və təkrarlanan xərc xəbərdarlıqları — hər kart müvafiq səhifəni açır. Menyuya “Kassa və bank”, “Xərclər”.
+- **Mobil:** “Daha” → “Kassa və bank” (balanslar, hesablar, hərəkətlər, mədaxil / məxaric / köçürmə / sayım / açılış,
+  gün sonu), “Xərclər” (ay seçimi, xərc əlavə / redaktə / sil, qəbz şəkli kamera və ya qalereyadan, təkrarlanan xərci ödə,
+  büdcə limiti və irəliləyişi).
+
+### Testlər
+- Backend **111/111** (FinanceCoreTest-ə dashboard icmalı testi əlavə olundu).
+- Web: tsc, lint, production build — xətasız. Flutter: analyze 0, test 29/29, release APK yığılır.
+- Yerli serverdə real ssenari: açılış 500 + müştəri ödənişi 50 − elektrik xərci 35 → kassa 515; bugünkü daxilolma 50
+  (açılış sayılmır); büdcə 35/40 → “yaxınlaşır”; vaxtı keçmiş internet → “ödənilməli”. Brauzerdə kassa və xərclər səhifəsi.
+
+### Qalan
+- Mobil dashboard-da pul kartları hələ yoxdur (kassa və xərclər ayrıca ekranlardadır).
+- Xərclərin PDF/Excel serverdə hazırlanan hesabatı (indi CSV brauzerdə) — Mərhələ 11.
+- Bu branch hələ production-a birləşdirilməyib; APK Desktop-a qoyulmayıb (canlı server bu API-ləri tanımır).

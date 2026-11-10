@@ -8,6 +8,7 @@ import { DEBT_STATUS_LABEL, DEBT_TYPE_LABEL, METHOD_LABEL, METHOD_TONE, formatDa
 import type { Dashboard } from "@/lib/types";
 import { Alert, Badge, Card, EmptyState, PageHeader, Spinner, StatCard, Table, Td, Th } from "@/components/ui";
 import { FinanceCards } from "@/components/dashboard/FinanceCards";
+import { MoneyCards } from "@/components/dashboard/MoneyCards";
 
 function BarChart({ data, label }: { data: { label: string; value: number; cash: number; card: number; other: number }[]; label: string }) {
   const max = Math.max(1, ...data.map((d) => d.value));
@@ -74,6 +75,7 @@ export default function DashboardPage() {
       <PageHeader title="Panel" subtitle="Bütün rəqəmlər birbaşa veritabanından hesablanır" />
 
       <FinanceCards />
+      <MoneyCards />
 
       <h2 className="mb-3 mt-2 font-serif text-lg font-semibold text-navy-800">Ödəniş üsulları və dinamika</h2>
 

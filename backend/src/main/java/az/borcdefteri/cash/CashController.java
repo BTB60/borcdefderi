@@ -14,9 +14,17 @@ import java.util.UUID;
 public class CashController {
 
     private final CashService cash;
+    private final FinanceOverviewService overview;
 
-    public CashController(CashService cash) {
+    public CashController(CashService cash, FinanceOverviewService overview) {
         this.cash = cash;
+        this.overview = overview;
+    }
+
+    /** Dashboard money figures (balances, money in / out, expenses, budget and recurring warnings). */
+    @GetMapping("/overview")
+    public FinanceOverviewService.Overview overview() {
+        return overview.overview();
     }
 
     @GetMapping("/accounts")

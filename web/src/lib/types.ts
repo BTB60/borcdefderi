@@ -389,3 +389,49 @@ export interface AuditEntry {
   ipAddress: string | null;
   createdAt: string;
 }
+
+// ----- ERP: cash, expenses, budgets -----
+
+export type CashKind = "CASH" | "BANK" | "CARD";
+
+export interface CashAccount { id: string; name: string; kind: CashKind; isDefault: boolean; active: boolean; balance: number; createdAt: string }
+
+export type MovementKind =
+  | "OPENING" | "DEPOSIT" | "WITHDRAWAL" | "TRANSFER_IN" | "TRANSFER_OUT" | "DEBT_COLLECTION" | "SUPPLIER_PAYMENT"
+  | "EXPENSE" | "EXPENSE_REVERSAL" | "SALE" | "SALE_REFUND" | "COUNT_ADJUSTMENT";
+
+export interface CashMovement {
+  id: string; accountId: string; accountName: string; direction: "IN" | "OUT"; amount: number; kind: MovementKind;
+  occurredOn: string; transferId: string | null; paymentId: string | null; expenseId: string | null; note: string | null;
+  actorName: string; createdAt: string;
+}
+
+export interface DayReport {
+  date: string; totalOpening: number; totalIn: number; totalOut: number; totalClosing: number;
+  accounts: { accountId: string; accountName: string; kind: CashKind; opening: number; in: number; out: number; closing: number; byKind: Record<string, number> }[];
+}
+
+export interface FinanceOverview {
+  today: string; cashBalance?: number; bankBalance?: number; cardBalance?: number; todayIn?: number; todayOut?: number;
+  monthIn?: number; monthOut?: number; todayExpenses?: number; monthExpenses?: number; previousMonthExpenses?: number;
+  budgetsNear?: number; budgetsOver?: number; recurringDue?: number; recurringDueAmount?: number;
+}
+
+export interface ExpenseCategory { id: string; code: string | null; name: string; custom: boolean }
+
+export interface Expense {
+  id: string; title: string; categoryId: string; categoryName: string; amount: number; expenseDate: string;
+  paymentMethod: PaymentMethod; accountId: string; accountName: string; payee: string | null; note: string | null;
+  recurringId: string | null; periodDate: string | null; createdByName: string; createdAt: string; version: number; attachmentCount: number;
+}
+
+export interface ExpensePage { items: Expense[]; total: number; sum: number; page: number; size: number }
+
+export interface ExpenseSummary { from: string; to: string; groupBy: string; total: number; count: number; rows: { key: string; label: string; count: number; total: number }[] }
+
+export interface RecurringExpense {
+  id: string; title: string; categoryId: string; categoryName: string; amount: number; frequency: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+  startDate: string; endDate: string | null; nextDueDate: string; accountId: string | null; payee: string | null; active: boolean; due: boolean; version: number;
+}
+
+export interface Budget { id: string; categoryId: string; categoryName: string; month: string; limit: number; actual: number; remaining: number; percent: number; state: "OK" | "NEAR" | "OVER" }

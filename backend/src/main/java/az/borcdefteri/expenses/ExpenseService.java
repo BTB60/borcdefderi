@@ -129,7 +129,7 @@ public class ExpenseService {
         CurrentMember m = requireExpenses();
         return jdbc.sql("""
                 SELECT id, code, name, store_id IS NOT NULL AS custom FROM expense_categories
-                WHERE (store_id IS NULL OR store_id = :s) AND active ORDER BY store_id NULLS FIRST, code, name
+                WHERE (store_id IS NULL OR store_id = :s) AND active ORDER BY store_id NULLS FIRST, CASE WHEN store_id IS NULL THEN id::text END, name
                 """).param("s", m.storeId())
                 .query((rs, n) -> new Category(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
                         rs.getBoolean("custom"))).list();

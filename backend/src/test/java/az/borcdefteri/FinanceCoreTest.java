@@ -223,6 +223,36 @@ class FinanceCoreTest extends IntegrationTestBase {
     }
 
     @Test
+    void financeOverviewSeparatesBalancesFlowsAndExpenses() throws Exception {
+        String owner = register("Maliyyə İcmalı");
+        activateSubscription(owner, "MONTHLY");
+        String cash = accountId(owner, "CASH");
+        String bank = accountId(owner, "BANK");
+        post(owner, "/api/cash/opening", move(cash, "1000.00")).andExpect(status().isCreated());
+        post(owner, "/api/cash/transfer", Map.of("fromAccountId", cash, "toAccountId", bank, "amount", "300.00")).andExpect(status().isCreated());
+        post(owner, "/api/cash/deposit", move(cash, "50.00")).andExpect(status().isCreated());
+        post(owner, "/api/expenses", expense("İcarə", RENT, "200.00", "CASH")).andExpect(status().isCreated());
+        post(owner, "/api/recurring-expenses", Map.of("title", "İnternet", "categoryId", RENT, "amount", "30.00",
+                "frequency", "MONTHLY", "startDate", LocalDate.now(clock).toString())).andExpect(status().isCreated());
+
+        get(owner, "/api/cash/overview").andExpect(status().isOk())
+                .andExpect(jsonPath("$.cashBalance", is(550.0)))   // 1000 - 300 + 50 - 200
+                .andExpect(jsonPath("$.bankBalance", is(300.0)))
+                .andExpect(jsonPath("$.todayIn", is(50.0)))        // opening and transfer are not money in
+                .andExpect(jsonPath("$.todayOut", is(200.0)))      // transfer is not money out
+                .andExpect(jsonPath("$.monthExpenses", is(200.0)))
+                .andExpect(jsonPath("$.recurringDue", is(1)))
+                .andExpect(jsonPath("$.recurringDueAmount", is(30.0)));
+
+        String email = uniqueEmail("icmal");
+        post(owner, "/api/employees", Map.of("email", email, "password", EMPLOYEE_PASSWORD, "fullName", "Borc İşçi",
+                "permissions", perms("CUSTOMER_DEBTS"))).andExpect(status().isCreated());
+        get(login(email, EMPLOYEE_PASSWORD), "/api/cash/overview").andExpect(status().isOk())
+                .andExpect(jsonPath("$.cashBalance").doesNotExist())
+                .andExpect(jsonPath("$.monthExpenses").doesNotExist());
+    }
+
+    @Test
     void permissionsAndStoreIsolation() throws Exception {
         String owner = register("İzolyasiya Kassa");
         activateSubscription(owner, "MONTHLY");

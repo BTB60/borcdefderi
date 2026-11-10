@@ -43,6 +43,7 @@ public final class PartyAccountRequests {
             OffsetDateTime paidAt,
             @Size(max = 255) String description,
             @Size(max = 1000) String note,
-            BigDecimal expectedRemaining
+            BigDecimal expectedRemaining,
+            java.util.UUID cashAccountId
     ) {}
 }

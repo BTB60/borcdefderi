@@ -50,9 +50,11 @@ public class PaymentService {
     private final AuditService audit;
     private final Clock clock;
     private final ReceiptLinks links;
+    private final az.borcdefteri.cash.CashService cash;
 
     public PaymentService(JdbcClient jdbc, TenantService tenant, DebtService debts, LedgerWriter ledger,
-                          AuditService audit, Clock clock, ReceiptLinks links) {
+                          AuditService audit, Clock clock, ReceiptLinks links, az.borcdefteri.cash.CashService cash) {
+        this.cash = cash;
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.debts = debts;
@@ -115,6 +117,13 @@ public class PaymentService {
         ledger.append(m.storeId(), debtId, paymentId,
                 req.paymentMethod().ledgerType(),
                 amount, newRemaining, m.userId());
+        // The money moves through a cash desk / bank account. Collecting a debt is not revenue and paying a supplier
+        // is not an expense: they are booked as DEBT_COLLECTION / SUPPLIER_PAYMENT and kept out of profit.
+        boolean outgoing = debt.debtType() == DebtType.COMPANY_PAYABLE;
+        UUID account = cash.accountFor(m.storeId(), req.paymentMethod().name(), req.cashAccountId(), m.userId());
+        cash.post(m.storeId(), account, outgoing ? "OUT" : "IN", amount, outgoing ? "SUPPLIER_PAYMENT" : "DEBT_COLLECTION",
+                paidAt.atZoneSameInstant(java.time.ZoneId.of("Asia/Baku")).toLocalDate(), paymentId, null,
+                debt.partyName(), m.userId());
         audit.log(m.storeId(), m.userId(), "PAYMENT_RECORDED", "PAYMENT", paymentId.toString(),
                 req.paymentMethod() + " " + amount + " AZN, borc " + debtId);
         return new PaymentView(paymentId, debtId, debt.debtType(), debt.partyName(), debt.partyPhone(), amount, req.paymentMethod(),

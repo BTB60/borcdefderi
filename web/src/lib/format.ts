@@ -60,6 +60,8 @@ export const PERMISSION_LABEL: Record<Permission, string> = {
   COMPANY_RECEIVABLES: "Şirkət alacaqları",
   COMPANY_PAYABLES: "Şirkət borcları",
   REPORTS: "Hesabatlar və panel",
+  CASH: "Kassa və bank",
+  EXPENSES: "Xərclər və büdcə",
 };
 
 export const SUBSCRIPTION_STATUS_LABEL: Record<string, string> = {

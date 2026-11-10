@@ -34,6 +34,8 @@ const permissionLabels = {
   'COMPANY_RECEIVABLES': 'Şirkət alacaqları',
   'COMPANY_PAYABLES': 'Şirkət borcları',
   'REPORTS': 'Hesabatlar',
+  'CASH': 'Kassa və bank',
+  'EXPENSES': 'Xərclər və büdcə',
 };
 
 /// Maps a server error code to a friendly message when the server text is not enough.

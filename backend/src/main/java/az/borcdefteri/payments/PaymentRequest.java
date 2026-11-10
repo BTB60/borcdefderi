@@ -14,5 +14,11 @@ public record PaymentRequest(
         @NotNull PaymentMethod paymentMethod,
         OffsetDateTime paidAt,
         @Size(max = 255) String description,
-        @Size(max = 1000) String note
-) {}
+        @Size(max = 1000) String note,
+        /** Optional cash desk / bank account the money moves through; default: by payment method. */
+        java.util.UUID cashAccountId
+) {
+    public PaymentRequest(BigDecimal amount, PaymentMethod paymentMethod, OffsetDateTime paidAt, String description, String note) {
+        this(amount, paymentMethod, paidAt, description, note, null);
+    }
+}

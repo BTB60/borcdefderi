@@ -92,7 +92,7 @@ public class PartyAccountService {
             }
             BigDecimal part = left.min(d.remainingAmount());
             made.add(payments.record(d.id(), new PaymentRequest(part, req.paymentMethod(), req.paidAt(),
-                    req.description(), req.note())));
+                    req.description(), req.note(), req.cashAccountId())));
             left = Money.of(left.subtract(part));
         }
         return new PayResult(type, before, Money.of(before.subtract(amount)), made);

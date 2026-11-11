@@ -38,6 +38,9 @@ class ApiClient {
   /// Called when a signed-in request gets 401 (token expired or account disabled); the session signs out.
   void Function()? onUnauthorized;
 
+  /// Called when the server answers 402 SUBSCRIPTION_REQUIRED (the store's subscription ended).
+  void Function()? onSubscriptionRequired;
+
   Uri _uri(String path, [Map<String, String>? query]) {
     final base = Uri.parse(baseUrl);
     return base.replace(path: path, queryParameters: (query == null || query.isEmpty) ? null : query);
@@ -110,6 +113,9 @@ class ApiClient {
     }
     if (res.statusCode == 401 && _token != null && onUnauthorized != null) {
       onUnauthorized!();
+    }
+    if (res.statusCode == 402 && code == 'SUBSCRIPTION_REQUIRED' && onSubscriptionRequired != null) {
+      onSubscriptionRequired!();
     }
     throw ApiException(res.statusCode, code, message, fields);
   }

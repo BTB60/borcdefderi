@@ -40,6 +40,23 @@ class Session extends ChangeNotifier {
         _clear().then((_) => notifyListeners());
       }
     };
+    // The subscription ran out while the app was open: reload "me" so the app switches to the expired screen.
+    api.onSubscriptionRequired = () {
+      if (me != null && !_refreshing) {
+        _refreshing = true;
+        refresh().catchError((Object _) {}).whenComplete(() => _refreshing = false);
+      }
+    };
+  }
+
+  bool _refreshing = false;
+
+  /// True when the store's subscription has ended (the server then blocks every business section).
+  bool get subscriptionBlocked {
+    final m = me;
+    if (m == null || m.isSuperAdmin) return false;
+    final sub = m.subscription;
+    return sub != null && !sub.active;
   }
 
   final ApiClient api;

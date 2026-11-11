@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Profil şəklini seçmək üçün</string>
+	<string>Məhsul və profil şəklini qalereyadan seçmək üçün</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Profil şəklini çəkmək üçün</string>
+	<string>Barkod skan etmək, məhsul və profil şəklini çəkmək üçün</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>tel</string>

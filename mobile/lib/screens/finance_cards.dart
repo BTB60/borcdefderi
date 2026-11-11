@@ -29,7 +29,8 @@ const _meta = {
   'customer-debts': _ListMeta('Müştəri borcu', 'Qalıq borc', 'party'),
   'active-customers': _ListMeta('Aktiv müştərilər', 'Qalıq borc', 'party'),
   'company-receivables': _ListMeta('Şirkətlər bizə borcludur', 'Qalıq borc', 'party'),
-  'company-payables': _ListMeta('Toplam borcum', 'Qalıq borcumuz', 'party'),
+  'company-payables': _ListMeta('Şirkətlərə borcum', 'Qalıq borcumuz', 'party'),
+  'all-open-debts': _ListMeta('Toplam borc', 'Qalıq', 'debt', partyFilter: true),
   'today-debts': _ListMeta('Yazılan borclar', 'Yazılan məbləğ', 'entry', partyFilter: true),
   'active-debts': _ListMeta('Aktiv borclar', 'Qalıq', 'debt', partyFilter: true),
   'overdue-debts': _ListMeta('Gecikmiş borclar', 'Qalıq', 'debt', partyFilter: true),
@@ -88,17 +89,11 @@ class FinanceCardsState extends State<FinanceCards> {
           _BigCard(
             colors: const [Color(0xFF7C3AED), Color(0xFF5B21B6)],
             icon: Icons.account_balance_wallet_outlined,
-            label: 'Toplam borcum',
-            value: formatMoney(payables.sum),
-            hint: '${payables.count} şirkətə açıq öhdəlik',
-            onTap: () => _open('company-payables'),
-            action: me.can('COMPANY_PAYABLES')
-                ? TextButton(
-                    style: TextButton.styleFrom(backgroundColor: Colors.white24, foregroundColor: Colors.white),
-                    onPressed: _addPayable,
-                    child: const Text('+ ƏLAVƏ ET', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-                  )
-                : null,
+            label: 'Toplam borc',
+            value: formatMoney(active.sum),
+            hint: '${active.count} açıq borc · müştəri ${formatMoney(_Fig.of(o['customerDebts']).sum)}'
+                ' · şirkət ${formatMoney(_Fig.of(o['companyReceivables']).sum)} · borcum ${formatMoney(payables.sum)}',
+            onTap: () => _open('all-open-debts'),
           ),
           const SizedBox(height: 12),
           Row(children: [
@@ -154,6 +149,11 @@ class FinanceCardsState extends State<FinanceCards> {
                   Colors.amber.shade800, () => _open('active-customers')),
               _SmallCard('Alınan ödənişlər', formatMoney(_Fig.of(o['paymentsIn']).sum), '${_Fig.of(o['paymentsIn']).count} ödəniş',
                   Icons.south_west, Colors.green.shade700, () => _open('payments-in')),
+              _SmallCard('Şirkətlərə borcum', formatMoney(payables.sum), '${payables.count} şirkətə açıq öhdəlik',
+                  Icons.north_east, Colors.deepPurple.shade400, () => _open('company-payables')),
+              if (me.can('COMPANY_PAYABLES'))
+                _SmallCard('Şirkət borcu yaz', '+ Əlavə et', 'təchizatçıya borc', Icons.add_business_outlined,
+                    Colors.deepPurple.shade400, _addPayable),
             ],
           ),
         ]);
@@ -164,7 +164,7 @@ class FinanceCardsState extends State<FinanceCards> {
 
 class _BigCard extends StatelessWidget {
   const _BigCard({required this.colors, required this.icon, required this.label, required this.value, required this.hint,
-      required this.onTap, this.action, this.compact = false});
+      required this.onTap, this.compact = false});
 
   final List<Color> colors;
   final IconData icon;
@@ -172,7 +172,6 @@ class _BigCard extends StatelessWidget {
   final String value;
   final String hint;
   final VoidCallback onTap;
-  final Widget? action;
   final bool compact;
 
   @override
@@ -192,8 +191,6 @@ class _BigCard extends StatelessWidget {
                     decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12)),
                     child: Icon(icon, color: Colors.white, size: compact ? 20 : 24),
                   ),
-                  const Spacer(),
-                  ?action,
                 ]),
                 SizedBox(height: compact ? 10 : 14),
                 Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
@@ -203,7 +200,7 @@ class _BigCard extends StatelessWidget {
                   child: Text(value,
                       style: TextStyle(color: Colors.white, fontSize: compact ? 22 : 28, fontWeight: FontWeight.w800)),
                 ),
-                Text(hint, style: const TextStyle(color: Colors.white70, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(hint, style: const TextStyle(color: Colors.white70, fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
               ]),
             ),
           ),
@@ -400,7 +397,9 @@ class _DashboardListScreenState extends State<DashboardListScreen> {
       }
     });
     try {
-      final j = await widget.session.api.get('/api/dashboard/lists/${widget.kind}', query: {
+      // "Toplam borc" is the server's active-debts list (every open debt the user may see), under its own title.
+      final apiKind = widget.kind == 'all-open-debts' ? 'active-debts' : widget.kind;
+      final j = await widget.session.api.get('/api/dashboard/lists/$apiKind', query: {
         'page': '$_page',
         'size': '50',
         if (_q.isNotEmpty) 'q': _q,

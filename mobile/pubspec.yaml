@@ -1,7 +1,7 @@
 name: borcdefteri_mobile
 description: "BORCDEFTERI — mağazalar üçün borc və ödəniş idarəetməsi (mobil)."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.1.2+3
 
 environment:
   sdk: ^3.13.7

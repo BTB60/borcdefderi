@@ -3,9 +3,14 @@ import 'package:flutter/material.dart';
 import '../format.dart';
 import '../models/models.dart';
 import '../state/session.dart';
+import '../theme.dart';
+import 'cash_screen.dart';
 import 'common.dart';
+import 'expenses_screen.dart';
 import 'finance_cards.dart';
+import 'inventory_screen.dart';
 import 'notifications_screen.dart';
+import 'sales_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, required this.session});
@@ -63,6 +68,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                _QuickActions(session: widget.session),
                 FinanceCards(key: _cards, session: widget.session),
                 const SizedBox(height: 22),
                 const Text('Ödəniş üsulları', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
@@ -112,6 +118,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
           },
         ),
       ),
+    );
+  }
+}
+
+/// Shortcuts to the ERP sections (also listed under "Daha"), filtered by the user's permissions.
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({required this.session});
+
+  final Session session;
+
+  @override
+  Widget build(BuildContext context) {
+    final me = session.me!;
+    final items = <({String label, IconData icon, Widget Function() page})>[
+      if (me.can('SALES')) (label: 'Satış', icon: Icons.point_of_sale, page: () => SalesScreen(session: session)),
+      if (me.can('INVENTORY') || me.can('SALES'))
+        (label: 'Anbar', icon: Icons.inventory_2_outlined, page: () => InventoryScreen(session: session)),
+      if (me.can('CASH')) (label: 'Kassa', icon: Icons.account_balance_wallet_outlined, page: () => CashScreen(session: session)),
+      if (me.can('EXPENSES')) (label: 'Xərclər', icon: Icons.receipt_long_outlined, page: () => ExpensesScreen(session: session)),
+    ];
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(children: [
+        for (final (i, item) in items.indexed) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => item.page())),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Column(children: [
+                    Icon(item.icon, color: navy, size: 28),
+                    const SizedBox(height: 6),
+                    Text(item.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ]),
     );
   }
 }

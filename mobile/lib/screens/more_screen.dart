@@ -8,6 +8,7 @@ import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'cash_screen.dart';
+import 'contact_screen.dart';
 import 'employees_screen.dart';
 import 'expenses_screen.dart';
 import 'inventory_screen.dart';
@@ -140,6 +141,15 @@ class MoreScreen extends StatelessWidget {
             title: const Text('Bildirişlər'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => NotificationsScreen(session: session))),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.support_agent, color: navy),
+            title: const Text('Əlaqə'),
+            subtitle: const Text('Dəstək: WhatsApp, zəng'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ContactScreen(session: session))),
           ),
         ),
         const SizedBox(height: 24),

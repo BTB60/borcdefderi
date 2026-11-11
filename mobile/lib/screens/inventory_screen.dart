@@ -1,5 +1,10 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../api/api_client.dart';
 import '../format.dart';
 import '../state/session.dart';
 import '../theme.dart';
@@ -11,6 +16,89 @@ String _q(Object? v) {
   final d = _n(v);
   return d == d.roundToDouble() ? d.toStringAsFixed(0) : d.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '');
 }
+
+/// Downloaded product pictures keyed by id + version (the version changes when the picture is replaced).
+final Map<String, Future<Uint8List?>> _imageCache = {};
+
+Future<Uint8List?> _productImage(Session session, Map<String, dynamic> p) {
+  if (p['hasImage'] != true) return Future.value(null);
+  return _imageCache.putIfAbsent(
+    '${p['id']}:${p['version']}',
+    () => session.api
+        .getBytes('/api/products/${p['id']}/image')
+        .then<Uint8List?>((b) => Uint8List.fromList(b))
+        .catchError((Object _) => null),
+  );
+}
+
+/// Product picture (or a placeholder icon) in a rounded square.
+class ProductThumb extends StatelessWidget {
+  const ProductThumb({super.key, required this.session, required this.product, this.size = 52, this.local});
+
+  final Session session;
+  final Map<String, dynamic>? product;
+  final double size;
+
+  /// A picture picked on the phone but not uploaded yet.
+  final Uint8List? local;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(size > 100 ? 14 : 10);
+    Widget box(Widget child) => ClipRRect(
+          borderRadius: radius,
+          child: Container(width: size, height: size, color: Colors.grey.shade200, alignment: Alignment.center, child: child),
+        );
+    final placeholder = Icon(Icons.inventory_2_outlined, color: Colors.grey.shade500, size: size * 0.45);
+    if (local != null) return box(Image.memory(local!, width: size, height: size, fit: BoxFit.cover));
+    if (product == null || product!['hasImage'] != true) return box(placeholder);
+    return FutureBuilder<Uint8List?>(
+      future: _productImage(session, product!),
+      builder: (context, snap) => box(snap.data == null
+          ? (snap.connectionState == ConnectionState.done
+              ? placeholder
+              : SizedBox(width: size * 0.3, height: size * 0.3, child: const CircularProgressIndicator(strokeWidth: 2)))
+          : Image.memory(snap.data!, width: size, height: size, fit: BoxFit.cover)),
+    );
+  }
+}
+
+/// Lets the user take or choose a product picture. Returns null when cancelled or the file is too big.
+Future<({Uint8List bytes, bool png})?> _pickProductImage(BuildContext context) async {
+  final source = await showModalBottomSheet<ImageSource>(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) => SafeArea(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(
+          leading: const Icon(Icons.photo_camera_outlined),
+          title: const Text('Kamera ilə çək'),
+          onTap: () => Navigator.pop(ctx, ImageSource.camera),
+        ),
+        ListTile(
+          leading: const Icon(Icons.photo_library_outlined),
+          title: const Text('Qalereyadan seç'),
+          onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+        ),
+      ]),
+    ),
+  );
+  if (source == null) return null;
+  final picked = await ImagePicker().pickImage(source: source, maxWidth: 1024, maxHeight: 1024, imageQuality: 85);
+  if (picked == null) return null;
+  final bytes = await picked.readAsBytes();
+  if (bytes.length > 4 * 1024 * 1024) {
+    if (context.mounted) showError(context, const ApiException(0, 'FILE_TOO_LARGE', 'Şəklin ölçüsü 4 MB-dan çox ola bilməz'));
+    return null;
+  }
+  final png = bytes.length > 3 && bytes[0] == 0x89 && bytes[1] == 0x50;
+  return (bytes: bytes, png: png);
+}
+
+/// Uploads [image] as the product's picture and returns the updated product.
+Future<Map<String, dynamic>> _uploadProductImage(Session session, String productId, ({Uint8List bytes, bool png}) image) async =>
+    await session.api.upload('/api/products/$productId/image', 'file', image.bytes, image.png ? 'product.png' : 'product.jpg',
+        image.png ? 'image/png' : 'image/jpeg') as Map<String, dynamic>;
 
 /// Anbar: products with stock, low-stock filter, add product and stock in / out / count.
 class InventoryScreen extends StatefulWidget {
@@ -25,7 +113,28 @@ class InventoryScreen extends StatefulWidget {
 class _InventoryScreenState extends State<InventoryScreen> {
   String _q2 = '';
   bool _low = false;
+  Timer? _debounce;
   late Future<List<dynamic>> _data = _fetch();
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  /// Search while typing (after a short pause).
+  void _onSearch(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted || v.trim() == _q2) return;
+      _q2 = v.trim();
+      _reload();
+    });
+  }
+
+  /// Picture, price and stock of one product; stock in / out from here for users who manage the warehouse.
+  Future<void> _open(Map<String, dynamic> p) =>
+      _sheet(_manage ? _StockSheet(session: widget.session, product: p) : _ProductInfo(session: widget.session, product: p));
 
   bool get _manage => widget.session.me!.can('INVENTORY');
 
@@ -61,12 +170,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       final p = await productByBarcode(widget.session, code);
       if (!mounted) return;
       if (p != null) {
-        if (_manage) {
-          await _sheet(_StockSheet(session: widget.session, product: p));
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('${p['name']}: qalıq ${_q(p['stockQty'])} ${p['unit']} · satış ${formatMoney(_n(p['salePrice']))}')));
-        }
+        await _open(p);
         return;
       }
       if (!_manage) {
@@ -123,7 +227,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   suffixIcon: IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
                 ),
                 textInputAction: TextInputAction.search,
+                onChanged: _onSearch,
                 onSubmitted: (v) {
+                  _debounce?.cancel();
                   _q2 = v.trim();
                   _reload();
                 },
@@ -142,7 +248,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
               for (final p in items)
                 Card(
                   child: ListTile(
-                    onTap: _manage ? () => _sheet(_StockSheet(session: widget.session, product: p)) : null,
+                    onTap: () => _open(p),
+                    contentPadding: const EdgeInsets.fromLTRB(10, 6, 14, 6),
+                    leading: ProductThumb(session: widget.session, product: p),
                     title: Text('${p['name']}', style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text('${p['code']} · alış ${formatMoney(_n(p['purchasePrice']))} · satış ${formatMoney(_n(p['salePrice']))}'),
                     trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -162,7 +270,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   ),
                 ),
               if (_manage && items.isNotEmpty)
-                Text('Stok əlavə etmək / çıxmaq üçün məhsula toxunun.', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                Text('Stok və şəkil üçün məhsula toxunun.', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
             ]),
           );
         },
@@ -189,6 +297,7 @@ class _ProductSheetState extends State<_ProductSheet> {
   final _stock = TextEditingController();
   final _min = TextEditingController(text: '0');
   final _unit = TextEditingController(text: 'ədəd');
+  ({Uint8List bytes, bool png})? _image;
   bool _busy = false;
   String? _error;
 
@@ -218,7 +327,15 @@ class _ProductSheetState extends State<_ProductSheet> {
         'minStock': _d(_min).isEmpty ? '0' : _d(_min),
         'initialStock': _d(_stock).isEmpty ? null : _d(_stock),
       }) as Map<String, dynamic>;
-      if (mounted) Navigator.pop(context, 'Məhsul əlavə edildi: ${p['code']}');
+      var msg = 'Məhsul əlavə edildi: ${p['code']}';
+      if (_image != null) {
+        try {
+          await _uploadProductImage(widget.session, '${p['id']}', _image!);
+        } catch (e) {
+          msg = '$msg. Şəkil yüklənmədi: ${errorMessage(e)}';
+        }
+      }
+      if (mounted) Navigator.pop(context, msg);
     } catch (e) {
       if (mounted) setState(() => _error = errorMessage(e));
     } finally {
@@ -230,6 +347,23 @@ class _ProductSheetState extends State<_ProductSheet> {
   Widget build(BuildContext context) => ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
         const Text('Yeni məhsul', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: navy)),
         if (_error != null) ErrorBanner(_error!),
+        const SizedBox(height: 8),
+        Row(children: [
+          ProductThumb(session: widget.session, product: null, size: 72, local: _image?.bytes),
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final img = await _pickProductImage(context);
+                      if (img != null && mounted) setState(() => _image = img);
+                    },
+              icon: const Icon(Icons.add_a_photo_outlined),
+              label: Text(_image == null ? 'Şəkil əlavə et' : 'Şəkli dəyiş'),
+            ),
+          ),
+        ]),
         TextField(controller: _name, decoration: const InputDecoration(labelText: 'Ad')),
         TextField(
           controller: _barcode,
@@ -273,6 +407,8 @@ class _StockSheet extends StatefulWidget {
 }
 
 class _StockSheetState extends State<_StockSheet> {
+  late Map<String, dynamic> _product = widget.product;
+  bool _imageBusy = false;
   String _kind = 'RECEIPT';
   final _qty = TextEditingController();
   late final _cost = TextEditingController(text: _n(widget.product['purchasePrice']).toStringAsFixed(2));
@@ -311,11 +447,37 @@ class _StockSheetState extends State<_StockSheet> {
     }
   }
 
+  Future<void> _changeImage() async {
+    final img = await _pickProductImage(context);
+    if (img == null || !mounted) return;
+    setState(() => _imageBusy = true);
+    try {
+      final p = await _uploadProductImage(widget.session, '${_product['id']}', img);
+      if (mounted) {
+        setState(() => _product = p);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Şəkil yadda saxlandı')));
+      }
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _imageBusy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
-        Text('${widget.product['name']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: navy)),
-        Text('İndiki qalıq: ${_q(widget.product['stockQty'])} ${widget.product['unit']}'),
-        const SizedBox(height: 10),
+        _ProductHeader(session: widget.session, product: _product),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _imageBusy ? null : _changeImage,
+            icon: _imageBusy
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.add_a_photo_outlined),
+            label: Text(_product['hasImage'] == true ? 'Şəkli dəyiş' : 'Şəkil əlavə et'),
+          ),
+        ),
+        const SizedBox(height: 4),
         if (_error != null) ErrorBanner(_error!),
         Wrap(spacing: 6, children: [
           for (final k in const [['RECEIPT', 'Giriş'], ['ISSUE', 'Çıxış'], ['ADJUSTMENT', 'Düzəliş ±'], ['COUNT', 'Sayım']])
@@ -332,5 +494,55 @@ class _StockSheetState extends State<_StockSheet> {
         TextField(controller: _note, decoration: const InputDecoration(labelText: 'Qeyd')),
         const SizedBox(height: 14),
         FilledButton(onPressed: _busy ? null : _save, child: const Text('Təsdiqlə')),
+      ]);
+}
+
+/// Large picture with name, code / barcode, prices and current stock.
+class _ProductHeader extends StatelessWidget {
+  const _ProductHeader({required this.session, required this.product});
+
+  final Session session;
+  final Map<String, dynamic> product;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = product;
+    final stockColor = p['outOfStock'] == true
+        ? Colors.red.shade700
+        : p['lowStock'] == true
+            ? Colors.orange.shade800
+            : navy;
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      ProductThumb(session: session, product: p, size: 110),
+      const SizedBox(width: 14),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${p['name']}', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: navy)),
+          const SizedBox(height: 2),
+          Text([p['code'], p['barcode']].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+          const SizedBox(height: 8),
+          Text('Satış: ${formatMoney(_n(p['salePrice']))}', style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text('Alış: ${formatMoney(_n(p['purchasePrice']))}', style: TextStyle(color: Colors.grey.shade700)),
+          const SizedBox(height: 4),
+          Text('Qalıq: ${_q(p['stockQty'])} ${p['unit']}', style: TextStyle(fontWeight: FontWeight.w800, color: stockColor)),
+        ]),
+      ),
+    ]);
+  }
+}
+
+/// Read-only product card for users who may sell but not manage the warehouse.
+class _ProductInfo extends StatelessWidget {
+  const _ProductInfo({required this.session, required this.product});
+
+  final Session session;
+  final Map<String, dynamic> product;
+
+  @override
+  Widget build(BuildContext context) => ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
+        _ProductHeader(session: session, product: product),
+        const SizedBox(height: 16),
+        OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text('Bağla')),
       ]);
 }

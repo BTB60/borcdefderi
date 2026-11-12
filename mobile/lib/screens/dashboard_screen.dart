@@ -10,6 +10,7 @@ import 'expenses_screen.dart';
 import 'finance_cards.dart';
 import 'inventory_screen.dart';
 import 'notifications_screen.dart';
+import 'reports_screen.dart';
 import 'sales_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -132,6 +133,7 @@ class _QuickActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final me = session.me!;
     final items = <({String label, IconData icon, Widget Function() page})>[
+      if (me.can('REPORTS')) (label: 'Hesabat', icon: Icons.insights_outlined, page: () => ReportsScreen(session: session)),
       if (me.can('SALES')) (label: 'Satış', icon: Icons.point_of_sale, page: () => SalesScreen(session: session)),
       if (me.can('INVENTORY') || me.can('SALES'))
         (label: 'Anbar', icon: Icons.inventory_2_outlined, page: () => InventoryScreen(session: session)),
@@ -155,7 +157,10 @@ class _QuickActions extends StatelessWidget {
                   child: Column(children: [
                     Icon(item.icon, color: navy, size: 28),
                     const SizedBox(height: 6),
-                    Text(item.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(item.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    ),
                   ]),
                 ),
               ),

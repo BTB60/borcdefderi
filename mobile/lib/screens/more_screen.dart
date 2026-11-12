@@ -16,6 +16,7 @@ import 'sales_screen.dart';
 import 'notifications_screen.dart';
 import 'parties_screen.dart';
 import 'profile_screen.dart';
+import 'reports_screen.dart';
 import 'subscription_screen.dart';
 
 /// Profile, subscription information, notifications and sign-out.
@@ -62,6 +63,16 @@ class MoreScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: ErrorBanner('Abunəliyinizin müddəti ${sub.daysRemaining} gün sonra bitir. Abunəlik bölməsindən yeniləyin.'),
+          ),
+        if (me.can('REPORTS'))
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.insights_outlined, color: navy),
+              title: const Text('Hesabat'),
+              subtitle: const Text('Satış, mənfəət, ən çox satılan məhsullar'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReportsScreen(session: session))),
+            ),
           ),
         if (me.can('SALES'))
           Card(

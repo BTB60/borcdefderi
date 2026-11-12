@@ -31,6 +31,8 @@ public class ProfitService {
 
     public record Comparison(LocalDate from, LocalDate to, BigDecimal netSales, BigDecimal expenses, BigDecimal netResult) {}
 
+    public record TopProduct(UUID productId, String name, BigDecimal quantity, BigDecimal revenue, BigDecimal profit) {}
+
     public record MonthPoint(String month, BigDecimal netSales, BigDecimal costOfGoods, BigDecimal expenses, BigDecimal netResult) {}
 
     private final JdbcClient jdbc;
@@ -82,6 +84,38 @@ public class ProfitService {
             out.add(new MonthPoint(ym.toString(), t.netSales(), t.cogs(), t.expenses, t.net()));
         }
         return out;
+    }
+
+    /** Best-selling products in the period by sales amount, net of returned quantities; cancelled sales excluded. */
+    public List<TopProduct> topProducts(LocalDate from, LocalDate to, int limit) {
+        CurrentMember m = require();
+        LocalDate today = tenant.today();
+        LocalDate lo = from != null ? from : today.withDayOfMonth(1);
+        LocalDate hi = to != null ? to : today;
+        if (lo.isAfter(hi)) throw ApiException.badRequest("INVALID_RANGE", "Başlanğıc tarix son tarixdən sonra ola bilməz");
+        int n = Math.min(Math.max(limit, 1), 50);
+        return jdbc.sql("""
+                        SELECT si.product_id,
+                               MAX(si.name) AS name,
+                               SUM(si.quantity - si.returned_qty) AS qty,
+                               SUM(si.line_total * (si.quantity - si.returned_qty) / si.quantity) AS revenue,
+                               SUM((si.quantity - si.returned_qty) * si.unit_cost) AS cost
+                        FROM sale_items si
+                        JOIN sales s ON s.id = si.sale_id AND s.store_id = si.store_id
+                        WHERE s.store_id = :s AND s.status = 'COMPLETED' AND s.sold_on BETWEEN :f AND :t
+                        GROUP BY si.product_id
+                        HAVING SUM(si.quantity - si.returned_qty) > 0
+                        ORDER BY revenue DESC
+                        LIMIT :n
+                        """)
+                .param("s", m.storeId()).param("f", lo).param("t", hi).param("n", n)
+                .query((rs, i) -> {
+                    BigDecimal revenue = Money.of(rs.getBigDecimal("revenue"));
+                    return new TopProduct(rs.getObject("product_id", UUID.class), rs.getString("name"),
+                            rs.getBigDecimal("qty"), revenue,
+                            Money.of(revenue.subtract(rs.getBigDecimal("cost"))));
+                })
+                .list();
     }
 
     private record Totals(BigDecimal sales, BigDecimal returns, BigDecimal saleCost, BigDecimal returnCost, BigDecimal expenses) {

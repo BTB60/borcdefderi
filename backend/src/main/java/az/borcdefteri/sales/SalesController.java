@@ -75,4 +75,12 @@ public class SalesController {
     public List<ProfitService.MonthPoint> monthly(@RequestParam(defaultValue = "12") int months) {
         return profit.monthly(months);
     }
+
+    @GetMapping("/finance/top-products")
+    public List<ProfitService.TopProduct> topProducts(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "10") int limit) {
+        return profit.topProducts(from, to, limit);
+    }
 }

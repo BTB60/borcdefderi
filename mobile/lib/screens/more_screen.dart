@@ -15,6 +15,7 @@ import 'inventory_screen.dart';
 import 'sales_screen.dart';
 import 'notifications_screen.dart';
 import 'parties_screen.dart';
+import 'pocket_screen.dart';
 import 'profile_screen.dart';
 import 'reports_screen.dart';
 import 'subscription_screen.dart';
@@ -64,6 +65,15 @@ class MoreScreen extends StatelessWidget {
             padding: const EdgeInsets.only(top: 12),
             child: ErrorBanner('Abunəliyinizin müddəti ${sub.daysRemaining} gün sonra bitir. Abunəlik bölməsindən yeniləyin.'),
           ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.account_balance_wallet, color: navy),
+            title: const Text('Cib pulu'),
+            subtitle: const Text('Cibə qoyduğum və xərclədiyim pul, gün sonu qalıq'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PocketScreen(session: session))),
+          ),
+        ),
         if (me.can('REPORTS'))
           Card(
             child: ListTile(

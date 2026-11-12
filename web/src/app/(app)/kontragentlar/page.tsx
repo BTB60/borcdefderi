@@ -98,7 +98,7 @@ function PartiesList() {
                   </Td>
                   {tab === "customers" && <Td className="text-xs text-slate-500">{p.code ?? "—"}</Td>}
                   <Td>{p.phone ?? "—"}</Td>
-                  {tab === "customers" && <Td className="text-right tabular-nums">{formatMoney(p.openBalance)}</Td>}
+                  {tab === "customers" && <Td className={`text-right tabular-nums ${p.openBalance > 0 ? "text-rose-700" : "text-slate-500"}`}>{formatMoney(p.openBalance)}</Td>}
                   <Td className="max-w-[18rem] truncate text-slate-500">{p.note ?? "—"}</Td>
                   <Td className="text-right">
                     <div className="flex justify-end gap-1">

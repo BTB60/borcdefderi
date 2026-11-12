@@ -10,6 +10,7 @@ import 'expenses_screen.dart';
 import 'finance_cards.dart';
 import 'inventory_screen.dart';
 import 'notifications_screen.dart';
+import 'pocket_screen.dart';
 import 'reports_screen.dart';
 import 'sales_screen.dart';
 
@@ -25,6 +26,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   late Future<Map<String, dynamic>> _data;
   final _cards = GlobalKey<FinanceCardsState>();
+  final _pocket = GlobalKey<PocketCardState>();
 
   @override
   void initState() {
@@ -38,6 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _refresh() async {
     _cards.currentState?.reload();
+    _pocket.currentState?.reload();
     setState(_load);
     await _data;
   }
@@ -70,6 +73,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 _QuickActions(session: widget.session),
+                PocketCard(key: _pocket, session: widget.session),
                 FinanceCards(key: _cards, session: widget.session),
                 const SizedBox(height: 22),
                 const Text('Alınan ödənişlər', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
@@ -100,7 +104,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: ListTile(
                             title: Text(p.partyName),
                             subtitle: Text('${formatDateTime(p.paidAt)} · ${methodLabels[p.paymentMethod]}'),
-                            trailing: Text(formatMoney(p.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
+                            trailing: Text(formatMoney(p.amount), style: TextStyle(fontWeight: FontWeight.w700, color: Colors.green.shade700)),
                           ),
                         ),
                     ],

@@ -179,7 +179,7 @@ export default function DashboardListPage() {
                         <Td>{r.phone ?? "—"}</Td>
                         <Td className="text-right tabular-nums">{formatMoney(r.totalDebt)}</Td>
                         <Td className="text-right tabular-nums text-emerald-700">{formatMoney(r.paid)}</Td>
-                        <Td className="text-right font-semibold tabular-nums text-navy-800">{formatMoney(r.remaining)}</Td>
+                        <Td className={`text-right font-semibold tabular-nums ${r.remaining > 0 ? "text-rose-700" : "text-emerald-700"}`}>{formatMoney(r.remaining)}</Td>
                         <Td className="text-xs">{r.lastPaymentAt ? formatDateTime(r.lastPaymentAt) : "—"}</Td>
                         <Td className="text-xs">{r.lastActivityAt ? formatDateTime(r.lastActivityAt) : "—"}</Td>
                       </tr>
@@ -200,7 +200,7 @@ export default function DashboardListPage() {
                         <Td>{formatDate(r.debtDate)}{r.dueDate && <div className={`text-xs ${r.overdueDays > 0 ? "font-semibold text-rose-600" : "text-slate-400"}`}>son: {formatDate(r.dueDate)}{r.overdueDays > 0 ? ` · ${r.overdueDays} gün gecikir` : ""}</div>}</Td>
                         <Td className="text-right tabular-nums">{formatMoney(r.amount)}</Td>
                         <Td className="text-right tabular-nums text-emerald-700">{formatMoney(r.paid)}</Td>
-                        <Td className="text-right font-semibold tabular-nums text-navy-800">{formatMoney(r.remaining)}</Td>
+                        <Td className={`text-right font-semibold tabular-nums ${r.remaining > 0 ? "text-rose-700" : "text-emerald-700"}`}>{formatMoney(r.remaining)}</Td>
                         <Td className="text-xs">{r.lastPaymentAt ? formatDateTime(r.lastPaymentAt) : "—"}</Td>
                         <Td className="text-xs">{r.receiptNumber ?? "—"}</Td>
                         <Td><Badge tone={r.status === "PAID" ? "emerald" : r.overdueDays > 0 ? "rose" : r.status === "PARTIAL" ? "amber" : "slate"}>{r.overdueDays > 0 ? "Gecikmiş" : DEBT_STATUS_LABEL[r.status]}</Badge></Td>
@@ -221,9 +221,9 @@ export default function DashboardListPage() {
                         </Td>
                         <Td>{formatDate(r.entryDate)}<div className="text-xs text-slate-400">{formatDateTime(r.createdAt)}</div></Td>
                         <Td className="text-xs">{r.receiptNumber ?? "—"}{r.note && <div className="text-slate-400">{r.note}</div>}</Td>
-                        <Td className="text-right font-semibold tabular-nums">{formatMoney(r.amount)}</Td>
+                        <Td className="text-right font-semibold tabular-nums text-rose-700">{formatMoney(r.amount)}</Td>
                         <Td className="text-right tabular-nums text-emerald-700">{formatMoney(r.debtPaid)}</Td>
-                        <Td className="text-right tabular-nums text-navy-800">{formatMoney(r.debtRemaining)}</Td>
+                        <Td className={`text-right tabular-nums ${r.debtRemaining > 0 ? "text-rose-700" : "text-emerald-700"}`}>{formatMoney(r.debtRemaining)}</Td>
                         <Td className="text-xs">{r.actorName}</Td>
                       </tr>
                     ))}
@@ -241,7 +241,7 @@ export default function DashboardListPage() {
                         <Td>{METHOD_LABEL[r.paymentMethod]}</Td>
                         <Td className="max-w-[14rem] truncate text-slate-500">{r.description ?? "—"}</Td>
                         <Td className="text-xs">{r.recordedByName}</Td>
-                        <Td className="text-right font-semibold tabular-nums">{formatMoney(r.amount)}</Td>
+                        <Td className="text-right font-semibold tabular-nums text-emerald-700">{formatMoney(r.amount)}</Td>
                       </tr>
                     ))}
                   </tbody>

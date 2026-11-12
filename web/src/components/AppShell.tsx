@@ -26,6 +26,7 @@ const STORE_NAV: NavItem[] = [
   { href: "/maliyye", label: "Gəlir və mənfəət", icon: "M4 19h16M6 16l4-5 3 3 5-7", permission: "REPORTS" },
   { href: "/kassa", label: "Kassa və bank", icon: "M3 7h18v12H3V7Zm0 4h18M7 3h10v4H7V3Z", permission: "CASH" },
   { href: "/xercler", label: "Xərclər", icon: "M12 3v18M17 7.5C17 5.6 14.8 4 12 4S7 5.6 7 7.5 9.2 11 12 11.5s5 2 5 4-2.2 3.5-5 3.5-5-1.6-5-3.5", permission: "EXPENSES" },
+  { href: "/cib-pulu", label: "Cib pulu", icon: "M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1h1a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm13 5h3" },
   { href: "/kontragentlar", label: "Müştəri və şirkətlər", icon: "M16 11a4 4 0 1 0-8 0M3 21a9 9 0 0 1 18 0" },
   { href: "/hesabatlar", label: "Hesabatlar", icon: "M7 3h7l5 5v13H7V3Zm7 0v5h5M10 13h6M10 17h6" },
   { href: "/abunelik", label: "Abunəlik", icon: "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z" },

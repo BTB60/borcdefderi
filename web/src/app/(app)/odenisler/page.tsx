@@ -121,7 +121,7 @@ export default function PaymentsPage() {
                   <Td><Badge tone={METHOD_TONE[p.paymentMethod]}>{METHOD_LABEL[p.paymentMethod]}</Badge></Td>
                   <Td className="max-w-[14rem] truncate text-slate-500">{p.description ?? "—"}</Td>
                   <Td className="text-slate-500">{p.recordedByName ?? "—"}</Td>
-                  <Td className="text-right font-semibold tabular-nums">{formatMoney(p.amount)}</Td>
+                  <Td className="text-right font-semibold tabular-nums text-emerald-700">{formatMoney(p.amount)}</Td>
                   <Td className="text-right">
                     <div className="flex items-center justify-end gap-3">
                       <button

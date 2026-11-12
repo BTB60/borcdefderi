@@ -9,6 +9,7 @@ import type { Dashboard } from "@/lib/types";
 import { Alert, Badge, Card, EmptyState, PageHeader, Spinner, StatCard, Table, Td, Th } from "@/components/ui";
 import { FinanceCards } from "@/components/dashboard/FinanceCards";
 import { MoneyCards } from "@/components/dashboard/MoneyCards";
+import { PocketCard } from "@/components/pocket/Pocket";
 
 function BarChart({ data, label }: { data: { label: string; value: number; cash: number; card: number; other: number }[]; label: string }) {
   const max = Math.max(1, ...data.map((d) => d.value));
@@ -74,6 +75,7 @@ export default function DashboardPage() {
     <>
       <PageHeader title="Panel" subtitle="Bütün rəqəmlər birbaşa veritabanından hesablanır" />
 
+      <PocketCard />
       <FinanceCards />
       <MoneyCards />
 
@@ -129,7 +131,7 @@ export default function DashboardPage() {
                     <Td>{formatDateTime(p.paidAt)}</Td>
                     <Td className="font-medium text-navy-800">{p.partyName}</Td>
                     <Td><Badge tone={METHOD_TONE[p.paymentMethod]}>{METHOD_LABEL[p.paymentMethod]}</Badge></Td>
-                    <Td className="text-right font-medium tabular-nums">{formatMoney(p.amount)}</Td>
+                    <Td className="text-right font-medium tabular-nums text-emerald-700">{formatMoney(p.amount)}</Td>
                   </tr>
                 ))}
               </tbody>
@@ -152,7 +154,7 @@ export default function DashboardPage() {
                     <Td className="font-medium text-navy-800">{o.partyName}</Td>
                     <Td className="text-slate-500">{DEBT_TYPE_LABEL[o.debtType]}</Td>
                     <Td>{o.dueDate ? <Badge tone={o.overdue ? "rose" : "slate"}>{formatDate(o.dueDate)}</Badge> : "—"}</Td>
-                    <Td className="text-right font-semibold tabular-nums">{formatMoney(o.remaining)}</Td>
+                    <Td className="text-right font-semibold tabular-nums text-rose-700">{formatMoney(o.remaining)}</Td>
                   </tr>
                 ))}
               </tbody>

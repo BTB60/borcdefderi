@@ -478,7 +478,7 @@ class _DashboardListScreenState extends State<DashboardListScreen> {
             if ((r['overdueDebts'] as num? ?? 0) > 0) 'Gecikmiş borc var',
           ].join('\n')),
           isThreeLine: true,
-          trailing: Text(formatMoney(n('remaining')), style: const TextStyle(fontWeight: FontWeight.w800)),
+          trailing: Text(formatMoney(n('remaining')), style: TextStyle(fontWeight: FontWeight.w800, color: Colors.red.shade700)),
         );
       case 'debt':
         final late = (r['overdueDays'] as num? ?? 0) > 0;
@@ -492,7 +492,8 @@ class _DashboardListScreenState extends State<DashboardListScreen> {
           ].join('\n')),
           isThreeLine: true,
           trailing: Text(formatMoney(widget.kind == 'closed-debts' ? n('amount') : n('remaining')),
-              style: TextStyle(fontWeight: FontWeight.w800, color: late ? Colors.red.shade700 : null)),
+              style: TextStyle(
+                  fontWeight: FontWeight.w800, color: widget.kind == 'closed-debts' ? Colors.green.shade700 : Colors.red.shade700)),
         );
       case 'entry':
         return ListTile(
@@ -504,7 +505,7 @@ class _DashboardListScreenState extends State<DashboardListScreen> {
             'Ödənilib ${formatMoney(n('debtPaid'))} · qalıq ${formatMoney(n('debtRemaining'))}',
           ].join('\n')),
           isThreeLine: true,
-          trailing: Text('+${formatMoney(n('amount'))}', style: const TextStyle(fontWeight: FontWeight.w800)),
+          trailing: Text('+${formatMoney(n('amount'))}', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.red.shade700)),
         );
       default:
         return ListTile(
@@ -512,7 +513,7 @@ class _DashboardListScreenState extends State<DashboardListScreen> {
           title: Text(r['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text('${formatDateTime(DateTime.parse(r['paidAt'] as String))} · '
               '${methodLabels[r['paymentMethod']] ?? r['paymentMethod']} · ${r['recordedByName']}'),
-          trailing: Text(formatMoney(n('amount')), style: const TextStyle(fontWeight: FontWeight.w800)),
+          trailing: Text(formatMoney(n('amount')), style: TextStyle(fontWeight: FontWeight.w800, color: Colors.green.shade700)),
         );
     }
   }

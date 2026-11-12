@@ -160,7 +160,7 @@ export default function PartyProfilePage() {
                     <span className={`absolute -left-[31px] top-1 h-3.5 w-3.5 rounded-full ring-4 ring-white ${e.type.startsWith("PAYMENT") ? "bg-emerald-500" : "bg-violet-600"}`} />
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <p className="text-sm font-medium text-navy-800">{ENTRY_LABEL[e.type]}{!isCustomer && <span className="ml-2 text-xs text-slate-400">{DIRECTION_LABEL[e.debtType]}</span>}</p>
-                      <p className={`font-semibold tabular-nums ${e.type.startsWith("PAYMENT") ? "text-emerald-700" : "text-navy-800"}`}>{e.type.startsWith("PAYMENT") ? "−" : "+"}{formatMoney(Math.abs(e.amount))}</p>
+                      <p className={`font-semibold tabular-nums ${e.type.startsWith("PAYMENT") ? "text-emerald-700" : "text-rose-700"}`}>{e.type.startsWith("PAYMENT") ? "−" : "+"}{formatMoney(Math.abs(e.amount))}</p>
                     </div>
                     <p className="text-xs text-slate-500">
                       {[e.entryDate && formatDate(e.entryDate), e.receiptNumber && `Çek: ${e.receiptNumber}`, e.note, e.actorName].filter(Boolean).join(" · ")}
@@ -182,7 +182,7 @@ export default function PartyProfilePage() {
                         {!isCustomer && <Td className="text-xs">{DIRECTION_LABEL[d.debtType]}</Td>}
                         <Td className="text-right tabular-nums">{formatMoney(d.amount)}</Td>
                         <Td className="text-right tabular-nums text-emerald-700">{formatMoney(d.paidAmount)}</Td>
-                        <Td className="text-right font-semibold tabular-nums">{formatMoney(d.remainingAmount)}</Td>
+                        <Td className={`text-right font-semibold tabular-nums ${d.remainingAmount > 0 ? "text-rose-700" : "text-emerald-700"}`}>{formatMoney(d.remainingAmount)}</Td>
                         <Td><Badge tone={late ? "rose" : STATUS_TONE[d.status]}>{late ? "Gecikmiş" : DEBT_STATUS_LABEL[d.status]}</Badge></Td>
                         <Td className="text-right"><Button variant="ghost" className="px-2.5 py-1.5" onClick={() => setHistoryOf(d)}>Tarixçə</Button></Td>
                       </tr>

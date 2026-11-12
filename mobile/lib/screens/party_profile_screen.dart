@@ -316,8 +316,8 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
         return ListTile(
           contentPadding: EdgeInsets.zero,
           leading: CircleAvatar(
-            backgroundColor: pay ? Colors.green.shade50 : const Color(0xFFEDE9FE),
-            child: Icon(pay ? Icons.south_west : Icons.north_east, color: pay ? Colors.green.shade700 : const Color(0xFF6D28D9), size: 18),
+            backgroundColor: pay ? Colors.green.shade50 : Colors.red.shade50,
+            child: Icon(pay ? Icons.south_west : Icons.north_east, color: pay ? Colors.green.shade700 : Colors.red.shade700, size: 18),
           ),
           title: Text(_entryLabels[e['type']] ?? '${e['type']}', style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text([
@@ -328,7 +328,7 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
           ].join(' · ')),
           trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text('${pay ? '−' : '+'}${formatMoney(amount)}',
-                style: TextStyle(fontWeight: FontWeight.w800, color: pay ? Colors.green.shade700 : navy)),
+                style: TextStyle(fontWeight: FontWeight.w800, color: pay ? Colors.green.shade700 : Colors.red.shade700)),
             Text('qalıq ${formatMoney((e['balanceAfter'] as num).toDouble())}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
           ]),
         );

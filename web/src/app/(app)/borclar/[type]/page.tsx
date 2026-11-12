@@ -157,7 +157,7 @@ export default function DebtSectionPage() {
                     <Td className="max-w-[16rem] truncate text-slate-500">{d.description ?? "—"}</Td>
                     <Td className="text-right tabular-nums">{formatMoney(d.amount)}</Td>
                     <Td className="text-right tabular-nums text-emerald-700">{formatMoney(d.paidAmount)}</Td>
-                    <Td className="text-right font-semibold tabular-nums text-navy-800">{formatMoney(d.remainingAmount)}</Td>
+                    <Td className={`text-right font-semibold tabular-nums ${d.remainingAmount > 0 ? "text-rose-700" : "text-emerald-700"}`}>{formatMoney(d.remainingAmount)}</Td>
                     <Td><Badge tone={STATUS_TONE[d.status]}>{DEBT_STATUS_LABEL[d.status]}</Badge></Td>
                     <Td className="text-right">
                       <div className="flex justify-end gap-1">

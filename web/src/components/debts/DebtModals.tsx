@@ -384,7 +384,7 @@ export function HistoryModal({ debt, onClose }: { debt: Debt; onClose: () => voi
                 </p>
               )}
               <p className="mt-1 text-sm">
-                <span className="tabular-nums">{e.type === "DEBT_INCREASED" ? "+" : ""}{formatMoney(e.amount)}</span>
+                <span className={`font-semibold tabular-nums ${e.type.startsWith("PAYMENT") ? "text-emerald-700" : "text-rose-700"}`}>{e.type === "DEBT_INCREASED" ? "+" : ""}{formatMoney(e.amount)}</span>
                 <span className="ml-2 text-xs text-slate-500">qalıq: {formatMoney(e.balanceAfter)}</span>
               </p>
               {e.paymentId && (

@@ -202,7 +202,8 @@ class _DebtListScreenState extends State<DebtListScreen> {
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
-                                    Text(formatMoney(d.remainingAmount), style: const TextStyle(fontWeight: FontWeight.w700, color: navy)),
+                                    Text(formatMoney(d.remainingAmount),
+                                        style: TextStyle(fontWeight: FontWeight.w700, color: d.isPaid ? Colors.green.shade700 : Colors.red.shade700)),
                                     const SizedBox(height: 4),
                                     StatusChip(d.status),
                                   ],
@@ -510,7 +511,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                           : () => _offerReceipt(e['paymentId'] as String, (e['amount'] as num).toDouble()),
                       leading: Icon(
                         (e['type'] as String).startsWith('PAYMENT') ? Icons.south_west : Icons.receipt_long_outlined,
-                        color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green : navy,
+                        color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green.shade700 : Colors.red.shade700,
                       ),
                       title: Text(_labels[e['type']] ?? '${e['type']}'),
                       subtitle: Text([
@@ -522,7 +523,10 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                       trailing: Text(
                         '${e['type'] == 'DEBT_INCREASED' ? '+' : ''}${formatMoney((e['amount'] as num).toDouble())}\nqalıq ${formatMoney((e['balanceAfter'] as num).toDouble())}',
                         textAlign: TextAlign.right,
-                        style: const TextStyle(fontSize: 12),
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green.shade700 : Colors.red.shade700),
                       ),
                     ),
                 ]);

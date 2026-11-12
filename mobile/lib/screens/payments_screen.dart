@@ -88,7 +88,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                         title: Text(p.partyName),
                         subtitle: Text('${formatDateTime(p.paidAt)} · ${methodLabels[p.paymentMethod]}${p.description == null ? '' : '\n${p.description}'}'),
                         isThreeLine: p.description != null,
-                        trailing: Text(formatMoney(p.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
+                        trailing: Text(formatMoney(p.amount), style: TextStyle(fontWeight: FontWeight.w700, color: Colors.green.shade700)),
                       ),
                     );
                   },

@@ -72,22 +72,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _QuickActions(session: widget.session),
                 FinanceCards(key: _cards, session: widget.session),
                 const SizedBox(height: 22),
-                const Text('Ödəniş üsulları', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const Text('Alınan ödənişlər', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
-                GridView.count(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 1.5,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    StatTile(label: 'Müştəri borcları', value: formatMoney(s.customerDebts)),
-                    StatTile(label: 'Şirkət alacaqları', value: formatMoney(s.companyReceivables)),
-                    StatTile(label: 'Şirkət borcları', value: formatMoney(s.companyPayables)),
-                    StatTile(label: 'Bu gün', value: formatMoney(s.todayTotal), hint: 'Bu ay: ${formatMoney(s.monthTotal)}'),
-                  ],
-                ),
+                Row(children: [
+                  Expanded(child: StatTile(label: 'Bu gün', value: formatMoney(s.todayTotal))),
+                  const SizedBox(width: 12),
+                  Expanded(child: StatTile(label: 'Bu ay', value: formatMoney(s.monthTotal))),
+                ]),
                 const SizedBox(height: 12),
                 Row(children: [
                   Expanded(child: _MiniCard(label: 'Nağd (cəmi)', value: formatMoney(s.cashReceived))),

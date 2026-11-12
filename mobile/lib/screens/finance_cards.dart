@@ -5,6 +5,7 @@ import '../state/session.dart';
 import '../theme.dart';
 import 'account_sheet.dart';
 import 'common.dart';
+import 'parties_screen.dart';
 import 'party_profile_screen.dart';
 
 class _Fig {
@@ -62,19 +63,8 @@ class FinanceCardsState extends State<FinanceCards> {
     reload();
   }
 
-  Future<void> _addPayable() async {
-    final id = await pickParty(context, session: widget.session, isCustomer: false);
-    if (id == null || !mounted) return;
-    final msg = await openAccountSheet(context,
-        session: widget.session, isCustomer: false, partyId: id, mode: AccountMode.charge, initialType: 'COMPANY_PAYABLE');
-    if (msg == null || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    reload();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final me = widget.session.me!;
     return FutureBuilder<Map<String, dynamic>>(
       future: _data,
       builder: (context, snap) {
@@ -110,24 +100,15 @@ class FinanceCardsState extends State<FinanceCards> {
             const SizedBox(width: 12),
             Expanded(
               child: _BigCard(
-                  colors: const [Color(0xFFFB923C), Color(0xFFEA580C)],
-                  icon: Icons.timelapse,
-                  label: 'Aktiv borclar',
-                  value: '${active.count}',
-                  hint: formatMoney(active.sum),
-                  onTap: () => _open('active-debts'),
+                  colors: const [Color(0xFF10B981), Color(0xFF15803D)],
+                  icon: Icons.task_alt,
+                  label: 'Bitmiş borc',
+                  value: '${closed.count}',
+                  hint: 'Bağlanmış: ${formatMoney(closed.sum)}',
+                  onTap: () => _open('closed-debts'),
                   compact: true),
             ),
           ]),
-          const SizedBox(height: 12),
-          _BigCard(
-              colors: const [Color(0xFF10B981), Color(0xFF15803D)],
-              icon: Icons.task_alt,
-              label: 'Bitmiş borc',
-              value: '${closed.count}',
-              hint: 'Cəmi bağlanmış: ${formatMoney(closed.sum)}',
-              onTap: () => _open('closed-debts'),
-              compact: true),
           const SizedBox(height: 12),
           GridView.count(
             crossAxisCount: 2,
@@ -145,15 +126,10 @@ class FinanceCardsState extends State<FinanceCards> {
                   Icons.today_outlined, Colors.deepPurple, () => _open('today-debts')),
               _SmallCard('Gecikmiş borclar', '${_Fig.of(o['overdueDebts']).count}', formatMoney(_Fig.of(o['overdueDebts']).sum),
                   Icons.warning_amber_rounded, Colors.red.shade700, () => _open('overdue-debts')),
-              _SmallCard('Aktiv müştərilər', '${_Fig.of(o['activeCustomers']).count}', 'borcu olanlar', Icons.person_pin_outlined,
-                  Colors.amber.shade800, () => _open('active-customers')),
               _SmallCard('Alınan ödənişlər', formatMoney(_Fig.of(o['paymentsIn']).sum), '${_Fig.of(o['paymentsIn']).count} ödəniş',
                   Icons.south_west, Colors.green.shade700, () => _open('payments-in')),
               _SmallCard('Şirkətlərə borcum', formatMoney(payables.sum), '${payables.count} şirkətə açıq öhdəlik',
                   Icons.north_east, Colors.deepPurple.shade400, () => _open('company-payables')),
-              if (me.can('COMPANY_PAYABLES'))
-                _SmallCard('Şirkət borcu yaz', '+ Əlavə et', 'təchizatçıya borc', Icons.add_business_outlined,
-                    Colors.deepPurple.shade400, _addPayable),
             ],
           ),
         ]);
@@ -338,6 +314,66 @@ class _DashboardListScreenState extends State<DashboardListScreen> {
 
   _ListMeta get _m => _meta[widget.kind]!;
 
+  /// Debt section behind this list when it gets the "+ Müştəri / + Şirkət" and "+ Borc" shortcuts.
+  ({bool isCustomer, String debtType, String permission})? get _shortcut => switch (widget.kind) {
+        'customer-debts' || 'active-customers' => (isCustomer: true, debtType: 'CUSTOMER_DEBT', permission: 'CUSTOMER_DEBTS'),
+        'company-receivables' => (isCustomer: false, debtType: 'COMPANY_RECEIVABLE', permission: 'COMPANY_RECEIVABLES'),
+        'company-payables' => (isCustomer: false, debtType: 'COMPANY_PAYABLE', permission: 'COMPANY_PAYABLES'),
+        _ => null,
+      };
+
+  /// Writes a debt for [partyId], or (when null) lets the user pick the customer / company first.
+  Future<void> _charge({String? partyId}) async {
+    final sc = _shortcut!;
+    final id = partyId ?? await pickParty(context, session: widget.session, isCustomer: sc.isCustomer);
+    if (id == null || !mounted) return;
+    final msg = await openAccountSheet(context,
+        session: widget.session, isCustomer: sc.isCustomer, partyId: id, mode: AccountMode.charge, initialType: sc.debtType);
+    if (msg == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    _load(reset: true);
+  }
+
+  Future<void> _addParty() async {
+    final sc = _shortcut!;
+    final party = await openPartyForm(context, session: widget.session, isCustomer: sc.isCustomer);
+    if (party == null || !mounted) return;
+    // A new customer / company usually comes with its first debt: offer it straight away.
+    await _charge(partyId: party.id);
+    if (mounted) _load(reset: true);
+  }
+
+  void _showAddMenu() {
+    final sc = _shortcut!;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: Icon(sc.isCustomer ? Icons.person_add_alt_1 : Icons.add_business_outlined, color: navy),
+            title: Text(sc.isCustomer ? 'Yeni müştəri' : 'Yeni şirkət'),
+            subtitle: const Text('Əlavə et, sonra borc yaz'),
+            onTap: () {
+              Navigator.pop(ctx);
+              _addParty();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.post_add, color: navy),
+            title: const Text('Borc yaz'),
+            subtitle: Text(sc.isCustomer ? 'Mövcud müştəriyə' : 'Mövcud şirkətə'),
+            onTap: () {
+              Navigator.pop(ctx);
+              _charge();
+            },
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -483,8 +519,17 @@ class _DashboardListScreenState extends State<DashboardListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final sc = _shortcut;
+    final canAdd = sc != null && widget.session.me!.can(sc.permission);
     return Scaffold(
       appBar: AppBar(title: Text(_m.title)),
+      floatingActionButton: canAdd
+          ? FloatingActionButton.extended(
+              onPressed: _showAddMenu,
+              icon: const Icon(Icons.add),
+              label: Text(sc.isCustomer ? 'Müştəri / borc' : 'Şirkət / borc'),
+            )
+          : null,
       body: NotificationListener<ScrollNotification>(
         onNotification: (n) {
           if (n.metrics.pixels > n.metrics.maxScrollExtent - 300 && _items.length < _total && !_loading) _load();
@@ -492,7 +537,7 @@ class _DashboardListScreenState extends State<DashboardListScreen> {
         },
         child: RefreshIndicator(
           onRefresh: () => _load(reset: true),
-          child: ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 24), children: [
+          child: ListView(padding: EdgeInsets.fromLTRB(12, 8, 12, canAdd ? 96 : 24), children: [
             Row(children: [
               Expanded(child: StatTile(label: 'Qeyd sayı', value: '$_total')),
               const SizedBox(width: 10),

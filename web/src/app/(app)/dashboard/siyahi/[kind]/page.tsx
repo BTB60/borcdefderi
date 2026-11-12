@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Input, PageHeader, Select, Spinner, StatCard, Table, Td, Th } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { DEBT_STATUS_LABEL, METHOD_LABEL, formatDate, formatDateTime, formatMoney, todayBaku } from "@/lib/format";
+import { DebtShortcuts, type ShortcutSection } from "@/components/dashboard/DebtShortcuts";
 import type { DashboardListKind, DebtRow, EntryRow, ListPage, PartyRow, PaymentRow } from "@/lib/types";
 
 const META: Record<DashboardListKind, { title: string; subtitle: string; sumLabel: string; shape: "party" | "debt" | "entry" | "payment"; partyFilter?: boolean }> = {
@@ -22,6 +23,14 @@ const META: Record<DashboardListKind, { title: string; subtitle: string; sumLabe
 };
 
 const PAGE = 50;
+
+/** Lists that get the "+ Müştəri / + Şirkət" and "+ Borc" shortcuts, as on their dashboard card. */
+const SHORTCUTS: Partial<Record<DashboardListKind, ShortcutSection>> = {
+  "customer-debts": "customer",
+  "active-customers": "customer",
+  "company-receivables": "receivable",
+  "company-payables": "payable",
+};
 
 function iso(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -62,6 +71,7 @@ export default function DashboardListPage() {
   const [data, setData] = useState<ListPage<unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!meta) return;
@@ -103,7 +113,25 @@ export default function DashboardListPage() {
 
   return (
     <>
-      <PageHeader title={meta.title} subtitle={meta.subtitle} actions={<Link href="/dashboard"><Button variant="outline">← Panel</Button></Link>} />
+      <PageHeader
+        title={meta.title}
+        subtitle={meta.subtitle}
+        actions={
+          <>
+            {SHORTCUTS[kind] && (
+              <DebtShortcuts
+                section={SHORTCUTS[kind]}
+                onSaved={(msg) => {
+                  setNotice(msg);
+                  load();
+                }}
+              />
+            )}
+            <Link href="/dashboard"><Button variant="outline">← Panel</Button></Link>
+          </>
+        }
+      />
+      {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
 
       <section className="mb-5 grid gap-4 sm:grid-cols-2">

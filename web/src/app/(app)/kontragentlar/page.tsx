@@ -27,7 +27,9 @@ function PartiesList() {
   const { can, isOwner } = useAuth();
   const canCustomers = isOwner || can("CUSTOMER_DEBTS");
   const canCompanies = isOwner || can("COMPANY_RECEIVABLES") || can("COMPANY_PAYABLES");
-  const [tab, setTab] = useState<Tab>(canCustomers ? "customers" : "companies");
+  const [tab, setTab] = useState<Tab>(
+    canCompanies && (search.get("tip") === "sirket" || !canCustomers) ? "companies" : "customers",
+  );
   const [q, setQ] = useState("");
   const [applied, setApplied] = useState("");
   const [items, setItems] = useState<Party[] | null>(null);

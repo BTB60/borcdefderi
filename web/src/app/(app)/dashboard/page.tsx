@@ -80,9 +80,6 @@ export default function DashboardPage() {
       <h2 className="mb-3 mt-2 font-serif text-lg font-semibold text-navy-800">Ödəniş üsulları və dinamika</h2>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Əsas göstəricilər">
-        <StatCard label="Müştəri borcları" value={formatMoney(s.customerDebts)} hint="Qalıq məbləğ" tone="navy" />
-        <StatCard label="Şirkət alacaqları" value={formatMoney(s.companyReceivables)} hint="Qalıq məbləğ" tone="emerald" />
-        <StatCard label="Şirkət borcları" value={formatMoney(s.companyPayables)} hint="Ödənilməli qalıq" tone="rose" />
         <StatCard label="Nağd ödənişlər (cəmi)" value={formatMoney(s.cashReceived)} tone="gold" />
         <StatCard label="Kart ödənişləri (cəmi)" value={formatMoney(s.cardReceived)} tone="sky" />
         <StatCard label="Köçürmə və digər (cəmi)" value={formatMoney(s.otherReceived ?? 0)} tone="navy" />

@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Alert, Spinner } from "@/components/ui";
-import { AccountModal, PickPartyModal } from "@/components/debts/AccountModals";
+import { DebtShortcuts } from "@/components/dashboard/DebtShortcuts";
 import { ApiError, api } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
 import { formatMoney } from "@/lib/format";
 import type { DashboardListKind, DashboardOverview } from "@/lib/types";
 
@@ -20,8 +18,6 @@ const ICONS = {
   today: "M7 3v3M17 3v3M4 8h16M5 5h14v15H5V5Zm4 7h2v2H9v-2Z",
   alert: "M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z",
   in: "M12 5v14m0 0-6-6m6 6 6-6",
-  plus: "M12 5v14M5 12h14",
-  report: "M7 3h7l5 5v13H7V3Zm7 0v5h5M10 13h6M10 17h6",
 } as const;
 
 function Icon({ d, className = "h-6 w-6" }: { d: string; className?: string }) {
@@ -49,16 +45,18 @@ function BigCard({ href, gradient, label, value, hint, icon, action }: { href: s
   );
 }
 
-function SmallCard({ href, label, value, hint, icon, tone }: { href: string; label: string; value: string; hint: string; icon: string; tone: string }) {
+function SmallCard({ href, label, value, hint, icon, tone, action }: { href: string; label: string; value: string; hint: string; icon: string; tone: string; action?: ReactNode }) {
   return (
-    <Link href={href} className="group flex items-center gap-4 rounded-2xl border border-slate-200/70 bg-white p-4 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
-      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${tone}`}><Icon d={icon} className="h-5 w-5" /></span>
-      <span className="min-w-0">
+    <div className="group relative flex items-center gap-4 rounded-2xl border border-slate-200/70 bg-white p-4 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg">
+      <Link href={href} className="absolute inset-0 z-0 rounded-2xl" aria-label={`${label} — siyahını aç`} />
+      <span className={`pointer-events-none relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${tone}`}><Icon d={icon} className="h-5 w-5" /></span>
+      <span className="pointer-events-none relative min-w-0 flex-1">
         <span className="block text-xs font-medium uppercase tracking-wider text-slate-500">{label}</span>
         <span className="block truncate font-serif text-xl font-semibold tabular-nums text-navy-800">{value}</span>
         <span className="block text-xs text-slate-400">{hint}</span>
       </span>
-    </Link>
+      {action && <div className="relative z-10 shrink-0">{action}</div>}
+    </div>
   );
 }
 
@@ -66,13 +64,9 @@ const listHref = (k: DashboardListKind) => `/dashboard/siyahi/${k}`;
 
 /** HesabPro 2.0 cards. Every figure comes from /api/dashboard/overview and equals the total of its list. */
 export function FinanceCards() {
-  const router = useRouter();
-  const { can, isOwner } = useAuth();
   const [o, setO] = useState<DashboardOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [pick, setPick] = useState<null | "customer" | "company">(null);
-  const [account, setAccount] = useState<null | { isCustomer: boolean; partyId: string }>(null);
 
   const load = useCallback(() => {
     api<DashboardOverview>("/api/dashboard/overview")
@@ -81,29 +75,17 @@ export function FinanceCards() {
   }, []);
   useEffect(load, [load]);
 
-  const canCustomers = isOwner || can("CUSTOMER_DEBTS");
-  const canPayables = isOwner || can("COMPANY_PAYABLES");
-
   if (error) return <div className="mb-6"><Alert>{error}</Alert></div>;
   if (!o) return <Spinner />;
 
-  const quick = [
-    canCustomers && { label: "Müştəri əlavə et", icon: ICONS.users, onClick: () => router.push("/kontragentlar?yeni=1") },
-    canCustomers && { label: "Borc əlavə et", icon: ICONS.plus, onClick: () => setPick("customer") },
-    { label: "Hesabatlar", icon: ICONS.report, onClick: () => router.push("/hesabatlar") },
-  ].filter(Boolean) as { label: string; icon: string; onClick: () => void }[];
+  const saved = (msg: string) => {
+    setNotice(msg);
+    load();
+  };
 
   return (
     <section className="mb-8 space-y-5" aria-label="Maliyyə kartları">
       {notice && <Alert kind="success">{notice}</Alert>}
-
-      <div className="flex flex-wrap gap-2" aria-label="Sürətli əməliyyatlar">
-        {quick.map((a) => (
-          <button key={a.label} type="button" onClick={a.onClick} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-navy-800 shadow-sm transition hover:border-gold-500 hover:shadow-glow">
-            <Icon d={a.icon} className="h-4 w-4" /> {a.label}
-          </button>
-        ))}
-      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <BigCard
@@ -113,11 +95,7 @@ export function FinanceCards() {
           value={formatMoney(o.companyPayables.sum)}
           hint={`${o.companyPayables.count} şirkətə açıq öhdəlik`}
           icon={ICONS.wallet}
-          action={canPayables ? (
-            <button type="button" onClick={() => setPick("company")} className="rounded-xl bg-white/20 px-3 py-1.5 text-xs font-semibold tracking-wide backdrop-blur transition hover:bg-white/30">
-              + ƏLAVƏ ET
-            </button>
-          ) : undefined}
+          action={<DebtShortcuts section="payable" tone="onColor" onSaved={saved} />}
         />
         <BigCard href={listHref("payments-out")} gradient="from-teal-500 to-cyan-700" label="Ödədiyim" value={formatMoney(o.paymentsOut.sum)} hint={`${o.paymentsOut.count} ödəniş etmişəm`} icon={ICONS.paid} />
         <BigCard href={listHref("active-debts")} gradient="from-orange-400 to-orange-600" label="Aktiv borclar" value={String(o.activeDebts.count)} hint={`Qalıq: ${formatMoney(o.activeDebts.sum)}`} icon={ICONS.active} />
@@ -125,39 +103,14 @@ export function FinanceCards() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <SmallCard href={listHref("customer-debts")} label="Müştəri borcu" value={formatMoney(o.customerDebts.sum)} hint={`${o.customerDebts.count} borclu müştəri`} icon={ICONS.users} tone="bg-navy-50 text-navy-800" />
-        <SmallCard href={listHref("company-receivables")} label="Şirkətlər bizə borcludur" value={formatMoney(o.companyReceivables.sum)} hint={`${o.companyReceivables.count} şirkət`} icon={ICONS.building} tone="bg-sky-50 text-sky-700" />
+        <SmallCard href={listHref("customer-debts")} label="Müştəri borcu" value={formatMoney(o.customerDebts.sum)} hint={`${o.customerDebts.count} borclu müştəri`} icon={ICONS.users} tone="bg-navy-50 text-navy-800"
+          action={<DebtShortcuts section="customer" onSaved={saved} />} />
+        <SmallCard href={listHref("company-receivables")} label="Şirkətlər bizə borcludur" value={formatMoney(o.companyReceivables.sum)} hint={`${o.companyReceivables.count} şirkət`} icon={ICONS.building} tone="bg-sky-50 text-sky-700"
+          action={<DebtShortcuts section="receivable" onSaved={saved} />} />
         <SmallCard href={listHref("today-debts")} label="Bu gün yazılan borclar" value={formatMoney(o.todayDebts.sum)} hint={`${o.todayDebts.count} əməliyyat`} icon={ICONS.today} tone="bg-violet-50 text-violet-700" />
         <SmallCard href={listHref("overdue-debts")} label="Gecikmiş borclar" value={String(o.overdueDebts.count)} hint={`Qalıq: ${formatMoney(o.overdueDebts.sum)}`} icon={ICONS.alert} tone="bg-rose-50 text-rose-700" />
-        <SmallCard href={listHref("active-customers")} label="Aktiv müştərilər" value={String(o.activeCustomers.count)} hint="Qalıq borcu olan müştərilər" icon={ICONS.users} tone="bg-amber-50 text-amber-700" />
         <SmallCard href={listHref("payments-in")} label="Alınan ödənişlər" value={formatMoney(o.paymentsIn.sum)} hint={`${o.paymentsIn.count} ödəniş qəbul edilib`} icon={ICONS.in} tone="bg-emerald-50 text-emerald-700" />
       </div>
-
-      {pick && (
-        <PickPartyModal
-          isCustomer={pick === "customer"}
-          title={pick === "customer" ? "Borc əlavə et — müştərini seçin" : "Toplam borcum — şirkəti seçin"}
-          onClose={() => setPick(null)}
-          onPick={(id) => {
-            setAccount({ isCustomer: pick === "customer", partyId: id });
-            setPick(null);
-          }}
-        />
-      )}
-      {account && (
-        <AccountModal
-          mode="charge"
-          isCustomer={account.isCustomer}
-          partyId={account.partyId}
-          initialType={account.isCustomer ? "CUSTOMER_DEBT" : "COMPANY_PAYABLE"}
-          onClose={() => setAccount(null)}
-          onSaved={(msg) => {
-            setAccount(null);
-            setNotice(msg);
-            load();
-          }}
-        />
-      )}
     </section>
   );
 }

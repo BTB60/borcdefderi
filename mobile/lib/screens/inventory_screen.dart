@@ -54,13 +54,54 @@ class ProductThumb extends StatelessWidget {
     if (product == null || product!['hasImage'] != true) return box(placeholder);
     return FutureBuilder<Uint8List?>(
       future: _productImage(session, product!),
-      builder: (context, snap) => box(snap.data == null
-          ? (snap.connectionState == ConnectionState.done
+      builder: (context, snap) => snap.data == null
+          ? box(snap.connectionState == ConnectionState.done
               ? placeholder
               : SizedBox(width: size * 0.3, height: size * 0.3, child: const CircularProgressIndicator(strokeWidth: 2)))
-          : Image.memory(snap.data!, width: size, height: size, fit: BoxFit.cover)),
+          : GestureDetector(
+              onTap: () => showProductImage(context, snap.data!, '${product!['name'] ?? ''}'),
+              child: box(Image.memory(snap.data!, width: size, height: size, fit: BoxFit.cover)),
+            ),
     );
   }
+}
+
+/// Shows a product picture full screen; pinch to zoom, tap or swipe the back button to close.
+Future<void> showProductImage(BuildContext context, Uint8List bytes, String title) {
+  return showDialog<void>(
+    context: context,
+    barrierColor: Colors.black,
+    builder: (ctx) => Dialog.fullscreen(
+      backgroundColor: Colors.black,
+      child: Stack(children: [
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: () => Navigator.pop(ctx),
+            child: InteractiveViewer(
+              minScale: 1,
+              maxScale: 5,
+              child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
+            ),
+          ),
+        ),
+        SafeArea(
+          child: Row(children: [
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white),
+              tooltip: 'Bağla',
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            Expanded(
+              child: Text(title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+            ),
+          ]),
+        ),
+      ]),
+    ),
+  );
 }
 
 /// Lets the user take or choose a product picture. Returns null when cancelled or the file is too big.

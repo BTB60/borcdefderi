@@ -361,6 +361,8 @@ export interface AdminStore {
   pendingPlanCode: string | null;
   pendingPlanName: string | null;
   pendingAt: string | null;
+  /** When the admin last sent a renewal reminder (WhatsApp / call / e-mail); absent when never. */
+  lastRemindedAt?: string | null;
   createdAt: string;
 }
 

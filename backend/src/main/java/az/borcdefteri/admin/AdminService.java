@@ -55,7 +55,9 @@ public class AdminService {
                          ORDER BY sb.end_date DESC LIMIT 1) AS active_plan,
                        (SELECT MAX(sb.end_date) FROM subscriptions sb
                          WHERE sb.store_id = s.id AND sb.status IN ('ACTIVE', 'EXPIRED')) AS subscription_end,
-                       pend.code AS pending_plan_code, pend.name AS pending_plan_name, pend.requested_at AS pending_at
+                       pend.code AS pending_plan_code, pend.name AS pending_plan_name, pend.requested_at AS pending_at,
+                       (SELECT MAX(a.created_at) FROM audit_logs a
+                         WHERE a.store_id = s.id AND a.action = 'SUBSCRIPTION_REMINDED') AS last_reminded_at
                 FROM stores s
                 LEFT JOIN store_members m ON m.store_id = s.id AND m.role = 'STORE_OWNER'
                 LEFT JOIN users u ON u.id = m.user_id
@@ -93,6 +95,7 @@ public class AdminService {
                     row.put("pendingPlanCode", rs.getString("pending_plan_code"));
                     row.put("pendingPlanName", rs.getString("pending_plan_name"));
                     row.put("pendingAt", rs.getObject("pending_at", OffsetDateTime.class));
+                    row.put("lastRemindedAt", rs.getObject("last_reminded_at", OffsetDateTime.class));
                     row.put("createdAt", rs.getObject("created_at", OffsetDateTime.class));
                     return row;
                 })
@@ -110,6 +113,26 @@ public class AdminService {
         audit.log(storeId, tenant.currentUserId(), "SUSPENDED".equals(status) ? "STORE_SUSPENDED" : "STORE_ACTIVATED",
                 "STORE", storeId.toString(), "Status: " + status);
         return Map.of("id", storeId, "status", status);
+    }
+
+    /**
+     * Records that the admin reminded the store about its subscription (WhatsApp, call or e-mail), so the
+     * "Bitən abunəliklər" list shows when the store was last contacted and nobody is messaged twice.
+     */
+    @Transactional
+    public Map<String, Object> remind(UUID storeId, String channel) {
+        tenant.requireSuperAdmin();
+        boolean exists = jdbc.sql("SELECT COUNT(*) FROM stores WHERE id = :id").param("id", storeId)
+                .query(Long.class).single() > 0;
+        if (!exists) {
+            throw ApiException.notFound("Mağaza tapılmadı");
+        }
+        audit.log(storeId, tenant.currentUserId(), "SUBSCRIPTION_REMINDED", "STORE", storeId.toString(),
+                "Abunəlik xatırlatması: " + channel);
+        OffsetDateTime at = jdbc.sql("""
+                SELECT MAX(created_at) FROM audit_logs WHERE store_id = :id AND action = 'SUBSCRIPTION_REMINDED'
+                """).param("id", storeId).query(OffsetDateTime.class).single();
+        return Map.of("id", storeId, "channel", channel, "remindedAt", at);
     }
 
     public Map<String, Object> revenue() {

@@ -64,6 +64,8 @@ public class AdminController {
 
     public record ActivateRequest(@NotBlank String planCode, String period) {}
 
+    public record RemindRequest(@NotNull @Pattern(regexp = "WHATSAPP|PHONE|EMAIL") String channel) {}
+
     private final AdminService admin;
     private final SubscriptionService subscriptions;
     private final PlanService plans;
@@ -92,6 +94,12 @@ public class AdminController {
     @PostMapping("/stores/{id}/extend")
     public Map<String, LocalDate> extend(@PathVariable UUID id, @Valid @RequestBody ExtendRequest req) {
         return Map.of("endDate", subscriptions.extend(id, req.days()));
+    }
+
+    /** Marks that the store owner was reminded to renew (the message itself is sent from the admin's phone/e-mail). */
+    @PostMapping("/stores/{id}/remind")
+    public Map<String, Object> remind(@PathVariable UUID id, @Valid @RequestBody RemindRequest req) {
+        return admin.remind(id, req.channel());
     }
 
     /** Activates (or renews) the store's subscription with the chosen package after the payment receipt is checked. */

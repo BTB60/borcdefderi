@@ -8,15 +8,17 @@ import { TemporaryPasswordModal, type TemporaryPassword } from "@/components/Pas
 import { PlansTab } from "@/components/admin/PlansTab";
 import { PaymentSettingsTab } from "@/components/admin/PaymentSettingsTab";
 import { PaymentRequestsTab } from "@/components/admin/PaymentRequestsTab";
+import { ExpiringTab } from "@/components/admin/ExpiringTab";
 import { optionLabel } from "@/lib/plans";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { AdminRevenue, AdminStore, AuditEntry, Plan } from "@/lib/types";
 
-type Tab = "stores" | "subscriptions" | "plans" | "revenue" | "users" | "audit" | "settings";
+type Tab = "stores" | "expiring" | "subscriptions" | "plans" | "revenue" | "users" | "audit" | "settings";
 
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "stores", label: "Mağazalar" },
+  { key: "expiring", label: "Bitən abunəliklər" },
   { key: "subscriptions", label: "Ödəniş sorğuları" },
   { key: "plans", label: "Abunəlik paketləri" },
   { key: "revenue", label: "Gəlir" },
@@ -50,6 +52,7 @@ export default function AdminPage() {
       {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
 
       {tab === "stores" && <StoresTab onError={setError} onNotice={setNotice} />}
+      {tab === "expiring" && <ExpiringStoresTab onError={setError} onNotice={setNotice} />}
       {tab === "subscriptions" && <PaymentRequestsTab onError={setError} onNotice={setNotice} />}
       {tab === "plans" && <PlansTab onError={setError} onNotice={setNotice} />}
       {tab === "revenue" && <RevenueTab onError={setError} />}
@@ -87,6 +90,7 @@ const ACTION_LABEL: Record<string, string> = {
   SUBSCRIPTION_ACTIVATED: "Abunəlik aktiv edildi",
   SUBSCRIPTION_REJECTED: "Abunəlik rədd edildi",
   SUBSCRIPTION_EXTENDED: "Abunəlik uzadıldı",
+  SUBSCRIPTION_REMINDED: "Abunəlik xatırladıldı",
   STORE_SUSPENDED: "Mağaza dayandırıldı",
   STORE_ACTIVATED: "Mağaza bərpa edildi",
   PLAN_UPDATED: "Paket dəyişdirildi",
@@ -103,6 +107,52 @@ function urgency(s: AdminStore, now: number): number {
   if (s.pendingPlanCode) return -2e15 + (Number.isFinite(left) ? left : 0);
   if (s.subscriptionState === "EXPIRED") return -1e15 + left;
   return left;
+}
+
+/** "Bitən abunəliklər": reminder list plus the same renew / extend dialogs as the stores tab. */
+function ExpiringStoresTab({ onError, onNotice }: TabProps) {
+  const [activating, setActivating] = useState<AdminStore | null>(null);
+  const [extending, setExtending] = useState<AdminStore | null>(null);
+  const [reload, setReload] = useState(0);
+  return (
+    <>
+      <ExpiringTab
+        onError={onError}
+        onNotice={onNotice}
+        reload={reload}
+        actions={(s) => (
+          <>
+            <Button variant="outline" onClick={() => setActivating(s)}>{s.activePlan ? "Yenilə" : "Aktiv et"}</Button>
+            {s.activePlan && <Button variant="ghost" onClick={() => setExtending(s)}>Uzat</Button>}
+          </>
+        )}
+      />
+      {activating && (
+        <ActivateModal
+          store={activating}
+          onClose={() => setActivating(null)}
+          onDone={(planName) => {
+            setActivating(null);
+            onNotice?.(`“${activating.name}” üçün ${planName} abunəliyi aktiv edildi`);
+            setReload((r) => r + 1);
+          }}
+          onError={(m) => onError(m)}
+        />
+      )}
+      {extending && (
+        <ExtendModal
+          store={extending}
+          onClose={() => setExtending(null)}
+          onDone={() => {
+            setExtending(null);
+            onNotice?.("Abunəlik uzadıldı");
+            setReload((r) => r + 1);
+          }}
+          onError={(m) => onError(m)}
+        />
+      )}
+    </>
+  );
 }
 
 function StoresTab({ onError, onNotice }: TabProps) {

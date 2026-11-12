@@ -35,10 +35,17 @@ class MemoryTokenStore implements TokenStore {
 /// Holds the signed-in user and performs auth calls against the shared REST API.
 class Session extends ChangeNotifier {
   Session({required this.api, required this.tokens}) {
+    // A 401 from one request does not always mean the session ended (an older server answers 401 for an
+    // endpoint it does not have). Sign out only when the token itself is rejected.
     api.onUnauthorized = () {
-      if (me != null) {
-        _clear().then((_) => notifyListeners());
-      }
+      if (me == null || _verifying) return;
+      _verifying = true;
+      api.get('/api/auth/me').then<void>((_) {}, onError: (Object e) async {
+        if (e is ApiException && e.status == 401 && me != null) {
+          await _clear();
+          notifyListeners();
+        }
+      }).whenComplete(() => _verifying = false);
     };
     // The subscription ran out while the app was open: reload "me" so the app switches to the expired screen.
     api.onSubscriptionRequired = () {
@@ -50,6 +57,7 @@ class Session extends ChangeNotifier {
   }
 
   bool _refreshing = false;
+  bool _verifying = false;
 
   /// True when the store's subscription has ended (the server then blocks every business section).
   bool get subscriptionBlocked {

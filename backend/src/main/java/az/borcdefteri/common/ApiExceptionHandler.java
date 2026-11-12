@@ -8,6 +8,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -18,6 +19,15 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Map<String, Object>> handleApi(ApiException ex) {
         return ResponseEntity.status(ex.getStatus()).body(body(ex.getCode(), ex.getMessage(), null));
+    }
+
+    /**
+     * Unknown API path: answer 404 directly. Left to the servlet container it becomes an /error dispatch, which
+     * the security chain would turn into 401 — and the apps sign the user out on 401.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResource(NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body("NOT_FOUND", "Belə ünvan yoxdur", null));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

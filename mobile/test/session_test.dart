@@ -47,7 +47,7 @@ void main() {
     expect(await tokens.read(), 'valid-token');
   });
 
-  test('a 401 on any request after login signs the user out', () async {
+  test('a 401 after login signs the user out once the token itself is rejected', () async {
     var calls = 0;
     final client = MockClient((req) async {
       calls++;
@@ -60,10 +60,28 @@ void main() {
     final session = Session(api: ApiClient(baseUrl: 'http://x', httpClient: client), tokens: tokens);
     await session.login('o@x.az', 'Owner#Passw0rd');
     await expectLater(session.api.get('/api/debts'), throwsA(isA<ApiException>()));
-    await Future<void>.delayed(Duration.zero);
-    expect(calls, 2);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(calls, 3); // login, debts, then /api/auth/me to confirm
     expect(session.isSignedIn, isFalse);
     expect(await tokens.read(), isNull);
+  });
+
+  test('a 401 from one endpoint does not sign out while the token is still valid', () async {
+    // An older server answers 401 for an endpoint it does not have (e.g. /api/pocket).
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/auth/login') {
+        return http.Response(jsonEncode({'token': 't', 'expiresInSeconds': 1, 'me': _me()}), 200);
+      }
+      if (req.url.path == '/api/auth/me') return http.Response(jsonEncode(_me()), 200);
+      return http.Response.bytes(utf8.encode(jsonEncode({'error': 'UNAUTHORIZED', 'message': 'Giriş tələb olunur'})), 401);
+    });
+    final tokens = MemoryTokenStore();
+    final session = Session(api: ApiClient(baseUrl: 'http://x', httpClient: client), tokens: tokens);
+    await session.login('o@x.az', 'Owner#Passw0rd');
+    await expectLater(session.api.get('/api/pocket'), throwsA(isA<ApiException>()));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(session.isSignedIn, isTrue);
+    expect(await tokens.read(), 't');
   });
 
   test('receipt PDF is downloaded as bytes with the bearer token', () async {

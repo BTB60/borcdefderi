@@ -59,4 +59,12 @@ class PocketMoneyTest extends IntegrationTestBase {
                 .andExpect(status().isNoContent());
         get(owner, "/api/pocket").andExpect(jsonPath("$.closingBalance", is(130.0)));
     }
+
+    @Test
+    void unknownApiPathIsNotFoundForSignedInUser() throws Exception {
+        // The apps sign out on 401, so a missing endpoint (older server) must answer 404, never 401.
+        String owner = register("Ünvan Mağazası");
+        get(owner, "/api/no-such-endpoint").andExpect(status().isNotFound()).andExpect(jsonPath("$.error", is("NOT_FOUND")));
+        get(null, "/api/no-such-endpoint").andExpect(status().isUnauthorized());
+    }
 }

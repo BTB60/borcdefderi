@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'api/api_client.dart';
 import 'config.dart';
+import 'screens/admin_screens.dart';
 import 'screens/auth_screens.dart';
 import 'screens/home_shell.dart';
 import 'screens/password_screens.dart';
@@ -72,6 +73,9 @@ class _BorcdefteriAppState extends State<BorcdefteriApp> {
           }
           if (session.me!.mustChangePassword) {
             return ForcePasswordChangeScreen(session: session);
+          }
+          if (session.me!.isSuperAdmin) {
+            return AdminHome(session: session);
           }
           if (session.subscriptionBlocked) {
             return SubscriptionExpiredScreen(session: session);

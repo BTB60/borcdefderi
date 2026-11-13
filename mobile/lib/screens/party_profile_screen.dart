@@ -12,6 +12,7 @@ import 'account_sheet.dart';
 import 'common.dart';
 import 'debts_screen.dart';
 import 'parties_screen.dart';
+import 'payment_edit_sheet.dart';
 
 const _sectionPermission = {
   'CUSTOMER_DEBT': 'CUSTOMER_DEBTS',
@@ -70,7 +71,9 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
     return _Profile(res[0] as Map<String, dynamic>, (res[1] as List).cast<Map<String, dynamic>>());
   }
 
-  void _reload() => setState(() => _data = _fetch());
+  void _reload() => setState(() {
+        _data = _fetch();
+      });
 
   bool _can(String debtType) => widget.session.me!.can(_sectionPermission[debtType]!);
 
@@ -364,15 +367,39 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
 
   Widget _paymentsTab(_Profile p) {
     if (p.payments.isEmpty) return const EmptyState(title: 'Ödəniş yoxdur');
+    final owner = widget.session.me!.isOwner;
     return ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 24), children: [
       for (final pay in p.payments)
         ListTile(
-          leading: const Icon(Icons.south_west, color: Colors.green),
-          title: Text(methodLabels[pay.paymentMethod] ?? pay.paymentMethod),
-          subtitle: Text([formatDateTime(pay.paidAt), if (pay.description != null) pay.description!].join(' · ')),
-          trailing: Text(formatMoney(pay.amount), style: TextStyle(fontWeight: FontWeight.w700, color: Colors.green.shade700)),
+          leading: Icon(pay.isVoided ? Icons.block : Icons.south_west, color: pay.isVoided ? Colors.red.shade400 : Colors.green),
+          title: Text(methodLabels[pay.paymentMethod] ?? pay.paymentMethod,
+              style: pay.isVoided ? TextStyle(color: Colors.grey.shade600, decoration: TextDecoration.lineThrough) : null),
+          subtitle: Text([
+            formatDateTime(pay.paidAt),
+            if (pay.isVoided) 'Ləğv edildi${pay.voidReason == null ? '' : ': ${pay.voidReason}'}',
+            if (pay.description != null) pay.description!,
+          ].join(' · ')),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(formatMoney(pay.amount),
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: pay.isVoided ? Colors.grey.shade500 : Colors.green.shade700,
+                    decoration: pay.isVoided ? TextDecoration.lineThrough : null)),
+            if (owner && !pay.isVoided)
+              IconButton(tooltip: 'Düzəlt / ləğv et', icon: const Icon(Icons.more_vert), onPressed: () => _paymentActions(pay)),
+          ]),
+          onTap: owner && !pay.isVoided ? () => _paymentActions(pay) : null,
         ),
     ]);
+  }
+
+  /// Owner only: edit or cancel one of this customer's / company's payments; the card and its debts reload.
+  Future<void> _paymentActions(Payment pay) async {
+    final changed = await showPaymentActions(context, widget.session, pay);
+    if (changed == null || !mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(changed.isVoided ? 'Ödəniş ləğv edildi, borc geri qaytarıldı' : 'Ödəniş düzəldildi')));
+    _reload();
   }
 }
 

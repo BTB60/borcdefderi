@@ -598,46 +598,61 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                 final entries = snap.data!;
                 final owner = widget.session.me!.isOwner;
                 return Column(children: [
-                  for (final (i, e) in entries.indexed)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      onTap: owner && e['type'] == 'DEBT_INCREASED' && e['cancelled'] != true
-                          ? () => _cancelIncrease(e)
-                          : e['paymentId'] == null || e['type'] == 'REVERSAL'
-                          ? null
-                          : owner && _isLivePayment(entries, i)
-                              ? () => _paymentTapped(e['paymentId'] as String, (e['amount'] as num).toDouble())
-                              : !_canNotify
-                                  ? null
-                                  : () => _offerReceipt(e['paymentId'] as String, (e['amount'] as num).toDouble()),
-                      leading: Icon(
-                        (e['type'] as String).startsWith('PAYMENT') ? Icons.south_west : Icons.receipt_long_outlined,
-                        color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green.shade700 : Colors.red.shade700,
-                      ),
-                      title: Text([
-                        e['reversesEntryId'] != null ? 'Borc artımı ləğv edildi' : _labels[e['type']] ?? '${e['type']}',
-                        if (e['cancelled'] == true) '(ləğv edilib)',
-                      ].join(' ')),
-                      subtitle: Text([
-                        '${formatDateTime(DateTime.parse(e['createdAt'] as String))} · ${e['actorName']}',
-                        if (e['entryDate'] != null) 'Tarix: ${formatDate(DateTime.parse(e['entryDate'] as String))}',
-                        if (e['receiptNumber'] != null) 'Çek: ${e['receiptNumber']}',
-                        if (e['note'] != null) '${e['note']}',
-                      ].join('\n')),
-                      trailing: Text(
-                        '${e['type'] == 'DEBT_INCREASED' ? '+' : ''}${formatMoney((e['amount'] as num).toDouble())}\nqalıq ${formatMoney((e['balanceAfter'] as num).toDouble())}',
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green.shade700 : Colors.red.shade700),
-                      ),
-                    ),
+                  for (final (i, e) in entries.indexed) _historyTile(entries, i, e, owner),
                 ]);
               },
             ),
           ],
         ),
+    );
+  }
+
+  /// One history row. The owner gets a visible ⋮ for a live payment (edit / cancel) or an uncancelled "Borc artırıldı".
+  Widget _historyTile(List<Map<String, dynamic>> entries, int i, Map<String, dynamic> e, bool owner) {
+    final VoidCallback? ownerAction = !owner
+        ? null
+        : e['type'] == 'DEBT_INCREASED' && e['cancelled'] != true
+            ? () => _cancelIncrease(e)
+            : e['paymentId'] != null && e['type'] != 'REVERSAL' && _isLivePayment(entries, i)
+                ? () => _paymentTapped(e['paymentId'] as String, (e['amount'] as num).toDouble())
+                : null;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      onTap: owner && e['type'] == 'DEBT_INCREASED' && e['cancelled'] != true
+          ? () => _cancelIncrease(e)
+          : e['paymentId'] == null || e['type'] == 'REVERSAL'
+          ? null
+          : owner && _isLivePayment(entries, i)
+              ? () => _paymentTapped(e['paymentId'] as String, (e['amount'] as num).toDouble())
+              : !_canNotify
+                  ? null
+                  : () => _offerReceipt(e['paymentId'] as String, (e['amount'] as num).toDouble()),
+      leading: Icon(
+        (e['type'] as String).startsWith('PAYMENT') ? Icons.south_west : Icons.receipt_long_outlined,
+        color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green.shade700 : Colors.red.shade700,
+      ),
+      title: Text([
+        e['reversesEntryId'] != null ? 'Borc artımı ləğv edildi' : _labels[e['type']] ?? '${e['type']}',
+        if (e['cancelled'] == true) '(ləğv edilib)',
+      ].join(' ')),
+      subtitle: Text([
+        '${formatDateTime(DateTime.parse(e['createdAt'] as String))} · ${e['actorName']}',
+        if (e['entryDate'] != null) 'Tarix: ${formatDate(DateTime.parse(e['entryDate'] as String))}',
+        if (e['receiptNumber'] != null) 'Çek: ${e['receiptNumber']}',
+        if (e['note'] != null) '${e['note']}',
+      ].join('\n')),
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(
+        '${e['type'] == 'DEBT_INCREASED' ? '+' : ''}${formatMoney((e['amount'] as num).toDouble())}\nqalıq ${formatMoney((e['balanceAfter'] as num).toDouble())}',
+        textAlign: TextAlign.right,
+        style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green.shade700 : Colors.red.shade700),
+        ),
+        if (ownerAction != null)
+          IconButton(tooltip: 'Düzəlt / ləğv et', icon: const Icon(Icons.more_vert), onPressed: ownerAction),
+      ]),
     );
   }
 

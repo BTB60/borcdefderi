@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'api/api_client.dart';
 import 'config.dart';
@@ -42,6 +43,9 @@ class _BorcdefteriAppState extends State<BorcdefteriApp> {
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       locale: const Locale('az'),
+      // Material texts (date pickers, dialogs) in Azerbaijani; without these delegates every date picker fails.
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      supportedLocales: const [Locale('az'), Locale('en')],
       home: ListenableBuilder(
         listenable: widget.session,
         builder: (context, _) {

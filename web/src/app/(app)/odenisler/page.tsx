@@ -153,7 +153,7 @@ export default function PaymentsPage() {
                       </button>
                       {(() => {
                         const href = !p.voidedAt && p.debtType !== "COMPANY_PAYABLE" && p.receiptUrl
-                          ? waLink(p.partyPhone, receiptMessageText(me?.storeName ?? "", p.partyName, p.amount, p.receiptUrl))
+                          ? waLink(p.partyPhone, receiptMessageText(me?.storeName ?? "", p.partyName, p.amount, p.receiptUrl, p.paidAt))
                           : null;
                         return href ? (
                           <a href={href} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-emerald-600 hover:text-emerald-500" title="Çeki WhatsApp ilə müştəriyə göndər">

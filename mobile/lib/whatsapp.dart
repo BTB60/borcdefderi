@@ -29,8 +29,8 @@ String paymentConfirmationText(String store, String party, double paid, double r
   return 'Hörmətli $party, "$store" mağazasına ${formatMoney(paid)} ödənişiniz qəbul edildi. $rest Təşəkkür edirik!$receipt';
 }
 
-String receiptMessageText(String store, String party, double paid, String receiptUrl) =>
-    'Hörmətli $party, "$store" mağazasına ${formatMoney(paid)} ödənişinizin çeki: $receiptUrl';
+String receiptMessageText(String store, String party, double paid, String receiptUrl, {DateTime? paidAt}) =>
+    'Hörmətli $party, "$store" mağazasına ${formatMoney(paid)}${paidAt == null ? '' : ' (${formatDateTime(paidAt)})'} ödənişinizin çeki: $receiptUrl';
 
 /// Values that fill the customer card's WhatsApp templates.
 class TemplateVars {

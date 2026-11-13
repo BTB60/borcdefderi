@@ -1,4 +1,4 @@
-import { formatMoney } from "./format";
+import { formatDateTime, formatMoney } from "./format";
 
 /**
  * Azerbaijani phone → international digits for wa.me links.
@@ -34,8 +34,9 @@ export function paymentConfirmationText(store: string, party: string, paid: numb
 }
 
 /** Message used when (re)sending a receipt from the payments list. */
-export function receiptMessageText(store: string, party: string, paid: number, receiptUrl: string): string {
-  return `Hörmətli ${party}, "${store}" mağazasına ${formatMoney(paid)} ödənişinizin çeki: ${receiptUrl}`;
+export function receiptMessageText(store: string, party: string, paid: number, receiptUrl: string, paidAt?: string | null): string {
+  const when = paidAt ? ` (${formatDateTime(paidAt)})` : "";
+  return `Hörmətli ${party}, "${store}" mağazasına ${formatMoney(paid)}${when} ödənişinizin çeki: ${receiptUrl}`;
 }
 
 /** WhatsApp Web (for computers without the WhatsApp app). */

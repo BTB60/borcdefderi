@@ -48,6 +48,7 @@ public class PaymentReportService {
     private static final ZoneId BAKU = ZoneId.of("Asia/Baku");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy");
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
     private static final Color NAVY = new Color(0x10, 0x1C, 0x35);
 
     private final PaymentService payments;
@@ -118,7 +119,9 @@ public class PaymentReportService {
 
             PdfPTable t = new PdfPTable(new float[]{1.1f, 1.6f});
             t.setWidthPercentage(100);
-            row(t, "Tarix", r.paidAt().atZoneSameInstant(BAKU).format(DATE_TIME), label, value);
+            var paidLocal = r.paidAt().atZoneSameInstant(BAKU);
+            row(t, "Tarix", paidLocal.format(DATE), label, value);
+            row(t, "Saat", paidLocal.format(TIME), label, value);
             row(t, r.debtType().isCustomer() ? "Müştəri" : "Şirkət", nz(r.partyName()), label, value);
             if (r.partyPhone() != null) {
                 row(t, "Telefon", r.partyPhone(), label, value);

@@ -189,7 +189,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
         widget.session.api.get('/api/products/summary'),
       ]);
 
-  void _reload() => setState(() => _data = _fetch());
+  void _reload() => setState(() {
+        _data = _fetch();
+      });
 
   Future<void> _sheet(Widget child) async {
     final msg = await showModalBottomSheet<String>(

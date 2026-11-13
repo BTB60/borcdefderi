@@ -63,7 +63,9 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
 
   Future<List<dynamic>> _fetch() async => await widget.session.api.get('/api/stock-counts') as List<dynamic>;
 
-  void _reload() => setState(() => _data = _fetch());
+  void _reload() => setState(() {
+        _data = _fetch();
+      });
 
   Future<void> _openCount(String id) async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => StockCountScreen(session: widget.session, countId: id)));
@@ -304,30 +306,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
 
   /// Asks the counted quantity of [line] and saves it. Returns true when saved.
   Future<bool> _enter(Map<String, dynamic> line) async {
-    final ctl = TextEditingController(text: line['countedQty'] == null ? '' : _q(line['countedQty']));
-    final result = await showDialog<({String? value})>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${line['name']}'),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Sistemdə: ${_q(line['systemQty'])} ${line['unit']}', style: TextStyle(color: Colors.grey.shade700)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: ctl,
-            autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(labelText: 'Sayılan miqdar', suffixText: '${line['unit']}'),
-            onSubmitted: (v) => Navigator.pop(ctx, (value: v)),
-          ),
-        ]),
-        actions: [
-          if (line['countedQty'] != null) TextButton(onPressed: () => Navigator.pop(ctx, (value: null)), child: const Text('Təmizlə')),
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ləğv et')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, (value: ctl.text)), child: const Text('Saxla')),
-        ],
-      ),
-    );
-    ctl.dispose();
+    final result = await showDialog<({String? value})>(context: context, builder: (_) => _QtyDialog(line: line));
     if (result == null || !mounted) return false;
     final raw = result.value?.trim().replaceAll(',', '.');
     if (raw != null && raw.isEmpty) return false;
@@ -564,5 +543,51 @@ class _StockCountScreenState extends State<StockCountScreen> {
           ),
         ),
     ]);
+  }
+}
+
+/// Counted-quantity dialog; owns its text controller so it is disposed only after the dialog is gone.
+/// Pops with (value: text) to save, (value: null) to clear, or nothing when cancelled.
+class _QtyDialog extends StatefulWidget {
+  const _QtyDialog({required this.line});
+
+  final Map<String, dynamic> line;
+
+  @override
+  State<_QtyDialog> createState() => _QtyDialogState();
+}
+
+class _QtyDialogState extends State<_QtyDialog> {
+  late final TextEditingController _ctl =
+      TextEditingController(text: widget.line['countedQty'] == null ? '' : _q(widget.line['countedQty']));
+
+  @override
+  void dispose() {
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final line = widget.line;
+    return AlertDialog(
+      title: Text('${line['name']}'),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Sistemdə: ${_q(line['systemQty'])} ${line['unit']}', style: TextStyle(color: Colors.grey.shade700)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _ctl,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(labelText: 'Sayılan miqdar', suffixText: '${line['unit']}'),
+          onSubmitted: (v) => Navigator.pop(context, (value: v)),
+        ),
+      ]),
+      actions: [
+        if (line['countedQty'] != null) TextButton(onPressed: () => Navigator.pop(context, (value: null)), child: const Text('Təmizlə')),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Ləğv et')),
+        FilledButton(onPressed: () => Navigator.pop(context, (value: _ctl.text)), child: const Text('Saxla')),
+      ],
+    );
   }
 }

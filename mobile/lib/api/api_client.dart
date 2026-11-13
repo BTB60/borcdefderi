@@ -41,9 +41,12 @@ class ApiClient {
   /// Called when the server answers 402 SUBSCRIPTION_REQUIRED (the store's subscription ended).
   void Function()? onSubscriptionRequired;
 
+  /// [path] may carry its own query (e.g. `/export?format=pdf`); it is merged with [query] instead of being escaped.
   Uri _uri(String path, [Map<String, String>? query]) {
     final base = Uri.parse(baseUrl);
-    return base.replace(path: path, queryParameters: (query == null || query.isEmpty) ? null : query);
+    final rel = Uri.parse(path);
+    final q = {...rel.queryParameters, ...?query};
+    return base.replace(path: rel.path, queryParameters: q.isEmpty ? null : q);
   }
 
   Map<String, String> _headers({bool json = false}) => {
@@ -59,7 +62,7 @@ class ApiClient {
   Future<List<int>> getBytes(String path) async {
     final http.Response res;
     try {
-      res = await _http.get(_uri(path), headers: _headers()).timeout(_timeout);
+      res = await _http.get(_uri(path), headers: {..._headers(), 'Accept': '*/*'}).timeout(_timeout);
     } on http.ClientException {
       throw const ApiException(0, 'NETWORK', 'Serverlə əlaqə qurula bilmədi. İnternet bağlantınızı yoxlayın.');
     } on TimeoutException {

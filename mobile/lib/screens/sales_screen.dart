@@ -209,9 +209,21 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
   }
 
   double get _subtotal => _cart.fold<double>(0, (s, l) => s + l.total);
-  double get _total => ((_subtotal - _p(_discount.text)).clamp(0, double.infinity) * 100).roundToDouble() / 100;
-  double get _paid => _p(_cash.text) + _p(_card.text);
-  double get _credit => ((_total - _paid) * 100).roundToDouble() / 100;
+  double get _total => _r((_subtotal - _p(_discount.text)).clamp(0, double.infinity).toDouble());
+  double get _cardPaid => _p(_card.text);
+
+  /// Cash the customer handed over (may be more than owed, e.g. 10 ₼ for 4 ₼).
+  double get _tendered => _p(_cash.text);
+
+  /// Cash that pays the sale: never more than what is left after the card part.
+  double get _cashPaid => _r(_tendered.clamp(0, (_total - _cardPaid).clamp(0, double.infinity)).toDouble());
+
+  /// Change to give back to the customer.
+  double get _change => _r((_tendered - _cashPaid).clamp(0, double.infinity).toDouble());
+  double get _credit => _r((_total - _cashPaid - _cardPaid).clamp(0, double.infinity).toDouble());
+
+  static double _r(double v) => (v * 100).roundToDouble() / 100;
+  static String _amount(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 
   Future<void> _pickCustomer() async {
     final id = await pickParty(context, session: widget.session, isCustomer: true);
@@ -229,14 +241,15 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
 
   Future<void> _submit() async {
     if (_busy || _cart.isEmpty) return;
-    if (_paid > _total + 0.001) {
-      setState(() => _error = 'Ödənilən məbləğ yekundan çoxdur');
+    if (_cardPaid > _total + 0.001) {
+      setState(() => _error = 'Kartla ödənilən məbləğ yekundan çoxdur');
       return;
     }
     if (_credit > 0 && _customerId == null) {
-      setState(() => _error = 'Ödənilməyən hissə üçün müştəri seçin');
+      setState(() => _error = 'Ödənilməyən ${formatMoney(_credit)} üçün müştəri seçin');
       return;
     }
+    final change = _change;
     setState(() {
       _busy = true;
       _error = null;
@@ -248,10 +261,27 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
         ],
         'customerId': _customerId,
         'discount': _p(_discount.text).toStringAsFixed(2),
-        'paidCash': _p(_cash.text).toStringAsFixed(2),
-        'paidCard': _p(_card.text).toStringAsFixed(2),
+        'paidCash': _cashPaid.toStringAsFixed(2),
+        'paidCard': _cardPaid.toStringAsFixed(2),
         'clientRequestId': _requestId,
       }) as Map<String, dynamic>;
+      if (!mounted) return;
+      if (change > 0) {
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            icon: Icon(Icons.payments_outlined, color: Colors.green.shade700, size: 40),
+            title: const Text('Satış tamamlandı'),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('Müştəri verdi: ${formatMoney(_tendered)}', style: TextStyle(color: Colors.grey.shade700)),
+              const SizedBox(height: 12),
+              const Text('Qaytarın'),
+              Text(formatMoney(change), style: TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: Colors.green.shade700)),
+            ]),
+            actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Oldu'))],
+          ),
+        );
+      }
       if (mounted) Navigator.pop(context, s);
     } catch (e) {
       if (mounted) setState(() => _error = errorMessage(e));
@@ -260,112 +290,263 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Yeni satış'), actions: [
-          IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
+  Widget _section(String title, {Widget? trailing}) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
+        child: Row(children: [
+          Expanded(
+            child: Text(title.toUpperCase(),
+                style: TextStyle(fontSize: 12, letterSpacing: 0.8, fontWeight: FontWeight.w700, color: Colors.grey.shade600)),
+          ),
+          ?trailing,
         ]),
-        bottomNavigationBar: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: navy, padding: const EdgeInsets.symmetric(vertical: 16)),
+      );
+
+  Widget _sumRow(String label, String value, {bool big = false, Color? color}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(children: [
+          Expanded(
+            child: Text(label,
+                style: TextStyle(fontSize: big ? 18 : 15, fontWeight: big ? FontWeight.w800 : FontWeight.w500, color: color ?? navy)),
+          ),
+          Text(value, style: TextStyle(fontSize: big ? 22 : 15, fontWeight: big ? FontWeight.w800 : FontWeight.w600, color: color ?? navy)),
+        ]),
+      );
+
+  /// Coloured result box (change to give back / amount that goes on the customer's debt).
+  Widget _notice(IconData icon, String label, String value, MaterialColor color) => Container(
+        margin: const EdgeInsets.only(top: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.shade50,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.shade200),
+        ),
+        child: Row(children: [
+          Icon(icon, color: color.shade800),
+          const SizedBox(width: 10),
+          Expanded(child: Text(label, style: TextStyle(color: color.shade900, fontWeight: FontWeight.w600))),
+          Text(value, style: TextStyle(color: color.shade800, fontSize: 22, fontWeight: FontWeight.w800)),
+        ]),
+      );
+
+  static const _decimal = TextInputType.numberWithOptions(decimal: true);
+
+  @override
+  Widget build(BuildContext context) {
+    final change = _change;
+    final credit = _credit;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Yeni satış'), actions: [
+        IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
+      ]),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: SizedBox(
+            height: 54,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: navy),
               onPressed: _busy || _cart.isEmpty ? null : _submit,
-              child: Text(_busy ? 'Saxlanılır…' : 'Satışı tamamla — ${formatMoney(_total)}'),
+              icon: _busy
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.check_circle_outline),
+              label: Text(_busy ? 'Saxlanılır…' : 'Satışı tamamla — ${formatMoney(_total)}',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             ),
           ),
         ),
-        body: ListView(padding: const EdgeInsets.fromLTRB(12, 12, 12, 24), children: [
-          TextField(
-            controller: _search,
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search),
-              hintText: 'Məhsul adı, kod və ya barkod',
-              suffixIcon: IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
-            ),
-            onChanged: _find,
+      ),
+      body: ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 24), children: [
+        TextField(
+          controller: _search,
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search),
+            hintText: 'Məhsul adı, kod və ya barkod',
+            suffixIcon: IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
           ),
-          for (final p in _results)
-            ListTile(
-              dense: true,
-              title: Text('${p['name']}'),
-              subtitle: Text('${p['code']} · qalıq ${p['stockQty']}'),
-              trailing: Text(formatMoney(_n(p['salePrice']))),
-              onTap: () => _add(p),
+          onChanged: _find,
+        ),
+        if (_results.isNotEmpty)
+          Card(
+            margin: const EdgeInsets.only(top: 6),
+            child: Column(children: [
+              for (final p in _results)
+                ListTile(
+                  leading: const Icon(Icons.add_shopping_cart_outlined),
+                  title: Text('${p['name']}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text('${p['code']} · anbarda ${_amount(_n(p['stockQty']))} ${p['unit'] ?? ''}'),
+                  trailing: Text(formatMoney(_n(p['salePrice'])), style: const TextStyle(fontWeight: FontWeight.w700)),
+                  onTap: () => _add(p),
+                ),
+            ]),
+          ),
+
+        // ----- cart -----
+        _section('Səbət${_cart.isEmpty ? '' : ' (${_cart.length})'}'),
+        if (_cart.isEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 28),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade300),
             ),
-          const SizedBox(height: 8),
-          if (_cart.isEmpty) const EmptyState(title: 'Səbət boşdur', text: 'Məhsul axtarın və ya barkodu skan edin.'),
-          for (final l in _cart)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Row(children: [
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('${l.product['name']}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                      Text('${formatMoney(l.price)} × ${l.qty}${l.qty > _n(l.product['stockQty']) ? '  (anbarda ${l.product['stockQty']})' : ''}',
-                          style: TextStyle(fontSize: 12, color: l.qty > _n(l.product['stockQty']) ? Colors.red : Colors.grey.shade700)),
-                    ]),
-                  ),
-                  IconButton(onPressed: () => setState(() => l.qty > 1 ? l.qty -= 1 : _cart.remove(l)), icon: const Icon(Icons.remove_circle_outline)),
-                  Text('${l.qty}'),
-                  IconButton(onPressed: () => setState(() => l.qty += 1), icon: const Icon(Icons.add_circle_outline)),
-                  SizedBox(width: 72, child: Text(formatMoney(l.total), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w700))),
-                ]),
+            child: Column(children: [
+              Icon(Icons.shopping_cart_outlined, size: 40, color: Colors.grey.shade400),
+              const SizedBox(height: 8),
+              const Text('Səbət boşdur', style: TextStyle(fontWeight: FontWeight.w700, color: navy)),
+              const SizedBox(height: 2),
+              Text('Məhsul axtarın və ya barkodu skan edin', style: TextStyle(color: Colors.grey.shade600)),
+            ]),
+          ),
+        for (final l in _cart)
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+              child: Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('${l.product['name']}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${formatMoney(l.price)} / ${l.product['unit'] ?? 'ədəd'}'
+                      '${l.qty > _n(l.product['stockQty']) ? ' · anbarda ${_amount(_n(l.product['stockQty']))}' : ''}',
+                      style: TextStyle(fontSize: 12, color: l.qty > _n(l.product['stockQty']) ? Colors.red : Colors.grey.shade700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(formatMoney(l.total), style: const TextStyle(fontWeight: FontWeight.w800, color: navy)),
+                  ]),
+                ),
+                Container(
+                  decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(24)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    IconButton(
+                      tooltip: l.qty > 1 ? 'Azalt' : 'Səbətdən çıxar',
+                      onPressed: () => setState(() => l.qty > 1 ? l.qty -= 1 : _cart.remove(l)),
+                      icon: Icon(l.qty > 1 ? Icons.remove : Icons.delete_outline, color: l.qty > 1 ? navy : Colors.red.shade700),
+                    ),
+                    Text(_amount(l.qty), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                    IconButton(tooltip: 'Artır', onPressed: () => setState(() => l.qty += 1), icon: const Icon(Icons.add, color: navy)),
+                  ]),
+                ),
+              ]),
+            ),
+          ),
+
+        // ----- totals -----
+        if (_cart.isNotEmpty) ...[
+          _section('Hesab'),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(children: [
+                _sumRow('Ara cəm', formatMoney(_subtotal)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _discount,
+                  keyboardType: _decimal,
+                  decoration: const InputDecoration(labelText: 'Endirim', suffixText: '₼', prefixIcon: Icon(Icons.local_offer_outlined)),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const Divider(height: 24),
+                _sumRow('Yekun', formatMoney(_total), big: true),
+              ]),
+            ),
+          ),
+        ],
+
+        // ----- payment -----
+        _section('Ödəniş'),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          ActionChip(
+            avatar: const Icon(Icons.payments_outlined, size: 18),
+            label: const Text('Hamısı nağd'),
+            onPressed: () => setState(() {
+              _cash.text = _total.toStringAsFixed(2);
+              _card.clear();
+            }),
+          ),
+          ActionChip(
+            avatar: const Icon(Icons.credit_card, size: 18),
+            label: const Text('Hamısı kart'),
+            onPressed: () => setState(() {
+              _card.text = _total.toStringAsFixed(2);
+              _cash.clear();
+            }),
+          ),
+          ActionChip(
+            avatar: const Icon(Icons.person_outline, size: 18),
+            label: const Text('Tam borca'),
+            onPressed: () => setState(() {
+              _cash.clear();
+              _card.clear();
+            }),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _cash,
+          keyboardType: _decimal,
+          decoration: const InputDecoration(
+            labelText: 'Müştəri verdi (nağd)',
+            suffixText: '₼',
+            prefixIcon: Icon(Icons.payments_outlined),
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 8),
+        // quick banknotes: tap to set what the customer handed over
+        Wrap(spacing: 8, runSpacing: 4, children: [
+          for (final note in const [5, 10, 20, 50, 100])
+            if (note >= _total - _cardPaid)
+              ChoiceChip(
+                label: Text('$note ₼'),
+                selected: _tendered == note,
+                onSelected: (_) => setState(() => _cash.text = '$note'),
               ),
+        ]),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _card,
+          keyboardType: _decimal,
+          decoration: const InputDecoration(labelText: 'Kartla', suffixText: '₼', prefixIcon: Icon(Icons.credit_card)),
+          onChanged: (_) => setState(() {}),
+        ),
+        if (_cart.isNotEmpty && change > 0)
+          _notice(Icons.currency_exchange, 'Müştəriyə qaytarın', formatMoney(change), Colors.green),
+        if (_cart.isNotEmpty && credit > 0)
+          _notice(Icons.account_balance_wallet_outlined,
+              _customerId == null ? 'Ödənilməyən hissə — müştəri seçin' : 'Borca yazılacaq: $_customerName', formatMoney(credit),
+              _customerId == null ? Colors.red : Colors.orange),
+
+        // ----- customer -----
+        _section('Müştəri'),
+        Card(
+          margin: EdgeInsets.zero,
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: navy.withValues(alpha: 0.08),
+              child: const Icon(Icons.person_outline, color: navy),
             ),
-          const Divider(),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.person_outline),
-            title: Text(_customerName ?? 'Müştəri seçin (borcla satış üçün)'),
-            trailing: _customerId == null ? const Icon(Icons.chevron_right) : IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() {
-                  _customerId = null;
-                  _customerName = null;
-                })),
+            title: Text(_customerName ?? 'Müştəri seçin', style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(_customerName == null ? 'Borcla satış üçün lazımdır' : 'Seçildi'),
+            trailing: _customerId == null
+                ? const Icon(Icons.chevron_right)
+                : IconButton(
+                    tooltip: 'Müştərini sil',
+                    icon: const Icon(Icons.clear),
+                    onPressed: () => setState(() {
+                      _customerId = null;
+                      _customerName = null;
+                    }),
+                  ),
             onTap: _pickCustomer,
           ),
-          TextField(
-              controller: _discount,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Ümumi endirim (₼)'),
-              onChanged: (_) => setState(() {})),
-          Row(children: [
-            Expanded(
-                child: TextField(
-                    controller: _cash,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Nağd (₼)'),
-                    onChanged: (_) => setState(() {}))),
-            const SizedBox(width: 10),
-            Expanded(
-                child: TextField(
-                    controller: _card,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Kart (₼)'),
-                    onChanged: (_) => setState(() {}))),
-          ]),
-          Wrap(spacing: 6, children: [
-            ActionChip(label: const Text('Hamısı nağd'), onPressed: () => setState(() {
-                  _cash.text = _total.toStringAsFixed(2);
-                  _card.clear();
-                })),
-            ActionChip(label: const Text('Hamısı kart'), onPressed: () => setState(() {
-                  _card.text = _total.toStringAsFixed(2);
-                  _cash.clear();
-                })),
-            ActionChip(label: const Text('Tam borca'), onPressed: () => setState(() {
-                  _cash.clear();
-                  _card.clear();
-                })),
-          ]),
-          const SizedBox(height: 8),
-          if (_credit > 0)
-            Text(_customerId == null
-                ? 'Ödənilməyən ${formatMoney(_credit)} üçün müştəri seçin'
-                : '${formatMoney(_credit)} $_customerName adlı müştərinin borcuna yazılacaq',
-                style: TextStyle(color: _customerId == null ? Colors.red.shade700 : Colors.orange.shade800)),
-          if (_error != null) ErrorBanner(_error!),
-        ]),
-      );
+        ),
+        if (_error != null) ...[const SizedBox(height: 12), ErrorBanner(_error!)],
+      ]),
+    );
+  }
 }

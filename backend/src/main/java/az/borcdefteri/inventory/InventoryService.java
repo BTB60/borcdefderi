@@ -321,6 +321,12 @@ public class InventoryService {
      * Stock never goes below zero.
      */
     public UUID move(CurrentMember m, UUID productId, String kind, BigDecimal delta, BigDecimal unitCost, UUID saleId, String note) {
+        return move(m, productId, kind, delta, unitCost, saleId, null, note);
+    }
+
+    /** As {@link #move(CurrentMember, UUID, String, BigDecimal, BigDecimal, UUID, String)}, linked to a stock count. */
+    public UUID move(CurrentMember m, UUID productId, String kind, BigDecimal delta, BigDecimal unitCost, UUID saleId,
+                     UUID stockCountId, String note) {
         BigDecimal current = jdbc.sql("SELECT stock_qty FROM products WHERE id = :id AND store_id = :s FOR UPDATE")
                 .param("id", productId).param("s", m.storeId()).query(BigDecimal.class).optional()
                 .orElseThrow(() -> ApiException.notFound("Məhsul tapılmadı"));
@@ -333,10 +339,12 @@ public class InventoryService {
         jdbc.sql("UPDATE products SET stock_qty = :q, updated_at = now() WHERE id = :id").param("q", after).param("id", productId).update();
         UUID id = UUID.randomUUID();
         jdbc.sql("""
-                INSERT INTO inventory_movements (id, store_id, product_id, kind, quantity, unit_cost, balance_after, sale_id, note, actor_id)
-                VALUES (:id, :s, :p, :k, :q, :c, :b, :sale, :note, :a)
+                INSERT INTO inventory_movements (id, store_id, product_id, kind, quantity, unit_cost, balance_after, sale_id,
+                                                 stock_count_id, note, actor_id)
+                VALUES (:id, :s, :p, :k, :q, :c, :b, :sale, :cnt, :note, :a)
                 """).param("id", id).param("s", m.storeId()).param("p", productId).param("k", kind).param("q", delta)
-                .param("c", unitCost).param("b", after).param("sale", saleId).param("note", blank(note)).param("a", m.userId()).update();
+                .param("c", unitCost).param("b", after).param("sale", saleId).param("cnt", stockCountId)
+                .param("note", blank(note)).param("a", m.userId()).update();
         return id;
     }
 

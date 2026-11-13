@@ -10,6 +10,7 @@ import '../state/session.dart';
 import '../theme.dart';
 import 'barcode_scanner.dart';
 import 'common.dart';
+import 'stock_count_screen.dart';
 
 double _n(Object? v) => (v as num?)?.toDouble() ?? 0;
 String _q(Object? v) {
@@ -141,7 +142,7 @@ Future<Map<String, dynamic>> _uploadProductImage(Session session, String product
     await session.api.upload('/api/products/$productId/image', 'file', image.bytes, image.png ? 'product.png' : 'product.jpg',
         image.png ? 'image/png' : 'image/jpeg') as Map<String, dynamic>;
 
-/// Anbar: products with stock, low-stock filter, add product and stock in / out / count.
+/// Anbar: products with stock, low-stock filter, add product and stock in / out; counts open from the app bar.
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key, required this.session});
 
@@ -239,6 +240,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Anbar'), actions: [
+        if (_manage)
+          TextButton.icon(
+            onPressed: () async {
+              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => StockCountsScreen(session: widget.session)));
+              if (mounted) _reload();
+            },
+            icon: const Icon(Icons.fact_check_outlined),
+            label: const Text('Sayım'),
+          ),
         IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
       ]),
       floatingActionButton: _manage
@@ -521,14 +531,14 @@ class _StockSheetState extends State<_StockSheet> {
         const SizedBox(height: 4),
         if (_error != null) ErrorBanner(_error!),
         Wrap(spacing: 6, children: [
-          for (final k in const [['RECEIPT', 'Giriş'], ['ISSUE', 'Çıxış'], ['ADJUSTMENT', 'Düzəliş ±'], ['COUNT', 'Sayım']])
+          for (final k in const [['RECEIPT', 'Giriş'], ['ISSUE', 'Çıxış'], ['ADJUSTMENT', 'Düzəliş ±']])
             ChoiceChip(label: Text(k[1]), selected: _kind == k[0], onSelected: (_) => setState(() => _kind = k[0])),
         ]),
         TextField(
           controller: _qty,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-          decoration: InputDecoration(labelText: _kind == 'COUNT' ? 'Sayılan miqdar' : _kind == 'ADJUSTMENT' ? 'Fərq (+/−)' : 'Miqdar'),
+          decoration: InputDecoration(labelText: _kind == 'ADJUSTMENT' ? 'Fərq (+/−)' : 'Miqdar'),
         ),
         if (_kind == 'RECEIPT')
           TextField(controller: _cost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Alış qiyməti (₼)')),

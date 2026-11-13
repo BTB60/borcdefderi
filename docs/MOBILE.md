@@ -22,7 +22,8 @@ Aşağı panel (icazəyə görə): **Panel** (sahib və ya REPORTS), **Borclar**
 | Ödənişlər | `payments_screen.dart` | Ödəniş siyahısı, çek (PDF) paylaşma |
 | Müştərilər / Şirkətlər | `parties_screen.dart`, `party_profile_screen.dart` | Kart: tarixçə, qeydlər, çıxarış, kabinet linki, WhatsApp şablonları |
 | Satış | `sales_screen.dart`, `barcode_scanner.dart` | Səbət, endirim, nağd/kart/nisyə, kamera ilə ardıcıl barkod skanı, çek, ləğv |
-| Anbar | `inventory_screen.dart` | Məhsullar **şəkillə**; yazdıqca axtarış; skan → məhsul kartı (böyük şəkil, qiymət, qalıq); giriş/çıxış/düzəliş/sayım; yeni məhsul (barkod skanı + kamera/qalereyadan şəkil); şəkil dəyişmə |
+| Anbar | `inventory_screen.dart` | Məhsullar **şəkillə**; yazdıqca axtarış; skan → məhsul kartı (böyük şəkil, qiymət, qalıq); giriş/çıxış/düzəliş; yeni məhsul (barkod skanı + kamera/qalereyadan şəkil); şəkil dəyişmə; yuxarıda **Sayım** düyməsi |
+| Anbar sayımı | `stock_count_screen.dart` | Sayımların siyahısı (+/− nəticə); **Yeni sayım** (bütün məhsullar və ya kateqoriya); məhsula toxun və ya **skan et** → sayılan miqdar (ardıcıl skan); sistem / sayılan / fərq (miqdar və ₼); filtr: sayılmayanlar, fərqi olanlar; **Tamamla** → fərqlər qalığa yazılır, sayım bağlanır; **sayım hesabatı** PDF/Excel paylaşma |
 | Kassa və bank | `cash_screen.dart` | Balans, mədaxil, məxaric, köçürmə, gün sonu |
 | Xərclər | `expenses_screen.dart` | Xərc, təkrarlanan xərc, büdcə |
 | İşçilər | `employees_screen.dart` | Sahib üçün: işçi əlavə et, icazələr, şifrə sıfırlama |

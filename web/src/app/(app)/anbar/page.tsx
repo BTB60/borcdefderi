@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
 import { API_URL, ApiError, api, getToken } from "@/lib/api";
@@ -12,7 +13,7 @@ const MOVE_LABEL: Record<StockMovement["kind"], string> = {
 };
 const q = (n: number) => Number(n).toLocaleString("az-AZ", { maximumFractionDigits: 3 });
 
-/** Anbar: products, stock levels, receipts / issues / adjustments / counts and movement history. */
+/** Anbar: products, stock levels, receipts / issues / adjustments and movement history. Counts live under /anbar/sayim. */
 export default function InventoryPage() {
   const { isOwner, can } = useAuth();
   const [items, setItems] = useState<Product[] | null>(null);
@@ -56,7 +57,7 @@ export default function InventoryPage() {
   return (
     <>
       <PageHeader title="Anbar" subtitle="Məhsullar, qalıqlar və anbar hərəkətləri"
-        actions={manage ? <Button variant="gold" onClick={() => setEditing("new")}>+ Məhsul əlavə et</Button> : undefined} />
+        actions={manage ? <div className="flex gap-2"><Link href="/anbar/sayim" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Sayım</Link><Button variant="gold" onClick={() => setEditing("new")}>+ Məhsul əlavə et</Button></div> : undefined} />
       {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -229,16 +230,16 @@ function StockModal({ product, onClose, onSaved }: { product: Product; onClose: 
         <Field label="Əməliyyat">
           <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
             <option value="RECEIPT">Anbara giriş</option><option value="ISSUE">Anbardan çıxış</option>
-            <option value="ADJUSTMENT">Düzəliş (±)</option><option value="COUNT">Sayım (sayılan miqdar)</option>
+            <option value="ADJUSTMENT">Düzəliş (±)</option>
           </Select>
         </Field>
-        <Field label={form.kind === "COUNT" ? "Sayılan miqdar" : form.kind === "ADJUSTMENT" ? "Fərq (+ və ya −)" : "Miqdar"}>
+        <Field label={form.kind === "ADJUSTMENT" ? "Fərq (+ və ya −)" : "Miqdar"}>
           <Input required autoFocus type="number" step="0.001" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
         </Field>
         {form.kind === "RECEIPT" && <Field label="Alış qiyməti (₼)" hint="Fərqlidirsə orta qiymət hesablanır"><Input type="number" min="0" step="0.01" value={form.unitCost} onChange={(e) => setForm({ ...form, unitCost: e.target.value })} /></Field>}
         <div className={form.kind === "RECEIPT" ? "" : "sm:col-span-2"}><Field label="Qeyd"><Input maxLength={500} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field></div>
       </form>
-      <p className="mt-3 text-xs text-slate-400">Anbara giriş pul hərəkəti yaratmır. Təchizatçıya ödəniş “Şirkətlər” və ya “Kassa” bölməsindən edilir.</p>
+      <p className="mt-3 text-xs text-slate-400">Anbar sayımı “Anbar → Sayım” bölməsindən aparılır. Anbara giriş pul hərəkəti yaratmır. Təchizatçıya ödəniş “Şirkətlər” və ya “Kassa” bölməsindən edilir.</p>
     </Modal>
   );
 }

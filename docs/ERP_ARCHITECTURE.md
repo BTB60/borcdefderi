@@ -159,7 +159,7 @@ ikinci dəfə ödənmir); büdcə NEAR / OVER; icazələr və mağaza izolyasiya
 
 ### API
 `/api/products` (CRUD, `?q=&stock=LOW|OUT`, `/summary`, `/by-code/{barkod}`, `/{id}/image`), `/api/product-categories`,
-`/api/inventory/movements` (RECEIPT, ISSUE, ADJUSTMENT, COUNT), `/api/sales` (yarat, siyahı, detal), `/api/sales/{id}/returns`,
+`/api/inventory/movements` (RECEIPT, ISSUE, ADJUSTMENT; COUNT yalnız köhnə tətbiqlər üçün), `/api/stock-counts` (anbar sayımı: başla, sətir say, tamamla → COUNT hərəkətləri, sil, `/{id}/export?format=xlsx|pdf` sayım hesabatı), `/api/sales` (yarat, siyahı, detal), `/api/sales/{id}/returns`,
 `/api/sales/{id}/cancel`, `/api/sales/{id}/receipt` (PDF çek), `/api/finance/pnl`, `/api/finance/monthly`.
 
 ### UI

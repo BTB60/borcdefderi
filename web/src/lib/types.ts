@@ -454,6 +454,24 @@ export interface StockMovement {
   quantity: number; unitCost: number | null; balanceAfter: number; saleId: string | null; note: string | null; actorName: string; createdAt: string;
 }
 
+export interface StockCountTotals {
+  totalItems: number; countedItems: number; matchedItems: number; surplusItems: number; shortageItems: number;
+  surplusQty: number; shortageQty: number; surplusValue: number; shortageValue: number; netValue: number;
+}
+
+export interface StockCount {
+  id: string; number: string; status: "IN_PROGRESS" | "COMPLETED"; categoryId: string | null; categoryName: string | null; note: string | null;
+  createdByName: string; createdAt: string; completedByName: string | null; completedAt: string | null; totals: StockCountTotals; version: number;
+}
+
+export interface StockCountLine {
+  productId: string; code: string; barcode: string | null; name: string; unit: string; hasImage: boolean;
+  systemQty: number; countedQty: number | null; difference: number | null; unitCost: number; differenceValue: number | null;
+  countedByName: string | null; countedAt: string | null;
+}
+
+export interface StockCountDetail { count: StockCount; lines: StockCountLine[] }
+
 export interface InventorySummary { productCount: number; activeCount: number; lowStockCount: number; outOfStockCount: number; costValue: number; saleValue: number }
 
 export interface SaleItem { id: string; productId: string; name: string; quantity: number; unitPrice: number; discount: number; lineTotal: number; unitCost: number; returnedQty: number }

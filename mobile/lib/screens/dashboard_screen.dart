@@ -10,6 +10,7 @@ import 'expenses_screen.dart';
 import 'finance_cards.dart';
 import 'inventory_screen.dart';
 import 'notifications_screen.dart';
+import 'payment_edit_sheet.dart';
 import 'pocket_screen.dart';
 import 'reports_screen.dart';
 import 'sales_screen.dart';
@@ -45,6 +46,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _data;
   }
 
+
+  /// Owner only: edit or cancel a recent payment, then refresh the dashboard.
+  Future<void> _paymentActions(Payment p) async {
+    final changed = await showPaymentActions(context, widget.session, p);
+    if (changed == null || !mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(changed.isVoided ? 'Ödəniş ləğv edildi' : 'Ödəniş düzəldildi')));
+    await _refresh();
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -104,7 +114,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: ListTile(
                             title: Text(p.partyName),
                             subtitle: Text('${formatDateTime(p.paidAt)} · ${methodLabels[p.paymentMethod]}'),
-                            trailing: Text(formatMoney(p.amount), style: TextStyle(fontWeight: FontWeight.w700, color: Colors.green.shade700)),
+                            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Text(formatMoney(p.amount), style: TextStyle(fontWeight: FontWeight.w700, color: Colors.green.shade700)),
+                              if (widget.session.me!.isOwner)
+                                IconButton(
+                                  tooltip: 'Düzəlt / ləğv et',
+                                  icon: const Icon(Icons.more_vert),
+                                  onPressed: () => _paymentActions(p),
+                                ),
+                            ]),
+                            onTap: widget.session.me!.isOwner ? () => _paymentActions(p) : null,
                           ),
                         ),
                     ],

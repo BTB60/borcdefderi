@@ -29,6 +29,15 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
   void _reload() => setState(() => _items = _fetch());
 
+
+  /// Owner only: edit or cancel one payment, then reload the list.
+  Future<void> _actions(Payment p) async {
+    final changed = await showPaymentActions(context, widget.session, p);
+    if (changed == null || !mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(changed.isVoided ? 'Ödəniş ləğv edildi' : 'Ödəniş düzəldildi')));
+    _reload();
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -97,20 +106,20 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                             style: voided ? TextStyle(color: Colors.grey.shade600, decoration: TextDecoration.lineThrough) : null),
                         subtitle: Text('${formatDateTime(p.paidAt)} · ${methodLabels[p.paymentMethod]}${extra.isEmpty ? '' : '\n$extra'}'),
                         isThreeLine: extra.isNotEmpty,
-                        trailing: Text(formatMoney(p.amount),
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: voided ? Colors.grey.shade500 : Colors.green.shade700,
-                                decoration: voided ? TextDecoration.lineThrough : null)),
-                        onTap: owner && !voided
-                            ? () async {
-                                final changed = await showPaymentActions(context, widget.session, p);
-                                if (changed == null || !context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                    content: Text(changed.isVoided ? 'Ödəniş ləğv edildi' : 'Ödəniş düzəldildi')));
-                                _reload();
-                              }
-                            : null,
+                        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Text(formatMoney(p.amount),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: voided ? Colors.grey.shade500 : Colors.green.shade700,
+                                  decoration: voided ? TextDecoration.lineThrough : null)),
+                          if (owner && !voided)
+                            IconButton(
+                              tooltip: 'Düzəlt / ləğv et',
+                              icon: const Icon(Icons.more_vert),
+                              onPressed: () => _actions(p),
+                            ),
+                        ]),
+                        onTap: owner && !voided ? () => _actions(p) : null,
                       ),
                     );
                   },

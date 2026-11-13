@@ -108,6 +108,13 @@ public class PaymentReportService {
             head.setSpacingBefore(10);
             head.setSpacingAfter(10);
             doc.add(head);
+            if (r.voidedAt() != null) {
+                Paragraph voided = new Paragraph("LƏĞV EDİLİB — " + r.voidedAt().atZoneSameInstant(BAKU).format(DATE_TIME),
+                        new Font(bold, 12, Font.NORMAL, new Color(0xB9, 0x1C, 0x1C)));
+                voided.setAlignment(Element.ALIGN_CENTER);
+                voided.setSpacingAfter(8);
+                doc.add(voided);
+            }
 
             PdfPTable t = new PdfPTable(new float[]{1.1f, 1.6f});
             t.setWidthPercentage(100);

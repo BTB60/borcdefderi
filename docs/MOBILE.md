@@ -18,8 +18,8 @@ Aşağı panel (icazəyə görə): **Panel** (sahib və ya REPORTS), **Borclar**
 |---|---|---|
 | Giriş / qeydiyyat / şifrə | `auth_screens.dart`, `password_screens.dart` | Giriş, qeydiyyat, "Şifrəni unutdum" (e-poçt linki), məcburi şifrə dəyişmə |
 | Panel | `dashboard_screen.dart`, `finance_cards.dart` | Sürətli düymələr (Satış, Anbar, Kassa, Xərclər); kartlar: **Toplam borc** (bütün açıq borclar), Ödədiyim, Aktiv/Bitmiş borclar, Müştəri borcu, Şirkətlər bizə borcludur, Bu gün yazılan, Gecikmiş, Aktiv müştərilər, Alınan ödənişlər, Şirkətlərə borcum, Şirkət borcu yaz. Hər kart öz siyahısını açır (axtarış, tarix, müştəri/şirkət filtri) |
-| Borclar | `debts_screen.dart`, `debt_edit_sheet.dart`, `debt_increase_sheet.dart`, `account_sheet.dart` | Müştəri borcu, şirkət alacağı/borcu; borc yaz, artır, redaktə, ödə; WhatsApp xatırlatma |
-| Ödənişlər | `payments_screen.dart` | Ödəniş siyahısı, çek (PDF) paylaşma |
+| Borclar | `debts_screen.dart`, `debt_edit_sheet.dart`, `debt_increase_sheet.dart`, `account_sheet.dart`, `payment_edit_sheet.dart` | Müştəri borcu, şirkət alacağı/borcu; borc yaz, artır, redaktə, ödə; WhatsApp xatırlatma; tarixçədə ödənişə toxunanda sahib onu **düzəldə** və ya **ləğv edə** bilər |
+| Ödənişlər | `payments_screen.dart`, `payment_edit_sheet.dart` | Ödəniş siyahısı, çek (PDF) paylaşma; ləğv edilmiş ödənişlər üstündən xətt çəkilmiş görünür və cəmə daxil olmur; yalnız mağaza sahibi ödənişə toxunub **düzəldə** (məbləğ, üsul, tarix, təsvir, qeyd) və ya səbəb yazıb **ləğv edə** bilər — borc qalığı və kassa serverdə avtomatik düzəlir |
 | Müştərilər / Şirkətlər | `parties_screen.dart`, `party_profile_screen.dart` | Kart: tarixçə, qeydlər, çıxarış, kabinet linki, WhatsApp şablonları |
 | Satış | `sales_screen.dart`, `barcode_scanner.dart` | Səbət, endirim, nağd/kart/nisyə, kamera ilə ardıcıl barkod skanı, çek, ləğv |
 | Anbar | `inventory_screen.dart` | Məhsullar **şəkillə**; yazdıqca axtarış; skan → məhsul kartı (böyük şəkil, qiymət, qalıq); giriş/çıxış/düzəliş; yeni məhsul (barkod skanı + kamera/qalereyadan şəkil); şəkil dəyişmə; yuxarıda **Sayım** düyməsi |

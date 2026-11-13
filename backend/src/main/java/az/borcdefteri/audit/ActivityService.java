@@ -49,9 +49,9 @@ public class ActivityService {
                   (SELECT COALESCE(SUM(t.amount),0) FROM financial_transactions t WHERE t.store_id = :s AND t.actor_id = u.id
                      AND t.transaction_type IN ('DEBT_CREATED','DEBT_INCREASED')
                      AND (t.created_at AT TIME ZONE 'Asia/Baku')::date BETWEEN :lo AND :hi) AS debt_amount,
-                  (SELECT COUNT(*) FROM payments p WHERE p.store_id = :s AND p.recorded_by = u.id
+                  (SELECT COUNT(*) FROM payments p WHERE p.store_id = :s AND p.recorded_by = u.id AND p.voided_at IS NULL
                      AND (p.paid_at AT TIME ZONE 'Asia/Baku')::date BETWEEN :lo AND :hi) AS payments,
-                  (SELECT COALESCE(SUM(p.amount),0) FROM payments p WHERE p.store_id = :s AND p.recorded_by = u.id
+                  (SELECT COALESCE(SUM(p.amount),0) FROM payments p WHERE p.store_id = :s AND p.recorded_by = u.id AND p.voided_at IS NULL
                      AND (p.paid_at AT TIME ZONE 'Asia/Baku')::date BETWEEN :lo AND :hi) AS payments_amount,
                   (SELECT COUNT(*) FROM audit_logs a WHERE a.store_id = :s AND a.actor_id = u.id
                      AND (a.created_at AT TIME ZONE 'Asia/Baku')::date BETWEEN :lo AND :hi) AS actions

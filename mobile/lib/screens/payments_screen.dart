@@ -4,6 +4,7 @@ import '../format.dart';
 import '../models/models.dart';
 import '../state/session.dart';
 import 'common.dart';
+import 'payment_edit_sheet.dart';
 
 /// Payment history across all sections the user may see, with method filter and text search.
 class PaymentsScreen extends StatefulWidget {
@@ -21,7 +22,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   late Future<List<Payment>> _items = _fetch();
 
   Future<List<Payment>> _fetch() {
-    final query = <String, String>{'limit': '200'};
+    final query = <String, String>{'limit': '200', 'includeVoided': 'true'};
     if (_method.isNotEmpty) query['method'] = _method;
     return widget.session.api.get('/api/payments', query: query).then((j) => (j as List).map((e) => Payment.fromJson(e as Map<String, dynamic>)).toList());
   }
@@ -65,7 +66,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
               final visible = snap.data!.where((p) => _query.isEmpty || p.partyName.toLowerCase().contains(_query)).toList();
               if (visible.isEmpty) return const EmptyState(title: 'Ödəniş tapılmadı');
-              final total = visible.fold<double>(0, (s, p) => s + p.amount);
+              final total = visible.where((p) => !p.isVoided).fold<double>(0, (s, p) => s + p.amount);
+              final owner = widget.session.me!.isOwner;
               return RefreshIndicator(
                 onRefresh: () async => _reload(),
                 child: ListView.builder(
@@ -79,16 +81,36 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       );
                     }
                     final p = visible[i - 1];
+                    final voided = p.isVoided;
+                    final extra = voided
+                        ? 'Ləğv edildi${p.voidReason == null ? '' : ': ${p.voidReason}'}'
+                        : [if (p.description != null) p.description!, if (p.editedAt != null) 'düzəldilib'].join(' · ');
                     return Card(
+                      color: voided ? Colors.grey.shade100 : null,
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: _methodColor(p.paymentMethod).shade50,
-                          child: Icon(_methodIcon(p.paymentMethod), color: _methodColor(p.paymentMethod)),
+                          backgroundColor: voided ? Colors.grey.shade200 : _methodColor(p.paymentMethod).shade50,
+                          child: Icon(voided ? Icons.block : _methodIcon(p.paymentMethod),
+                              color: voided ? Colors.red.shade400 : _methodColor(p.paymentMethod)),
                         ),
-                        title: Text(p.partyName),
-                        subtitle: Text('${formatDateTime(p.paidAt)} · ${methodLabels[p.paymentMethod]}${p.description == null ? '' : '\n${p.description}'}'),
-                        isThreeLine: p.description != null,
-                        trailing: Text(formatMoney(p.amount), style: TextStyle(fontWeight: FontWeight.w700, color: Colors.green.shade700)),
+                        title: Text(p.partyName,
+                            style: voided ? TextStyle(color: Colors.grey.shade600, decoration: TextDecoration.lineThrough) : null),
+                        subtitle: Text('${formatDateTime(p.paidAt)} · ${methodLabels[p.paymentMethod]}${extra.isEmpty ? '' : '\n$extra'}'),
+                        isThreeLine: extra.isNotEmpty,
+                        trailing: Text(formatMoney(p.amount),
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: voided ? Colors.grey.shade500 : Colors.green.shade700,
+                                decoration: voided ? TextDecoration.lineThrough : null)),
+                        onTap: owner && !voided
+                            ? () async {
+                                final changed = await showPaymentActions(context, widget.session, p);
+                                if (changed == null || !context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text(changed.isVoided ? 'Ödəniş ləğv edildi' : 'Ödəniş düzəldildi')));
+                                _reload();
+                              }
+                            : null,
                       ),
                     );
                   },

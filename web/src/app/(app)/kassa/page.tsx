@@ -18,6 +18,7 @@ const MOVE_LABEL: Record<MovementKind, string> = {
   SUPPLIER_PAYMENT: "Şirkətə borc ödənildi",
   EXPENSE: "Xərc",
   EXPENSE_REVERSAL: "Xərc geri qaytarıldı",
+  PAYMENT_REVERSAL: "Ödəniş ləğvi / düzəlişi",
   SALE: "Satış",
   SALE_REFUND: "Satış qaytarıldı",
   COUNT_ADJUSTMENT: "Sayım fərqi",

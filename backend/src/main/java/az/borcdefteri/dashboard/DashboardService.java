@@ -95,7 +95,7 @@ public class DashboardService {
         jdbc.sql("""
                 SELECT p.payment_method, COALESCE(SUM(p.amount), 0) AS total FROM payments p
                 JOIN debts d ON d.id = p.debt_id AND d.store_id = p.store_id
-                WHERE p.store_id = :s AND d.debt_type <> 'COMPANY_PAYABLE'
+                WHERE p.store_id = :s AND p.voided_at IS NULL AND d.debt_type <> 'COMPANY_PAYABLE'
                   AND (p.paid_at AT TIME ZONE :tz)::date BETWEEN :from AND :to
                 GROUP BY p.payment_method""")
                 .param("s", storeId).param("tz", TZ).param("from", lo).param("to", hi)
@@ -112,7 +112,7 @@ public class DashboardService {
         jdbc.sql("""
                 SELECT (p.paid_at AT TIME ZONE :tz)::date AS d, p.payment_method, COALESCE(SUM(p.amount), 0) AS total
                 FROM payments p JOIN debts dd ON dd.id = p.debt_id AND dd.store_id = p.store_id
-                WHERE p.store_id = :s AND dd.debt_type <> 'COMPANY_PAYABLE'
+                WHERE p.store_id = :s AND p.voided_at IS NULL AND dd.debt_type <> 'COMPANY_PAYABLE'
                   AND (p.paid_at AT TIME ZONE :tz)::date BETWEEN :from AND :to
                 GROUP BY 1, 2""")
                 .param("tz", TZ).param("s", storeId).param("from", from).param("to", today)
@@ -139,7 +139,7 @@ public class DashboardService {
                 SELECT date_trunc('month', p.paid_at AT TIME ZONE :tz)::date AS m, p.payment_method,
                        COALESCE(SUM(p.amount), 0) AS total
                 FROM payments p JOIN debts dd ON dd.id = p.debt_id AND dd.store_id = p.store_id
-                WHERE p.store_id = :s AND dd.debt_type <> 'COMPANY_PAYABLE'
+                WHERE p.store_id = :s AND p.voided_at IS NULL AND dd.debt_type <> 'COMPANY_PAYABLE'
                   AND (p.paid_at AT TIME ZONE :tz)::date >= :from
                 GROUP BY 1, 2""")
                 .param("tz", TZ).param("s", storeId).param("from", from)

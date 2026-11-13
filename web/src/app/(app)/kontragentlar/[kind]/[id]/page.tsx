@@ -6,10 +6,11 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Textarea, Th } from "@/components/ui";
 import { AccountModal, DIRECTION_LABEL } from "@/components/debts/AccountModals";
 import { HistoryModal, WhatsAppIcon } from "@/components/debts/DebtModals";
+import { PaymentCancelModal, PaymentEditModal } from "@/components/payments/PaymentEditModals";
 import { ApiError, api, download } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DEBT_STATUS_LABEL, METHOD_LABEL, formatDate, formatDateTime, formatMoney } from "@/lib/format";
-import type { CustomerNote, Debt, DebtStatus, DebtType, HistoryEntry, Party, PartyProfile, PortalLink } from "@/lib/types";
+import type { CustomerNote, Debt, DebtStatus, DebtType, HistoryEntry, Party, PartyProfile, Payment, PortalLink } from "@/lib/types";
 import { TEMPLATE_LABEL, templateText, waLink, waNumber, waWebLink, type TemplateKey } from "@/lib/whatsapp";
 
 const STATUS_TONE: Record<DebtStatus, "amber" | "emerald" | "slate"> = { OPEN: "slate", PARTIAL: "amber", PAID: "emerald" };
@@ -26,6 +27,7 @@ const ENTRY_LABEL: Record<HistoryEntry["type"], string> = {
   PAYMENT_CARD: "Ödəniş — kart",
   PAYMENT_TRANSFER: "Ödəniş — köçürmə",
   PAYMENT_OTHER: "Ödəniş — digər",
+  REVERSAL: "Ödəniş ləğvi",
 };
 
 function QuickButton({ onClick, href, icon, label, tone = "bg-white text-navy-800" }: { onClick?: () => void; href?: string; icon: ReactNode; label: string; tone?: string }) {
@@ -42,8 +44,9 @@ export default function PartyProfilePage() {
   const params = useParams<{ kind: string; id: string }>();
   const isCustomer = params.kind === "musteri";
   const base = `/api/${isCustomer ? "customers" : "companies"}/${params.id}`;
-  const { can, me } = useAuth();
+  const { can, me, isOwner } = useAuth();
   const [data, setData] = useState<PartyProfile | null>(null);
+  const [paymentAction, setPaymentAction] = useState<{ kind: "edit" | "cancel"; payment: Payment } | null>(null);
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -193,10 +196,21 @@ export default function PartyProfilePage() {
             ))}
             {tab === "payments" && (payments.length === 0 ? <EmptyState title="Ödəniş yoxdur" /> : (
               <Table>
-                <thead className="bg-slate-50/70"><tr><Th>Tarix</Th><Th>Üsul</Th><Th>Qəbul edən</Th><Th className="text-right">Məbləğ</Th></tr></thead>
+                <thead className="bg-slate-50/70"><tr><Th>Tarix</Th><Th>Üsul</Th><Th>Qəbul edən</Th><Th className="text-right">Məbləğ</Th>{isOwner && <Th />}</tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {payments.map((p) => (
-                    <tr key={p.id}><Td>{formatDateTime(p.paidAt)}</Td><Td>{METHOD_LABEL[p.paymentMethod]}</Td><Td className="text-slate-500">{p.recordedByName ?? "—"}</Td><Td className="text-right font-semibold tabular-nums text-emerald-700">{formatMoney(p.amount)}</Td></tr>
+                    <tr key={p.id}>
+                      <Td>{formatDateTime(p.paidAt)}</Td><Td>{METHOD_LABEL[p.paymentMethod]}</Td><Td className="text-slate-500">{p.recordedByName ?? "—"}</Td>
+                      <Td className="text-right font-semibold tabular-nums text-emerald-700">{formatMoney(p.amount)}</Td>
+                      {isOwner && (
+                        <Td className="text-right">
+                          <div className="flex justify-end gap-3 text-xs font-medium">
+                            <button className="text-navy-700 hover:text-navy-500" onClick={() => setPaymentAction({ kind: "edit", payment: p })}>Düzəlt</button>
+                            <button className="text-rose-600 hover:text-rose-500" onClick={() => setPaymentAction({ kind: "cancel", payment: p })}>Ləğv et</button>
+                          </div>
+                        </Td>
+                      )}
+                    </tr>
                   ))}
                 </tbody>
               </Table>
@@ -215,7 +229,16 @@ export default function PartyProfilePage() {
         <AccountModal mode={account} isCustomer={isCustomer} partyId={party.id} onClose={() => setAccount(null)}
           onSaved={(msg) => { setAccount(null); setNotice(msg); load(); }} />
       )}
-      {historyOf && <HistoryModal debt={historyOf} onClose={() => setHistoryOf(null)} />}
+      {historyOf && <HistoryModal debt={historyOf} onClose={() => setHistoryOf(null)} onChanged={() => void load()} />}
+      {paymentAction?.kind === "edit" && (
+        <PaymentEditModal payment={paymentAction.payment}
+          maxAmount={(debts.find((d) => d.id === paymentAction.payment.debtId)?.remainingAmount ?? 0) + paymentAction.payment.amount}
+          onClose={() => setPaymentAction(null)} onSaved={() => { setPaymentAction(null); setNotice("Ödəniş düzəldildi"); void load(); }} />
+      )}
+      {paymentAction?.kind === "cancel" && (
+        <PaymentCancelModal payment={paymentAction.payment} onClose={() => setPaymentAction(null)}
+          onSaved={() => { setPaymentAction(null); setNotice("Ödəniş ləğv edildi"); void load(); }} />
+      )}
       {whatsapp && (
         <WhatsAppModal phone={party.phone} name={party.name} storeName={me?.storeName ?? ""} total={totals.totalDebt} paid={totals.paid}
           remaining={totals.remaining} lastPayment={payments[0]?.amount ?? null} onOpen={() => logContact("WHATSAPP")} onClose={() => setWhatsapp(false)} />

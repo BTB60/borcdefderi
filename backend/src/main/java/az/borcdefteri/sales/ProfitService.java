@@ -65,8 +65,9 @@ public class ProfitService {
         Totals p = totals(s, pLo, pHi);
         BigDecimal paidNow = sum("SELECT COALESCE(SUM(paid_cash + paid_card), 0) FROM sales WHERE store_id = :s AND sold_on BETWEEN :f AND :t", s, lo, hi);
         BigDecimal credit = sum("SELECT COALESCE(SUM(credit_amount), 0) FROM sales WHERE store_id = :s AND sold_on BETWEEN :f AND :t", s, lo, hi);
-        BigDecimal collections = sum("SELECT COALESCE(SUM(amount), 0) FROM cash_transactions WHERE store_id = :s AND kind = 'DEBT_COLLECTION' AND occurred_on BETWEEN :f AND :t", s, lo, hi);
-        BigDecimal supplier = sum("SELECT COALESCE(SUM(amount), 0) FROM cash_transactions WHERE store_id = :s AND kind = 'SUPPLIER_PAYMENT' AND occurred_on BETWEEN :f AND :t", s, lo, hi);
+        // cancelled / corrected debt payments are booked back as PAYMENT_REVERSAL in the opposite direction
+        BigDecimal collections = sum("SELECT COALESCE(SUM(CASE WHEN kind = 'DEBT_COLLECTION' THEN amount ELSE -amount END), 0) FROM cash_transactions WHERE store_id = :s AND (kind = 'DEBT_COLLECTION' OR (kind = 'PAYMENT_REVERSAL' AND direction = 'OUT')) AND occurred_on BETWEEN :f AND :t", s, lo, hi);
+        BigDecimal supplier = sum("SELECT COALESCE(SUM(CASE WHEN kind = 'SUPPLIER_PAYMENT' THEN amount ELSE -amount END), 0) FROM cash_transactions WHERE store_id = :s AND (kind = 'SUPPLIER_PAYMENT' OR (kind = 'PAYMENT_REVERSAL' AND direction = 'IN')) AND occurred_on BETWEEN :f AND :t", s, lo, hi);
         long count = jdbc.sql("SELECT COUNT(*) FROM sales WHERE store_id = :s AND sold_on BETWEEN :f AND :t")
                 .param("s", s).param("f", lo).param("t", hi).query(Long.class).single();
         return new Pnl(lo, hi, t.sales, t.returns, t.netSales(), t.cogs(), t.gross(), t.expenses, t.net(), count, paidNow, credit,

@@ -218,6 +218,7 @@ public class StatementService {
             case "PAYMENT_CARD" -> "Ödəniş (kart)";
             case "PAYMENT_TRANSFER" -> "Ödəniş (köçürmə)";
             case "PAYMENT_OTHER" -> "Ödəniş (digər)";
+            case "REVERSAL" -> "Ödəniş ləğvi";
             default -> type;
         };
     }

@@ -104,7 +104,8 @@ export interface DebtPage {
 
 export interface LedgerEntry {
   id: string;
-  type: "DEBT_CREATED" | "DEBT_ADJUSTED" | "DEBT_INCREASED" | "PAYMENT_CASH" | "PAYMENT_CARD" | "PAYMENT_TRANSFER" | "PAYMENT_OTHER";
+  /** REVERSAL: a payment taken back (cancelled, or the old version of a corrected payment) — the debt grows again. */
+  type: "DEBT_CREATED" | "DEBT_ADJUSTED" | "DEBT_INCREASED" | "PAYMENT_CASH" | "PAYMENT_CARD" | "PAYMENT_TRANSFER" | "PAYMENT_OTHER" | "REVERSAL";
   amount: number;
   balanceAfter: number;
   paymentId: string | null;
@@ -142,6 +143,11 @@ export interface Payment {
   debtStatusAfter?: DebtStatus | null;
   /** Public, unguessable link to the PDF receipt — sent to the customer over WhatsApp. */
   receiptUrl?: string | null;
+  /** Set when the store owner cancelled (ləğv) the payment; it no longer counts anywhere. */
+  voidedAt?: string | null;
+  voidReason?: string | null;
+  /** Last correction by the store owner. */
+  editedAt?: string | null;
 }
 
 export interface Party {
@@ -400,7 +406,7 @@ export interface CashAccount { id: string; name: string; kind: CashKind; isDefau
 
 export type MovementKind =
   | "OPENING" | "DEPOSIT" | "WITHDRAWAL" | "TRANSFER_IN" | "TRANSFER_OUT" | "DEBT_COLLECTION" | "SUPPLIER_PAYMENT"
-  | "EXPENSE" | "EXPENSE_REVERSAL" | "SALE" | "SALE_REFUND" | "COUNT_ADJUSTMENT";
+  | "EXPENSE" | "EXPENSE_REVERSAL" | "SALE" | "SALE_REFUND" | "COUNT_ADJUSTMENT" | "PAYMENT_REVERSAL";
 
 export interface CashMovement {
   id: string; accountId: string; accountName: string; direction: "IN" | "OUT"; amount: number; kind: MovementKind;

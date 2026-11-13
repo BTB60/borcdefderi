@@ -125,7 +125,7 @@ public class PartyService {
                        COUNT(d.id) FILTER (WHERE d.status <> 'PAID') AS open_count,
                        COUNT(d.id) FILTER (WHERE d.remaining_amount > 0 AND d.due_date < :today) AS overdue_debts,
                        GREATEST(MAX(d.updated_at), (SELECT MAX(pp.paid_at) FROM payments pp JOIN debts d2 ON d2.id = pp.debt_id
-                                                      WHERE d2.""" + fkColumn + " = p.id)) AS last_activity_at "
+                                                      WHERE pp.voided_at IS NULL AND d2.""" + fkColumn + " = p.id)) AS last_activity_at "
                 + "FROM " + table + " p LEFT JOIN debts d ON d." + fkColumn + " = p.id AND d.store_id = p.store_id" + typeFilter
                 + " WHERE p.store_id = :storeId AND (LOWER(p.name) LIKE LOWER(:q) OR COALESCE(p.phone, '') LIKE :q"
                 + (customers ? " OR LOWER(p.code) LIKE LOWER(:q)" : "") + ")"

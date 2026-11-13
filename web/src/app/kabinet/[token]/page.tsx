@@ -15,6 +15,7 @@ const TYPE_LABEL: Record<string, string> = {
   PAYMENT_CARD: "Ödəniş",
   PAYMENT_TRANSFER: "Ödəniş",
   PAYMENT_OTHER: "Ödəniş",
+  REVERSAL: "Ödəniş ləğvi",
 };
 
 /** Customer portal ("Müştəri kabineti"): read-only, no login, one customer per secret link. */

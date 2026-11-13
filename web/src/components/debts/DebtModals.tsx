@@ -4,6 +4,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Button, EmptyState, Field, Input, Modal, Select, Spinner } from "@/components/ui";
 import { ApiError, api, canShareFiles, download, shareProtectedFile } from "@/lib/api";
 import { DEBT_TYPE_LABEL, METHOD_LABEL, formatDate, formatDateTime, formatMoney, todayBaku } from "@/lib/format";
+import { useAuth } from "@/lib/auth";
+import { PaymentCancelModal, PaymentEditModal } from "@/components/payments/PaymentEditModals";
 import type { Debt, DebtType, LedgerEntry, Party, Payment, PaymentMethod } from "@/lib/types";
 import { paymentConfirmationText, waLink } from "@/lib/whatsapp";
 
@@ -350,12 +352,46 @@ export function PaymentModal({ debt, storeName, canNotify, onClose, onSaved }: {
   );
 }
 
-export function HistoryModal({ debt, onClose }: { debt: Debt; onClose: () => void }) {
+export function HistoryModal({ debt, onClose, onChanged }: { debt: Debt; onClose: () => void; onChanged?: () => void }) {
+  const { isOwner } = useAuth();
   const [entries, setEntries] = useState<LedgerEntry[] | null>(null);
+  const [payments, setPayments] = useState<Record<string, Payment>>({});
+  const [remaining, setRemaining] = useState(debt.remainingAmount);
+  const [action, setAction] = useState<{ kind: "edit" | "cancel"; payment: Payment } | null>(null);
+  const [reload, setReload] = useState(0);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api<LedgerEntry[]>(`/api/debts/${debt.id}/history`).then(setEntries).catch((e) => setError(e instanceof ApiError ? e.message : "Tarixçə yüklənmədi"));
-  }, [debt.id]);
+    if (isOwner) {
+      api<Payment[]>(`/api/payments?debtId=${debt.id}&limit=500&includeVoided=true`)
+        .then((list) => setPayments(Object.fromEntries(list.map((p) => [p.id, p]))))
+        .catch(() => setPayments({}));
+    }
+  }, [debt.id, isOwner, reload]);
+
+  // A payment entry is still in effect when no REVERSAL of the same payment follows it.
+  const live = new Set<string>();
+  entries?.forEach((e, i) => {
+    if (e.paymentId && e.type.startsWith("PAYMENT") && !entries.slice(i + 1).some((x) => x.type === "REVERSAL" && x.paymentId === e.paymentId)) {
+      live.add(e.id);
+    }
+  });
+
+  function changed(p: Payment) {
+    setAction(null);
+    if (p.remainingAfter != null) setRemaining(p.remainingAfter);
+    setEntries(null);
+    setReload((n) => n + 1);
+    onChanged?.();
+  }
+
+  if (action) {
+    return action.kind === "edit" ? (
+      <PaymentEditModal payment={action.payment} maxAmount={remaining + action.payment.amount} onClose={() => setAction(null)} onSaved={changed} />
+    ) : (
+      <PaymentCancelModal payment={action.payment} onClose={() => setAction(null)} onSaved={changed} />
+    );
+  }
 
   const labels: Record<LedgerEntry["type"], string> = {
     DEBT_CREATED: "Borc yaradıldı",
@@ -365,6 +401,7 @@ export function HistoryModal({ debt, onClose }: { debt: Debt; onClose: () => voi
     PAYMENT_CARD: "Kart ödənişi",
     PAYMENT_TRANSFER: "Köçürmə ilə ödəniş",
     PAYMENT_OTHER: "Digər ödəniş",
+    REVERSAL: "Ödəniş ləğvi",
   };
 
   return (
@@ -387,13 +424,25 @@ export function HistoryModal({ debt, onClose }: { debt: Debt; onClose: () => voi
                 <span className={`font-semibold tabular-nums ${e.type.startsWith("PAYMENT") ? "text-emerald-700" : "text-rose-700"}`}>{e.type === "DEBT_INCREASED" ? "+" : ""}{formatMoney(e.amount)}</span>
                 <span className="ml-2 text-xs text-slate-500">qalıq: {formatMoney(e.balanceAfter)}</span>
               </p>
-              {e.paymentId && (
-                <button
-                  className="mt-1 text-xs font-medium text-gold-600 hover:text-gold-500"
-                  onClick={() => download(`/api/payments/${e.paymentId}/receipt`, "cek.pdf").catch((err) => setError(err instanceof ApiError ? err.message : "Çek yüklənmədi"))}
-                >
-                  Çek (PDF) →
-                </button>
+              {e.paymentId && e.type !== "REVERSAL" && (
+                <div className="mt-1 flex flex-wrap gap-3">
+                  <button
+                    className="text-xs font-medium text-gold-600 hover:text-gold-500"
+                    onClick={() => download(`/api/payments/${e.paymentId}/receipt`, "cek.pdf").catch((err) => setError(err instanceof ApiError ? err.message : "Çek yüklənmədi"))}
+                  >
+                    Çek (PDF) →
+                  </button>
+                  {isOwner && live.has(e.id) && payments[e.paymentId] && !payments[e.paymentId].voidedAt && (
+                    <>
+                      <button className="text-xs font-medium text-navy-700 hover:text-navy-500" onClick={() => setAction({ kind: "edit", payment: payments[e.paymentId!] })}>
+                        Düzəlt
+                      </button>
+                      <button className="text-xs font-medium text-rose-600 hover:text-rose-500" onClick={() => setAction({ kind: "cancel", payment: payments[e.paymentId!] })}>
+                        Ləğv et
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
             </li>
           ))}

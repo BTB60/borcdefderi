@@ -356,6 +356,41 @@ public class CashService {
         return insert(storeId, accountId, direction, Money.of(amount), kind, date, null, paymentId, expenseId, note, actorId, null);
     }
 
+    /** A debt payment's money movement (kind DEBT_COLLECTION / SUPPLIER_PAYMENT). */
+    public record PaymentMovement(UUID id, UUID accountId, String direction, BigDecimal amount, String kind) {}
+
+    /**
+     * The movement of a payment that is still in effect (not booked back yet). Empty for payments recorded before
+     * the cash desk existed: those never moved money through a desk, so editing them must not either.
+     */
+    public java.util.Optional<PaymentMovement> livePaymentMovement(UUID storeId, UUID paymentId) {
+        return jdbc.sql("""
+                SELECT t.id, t.account_id, t.direction, t.amount, t.kind FROM cash_transactions t
+                WHERE t.store_id = :s AND t.payment_id = :p AND t.kind IN ('DEBT_COLLECTION', 'SUPPLIER_PAYMENT')
+                  AND NOT EXISTS (SELECT 1 FROM cash_transactions r WHERE r.reverses_id = t.id)
+                ORDER BY t.created_at DESC LIMIT 1""")
+                .param("s", storeId).param("p", paymentId)
+                .query((rs, n) -> new PaymentMovement(rs.getObject("id", UUID.class), rs.getObject("account_id", UUID.class),
+                        rs.getString("direction"), Money.of(rs.getBigDecimal("amount")), rs.getString("kind")))
+                .optional();
+    }
+
+    /** Books a payment's movement back: same account and amount, opposite direction, kind PAYMENT_REVERSAL. */
+    public UUID reversePaymentMovement(UUID storeId, UUID paymentId, PaymentMovement mv, LocalDate date, String note,
+                                       UUID actorId) {
+        lockAccount(storeId, mv.accountId());
+        UUID id = UUID.randomUUID();
+        jdbc.sql("""
+                INSERT INTO cash_transactions (id, store_id, account_id, direction, amount, kind, occurred_on,
+                                               payment_id, note, actor_id, reverses_id)
+                VALUES (:id, :s, :a, :dir, :amt, 'PAYMENT_REVERSAL', :d, :p, :note, :actor, :rev)
+                """).param("id", id).param("s", storeId).param("a", mv.accountId())
+                .param("dir", "IN".equals(mv.direction()) ? "OUT" : "IN").param("amt", mv.amount()).param("d", date)
+                .param("p", paymentId).param("note", note == null || note.isBlank() ? null : note.trim())
+                .param("actor", actorId).param("rev", mv.id()).update();
+        return id;
+    }
+
     /** Money of a sale or a sale refund (kind SALE / SALE_REFUND), linked to the sale. */
     public UUID postSale(UUID storeId, UUID accountId, String direction, BigDecimal amount, String kind, LocalDate date,
                          UUID saleId, String note, UUID actorId) {

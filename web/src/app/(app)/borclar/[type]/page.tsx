@@ -229,7 +229,7 @@ export default function DebtSectionPage() {
           }}
         />
       )}
-      {historyOf && <HistoryModal debt={historyOf} onClose={() => setHistoryOf(null)} />}
+      {historyOf && <HistoryModal debt={historyOf} onClose={() => setHistoryOf(null)} onChanged={() => void load()} />}
       {increasing && (
         <DebtIncreaseModal
           debt={increasing}

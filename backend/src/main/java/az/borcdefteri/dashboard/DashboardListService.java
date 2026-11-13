@@ -246,7 +246,7 @@ public class DashboardListService {
         q.select = "SELECT p.id AS party_id, '" + (customer ? "CUSTOMER" : "COMPANY") + "' AS party_kind, :type AS debt_type, "
                 + "p.name, " + code + " AS code, p.phone, SUM(d.amount) AS total_debt, SUM(d.paid_amount) AS paid, "
                 + "SUM(d.remaining_amount) AS remaining, MAX(d.updated_at) AS last_activity_at, "
-                + "(SELECT MAX(pp.paid_at) FROM payments pp JOIN debts d2 ON d2.id = pp.debt_id WHERE " + fk.replace("d.", "d2.")
+                + "(SELECT MAX(pp.paid_at) FROM payments pp JOIN debts d2 ON d2.id = pp.debt_id WHERE pp.voided_at IS NULL AND " + fk.replace("d.", "d2.")
                 + " = p.id AND d2.debt_type = :type) AS last_payment_at, "
                 + "COUNT(*) FILTER (WHERE d.remaining_amount > 0 AND d.due_date < :today) AS overdue_debts "
                 + "FROM " + partyTable + " JOIN debts d ON " + fk + " = p.id AND d.store_id = p.store_id AND d.debt_type = :type"
@@ -285,7 +285,7 @@ public class DashboardListService {
                        d.debt_date, d.due_date,
                        CASE WHEN d.remaining_amount > 0 AND d.due_date < :today THEN (:today - d.due_date) ELSE 0 END AS overdue_days,
                        d.amount, d.paid_amount, d.remaining_amount, d.status, d.created_at,
-                       (SELECT MAX(p.paid_at) FROM payments p WHERE p.debt_id = d.id) AS last_payment_at,
+                       (SELECT MAX(p.paid_at) FROM payments p WHERE p.debt_id = d.id AND p.voided_at IS NULL) AS last_payment_at,
                        (SELECT t.receipt_number FROM financial_transactions t WHERE t.debt_id = d.id
                           AND t.receipt_number IS NOT NULL ORDER BY t.created_at DESC LIMIT 1) AS receipt_number,
                        (SELECT u.full_name FROM users u WHERE u.id = d.created_by) AS created_by_name,
@@ -326,7 +326,7 @@ public class DashboardListService {
     private void paymentQuery(Query q, CurrentMember m, Filters f, boolean hasQ, List<DebtType> types) {
         q.shape = Shape.PAYMENT;
         q.params.put("types", allowed(m, types));
-        StringBuilder where = new StringBuilder(" WHERE p.store_id = :storeId AND d.debt_type IN (:types)").append(partyKindClause(f));
+        StringBuilder where = new StringBuilder(" WHERE p.store_id = :storeId AND p.voided_at IS NULL AND d.debt_type IN (:types)").append(partyKindClause(f));
         if (f.from() != null) {
             where.append(" AND (p.paid_at AT TIME ZONE :tz)::date >= :from");
             q.params.put("from", f.from());

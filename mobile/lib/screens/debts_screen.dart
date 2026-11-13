@@ -12,6 +12,7 @@ import '../theme.dart';
 import 'common.dart';
 import 'debt_edit_sheet.dart';
 import 'debt_increase_sheet.dart';
+import 'payment_edit_sheet.dart';
 import 'party_profile_screen.dart';
 import 'parties_screen.dart';
 
@@ -251,6 +252,63 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
 
   bool get _canNotify => _debt.debtType != 'COMPANY_PAYABLE';
 
+  /// Ledger entry of a payment that is still in effect: no REVERSAL of the same payment follows it.
+  static bool _isLivePayment(List<Map<String, dynamic>> entries, int i) {
+    final e = entries[i];
+    if (e['paymentId'] == null || !(e['type'] as String).startsWith('PAYMENT')) return false;
+    return !entries.skip(i + 1).any((x) => x['type'] == 'REVERSAL' && x['paymentId'] == e['paymentId']);
+  }
+
+  /// Owner: tap on a payment in the history → receipt, edit or cancel.
+  Future<void> _paymentTapped(String paymentId, double amount) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (_canNotify)
+            ListTile(
+              leading: const Icon(Icons.receipt_long_outlined),
+              title: const Text('Çeki göndər'),
+              onTap: () => Navigator.of(ctx).pop('receipt'),
+            ),
+          ListTile(
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('Düzəlt və ya ləğv et'),
+            onTap: () => Navigator.of(ctx).pop('change'),
+          ),
+        ]),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    if (choice == 'receipt') {
+      _offerReceipt(paymentId, amount);
+      return;
+    }
+    try {
+      final list = await widget.session.api.get('/api/payments',
+          query: {'debtId': _debt.id, 'limit': '500', 'includeVoided': 'true'}) as List;
+      final payment = list
+          .map((e) => Payment.fromJson(e as Map<String, dynamic>))
+          .firstWhere((p) => p.id == paymentId);
+      if (!mounted) return;
+      final changed = await showPaymentActions(context, widget.session, payment,
+          maxAmount: _debt.remainingAmount + payment.amount);
+      if (changed == null || !mounted) return;
+      final fresh = await widget.session.api.get('/api/debts/${_debt.id}') as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _debt = Debt.fromJson(fresh);
+        _changed = true;
+        _history = _loadHistory();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(changed.isVoided ? 'Ödəniş ləğv edildi' : 'Ödəniş düzəldildi')));
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
   Future<void> _openWhatsApp(Uri uri) async {
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('WhatsApp açıla bilmədi')));
@@ -412,6 +470,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
     'PAYMENT_CARD': 'Kart ödənişi',
     'PAYMENT_TRANSFER': 'Köçürmə ilə ödəniş',
     'PAYMENT_OTHER': 'Digər ödəniş',
+    'REVERSAL': 'Ödəniş ləğvi',
   };
 
   @override
@@ -502,13 +561,19 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
               builder: (context, snap) {
                 if (snap.hasError) return ErrorBanner(errorMessage(snap.error!));
                 if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+                final entries = snap.data!;
+                final owner = widget.session.me!.isOwner;
                 return Column(children: [
-                  for (final e in snap.data!)
+                  for (final (i, e) in entries.indexed)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      onTap: e['paymentId'] == null || !_canNotify
+                      onTap: e['paymentId'] == null || e['type'] == 'REVERSAL'
                           ? null
-                          : () => _offerReceipt(e['paymentId'] as String, (e['amount'] as num).toDouble()),
+                          : owner && _isLivePayment(entries, i)
+                              ? () => _paymentTapped(e['paymentId'] as String, (e['amount'] as num).toDouble())
+                              : !_canNotify
+                                  ? null
+                                  : () => _offerReceipt(e['paymentId'] as String, (e['amount'] as num).toDouble()),
                       leading: Icon(
                         (e['type'] as String).startsWith('PAYMENT') ? Icons.south_west : Icons.receipt_long_outlined,
                         color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green.shade700 : Colors.red.shade700,

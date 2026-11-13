@@ -38,7 +38,22 @@ public class PaymentController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) PaymentMethod method,
             @RequestParam(required = false) UUID debtId,
-            @RequestParam(defaultValue = "100") int limit) {
-        return payments.list(from, to, method, debtId, limit);
+            @RequestParam(defaultValue = "100") int limit,
+            @RequestParam(defaultValue = "false") boolean includeVoided) {
+        return payments.list(from, to, method, debtId, limit, includeVoided);
+    }
+
+    /** Store owner only: corrects amount, method, date, description or note (same body as recording a payment). */
+    @PutMapping("/payments/{id}")
+    public PaymentView update(@PathVariable UUID id, @Valid @RequestBody PaymentRequest req) {
+        return payments.update(id, req);
+    }
+
+    public record CancelRequest(@jakarta.validation.constraints.Size(max = 500) String reason) {}
+
+    /** Store owner only: cancels (ləğv) the payment; it is kept, marked as cancelled, and booked back. */
+    @PostMapping("/payments/{id}/cancel")
+    public PaymentView cancel(@PathVariable UUID id, @RequestBody(required = false) @Valid CancelRequest req) {
+        return payments.cancel(id, req == null ? null : req.reason());
     }
 }

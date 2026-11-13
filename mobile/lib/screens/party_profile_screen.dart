@@ -27,6 +27,7 @@ const _entryLabels = {
   'PAYMENT_CARD': 'Ödəniş — kart',
   'PAYMENT_TRANSFER': 'Ödəniş — köçürmə',
   'PAYMENT_OTHER': 'Ödəniş — digər',
+  'REVERSAL': 'Ödəniş ləğvi',
 };
 
 class _Profile {

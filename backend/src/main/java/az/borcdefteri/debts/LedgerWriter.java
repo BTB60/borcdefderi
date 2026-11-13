@@ -6,7 +6,11 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-/** Appends to the immutable financial ledger (table financial_transactions; UPDATE/DELETE forbidden by trigger). */
+/**
+ * Appends to the immutable financial ledger (table financial_transactions; UPDATE/DELETE forbidden by trigger).
+ * created_at is clock_timestamp(), not now(): several entries of one transaction (a payment correction writes a
+ * REVERSAL and a new payment) must keep their order.
+ */
 @Component
 public class LedgerWriter {
 
@@ -27,9 +31,9 @@ public class LedgerWriter {
                        String receiptNumber, String note) {
         jdbc.sql("""
                 INSERT INTO financial_transactions (id, store_id, debt_id, payment_id, transaction_type, amount,
-                                                    balance_after, actor_id, entry_date, receipt_number, note)
+                                                    balance_after, actor_id, entry_date, receipt_number, note, created_at)
                 VALUES (:id, :storeId, :debtId, :paymentId, :type, :amount, :balance, :actor,
-                        :entryDate, :receipt, :note)
+                        :entryDate, :receipt, :note, clock_timestamp())
                 """)
                 .param("entryDate", entryDate)
                 .param("receipt", receiptNumber)

@@ -266,31 +266,57 @@ class DebtPage {
 
 class Payment {
   final String id;
+  final String debtId;
   final String debtType;
   final String partyName;
   final double amount;
   final String paymentMethod;
   final DateTime paidAt;
   final String? description;
+  final String? note;
+
+  /// Set when the store owner cancelled (ləğv) the payment; it no longer counts anywhere.
+  final DateTime? voidedAt;
+  final String? voidReason;
+
+  /// Last correction by the store owner.
+  final DateTime? editedAt;
+
+  /// Debt balance after an edit / cancel (only in the response of those calls).
+  final double? remainingAfter;
 
   const Payment({
     required this.id,
+    this.debtId = '',
     required this.debtType,
     required this.partyName,
     required this.amount,
     required this.paymentMethod,
     required this.paidAt,
     required this.description,
+    this.note,
+    this.voidedAt,
+    this.voidReason,
+    this.editedAt,
+    this.remainingAfter,
   });
+
+  bool get isVoided => voidedAt != null;
 
   factory Payment.fromJson(Map<String, dynamic> j) => Payment(
         id: j['id'] as String,
+        debtId: j['debtId'] as String? ?? '',
         debtType: j['debtType'] as String,
         partyName: j['partyName'] as String? ?? '',
         amount: _num(j['amount']),
         paymentMethod: j['paymentMethod'] as String,
         paidAt: DateTime.parse(j['paidAt'] as String),
         description: _str(j['description']),
+        note: _str(j['note']),
+        voidedAt: _date(j['voidedAt']),
+        voidReason: _str(j['voidReason']),
+        editedAt: _date(j['editedAt']),
+        remainingAfter: j['remainingAfter'] == null ? null : _num(j['remainingAfter']),
       );
 }
 

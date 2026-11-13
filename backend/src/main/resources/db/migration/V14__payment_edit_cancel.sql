@@ -1,4 +1,4 @@
--- Editing and cancelling (ləğv) debt payments. Nothing is deleted: a cancelled payment stays in the table with
+-- Editing and cancelling (ləğv) debt payments and cancelling debt increases ("Borc artır"). Nothing is deleted: a cancelled payment stays in the table with
 -- voided_at set; the debt balance, the ledger and the cash desk are corrected with new reversal rows.
 -- Additive only. Rollback: db/rollback/V14__undo.sql.
 
@@ -37,6 +37,10 @@ ALTER TABLE financial_transactions DROP CONSTRAINT financial_transactions_transa
 ALTER TABLE financial_transactions ADD CONSTRAINT financial_transactions_transaction_type_check
     CHECK (transaction_type IN ('DEBT_CREATED', 'DEBT_ADJUSTED', 'DEBT_INCREASED',
                                 'PAYMENT_CASH', 'PAYMENT_CARD', 'PAYMENT_TRANSFER', 'PAYMENT_OTHER', 'REVERSAL'));
+
+-- 3b) A ledger entry that cancels another one ("Borc artımı ləğv edildi") points at it; each entry can be cancelled once.
+ALTER TABLE financial_transactions ADD COLUMN reverses_entry_id UUID REFERENCES financial_transactions(id);
+CREATE UNIQUE INDEX ux_fin_tx_reverses ON financial_transactions(reverses_entry_id) WHERE reverses_entry_id IS NOT NULL;
 
 -- 4) Cash desk: PAYMENT_REVERSAL books a payment's money movement back (opposite direction), pointing at the
 --    reversed row. A payment can now have several cash rows (original, reversal, corrected), so the

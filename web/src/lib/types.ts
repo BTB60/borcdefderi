@@ -115,6 +115,10 @@ export interface LedgerEntry {
   entryDate?: string | null;
   receiptNumber?: string | null;
   note?: string | null;
+  /** This entry cancels another one (a "Borc artırıldı" cancelled by the owner). */
+  reversesEntryId?: string | null;
+  /** This entry was cancelled by a later one. */
+  cancelled?: boolean;
 }
 
 /** GET /api/customers/{id}/profile and /api/companies/{id}/profile */

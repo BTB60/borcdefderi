@@ -259,6 +259,40 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
     return !entries.skip(i + 1).any((x) => x['type'] == 'REVERSAL' && x['paymentId'] == e['paymentId']);
   }
 
+  /// Owner: cancel a "Borc artırıldı" entry recorded by mistake; the debt goes back to what it was before it.
+  Future<void> _cancelIncrease(Map<String, dynamic> e) async {
+    final amount = (e['amount'] as num).toDouble();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Borc artımını ləğv et?'),
+        content: Text('${formatMoney(amount)} artım ləğv ediləcək, borc bu məbləğ qədər azalacaq. '
+            'Əməliyyat tarixçədə “ləğv edilib” kimi qalır.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Bağla')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Ləğv et'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final res = await widget.session.api.post('/api/debts/${_debt.id}/history/${e['id']}/cancel', <String, dynamic>{});
+      if (!mounted) return;
+      setState(() {
+        _debt = Debt.fromJson(res as Map<String, dynamic>);
+        _changed = true;
+        _history = _loadHistory();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Borc artımı ləğv edildi')));
+    } catch (err) {
+      if (mounted) showError(context, err);
+    }
+  }
+
   /// Owner: tap on a payment in the history → receipt, edit or cancel.
   Future<void> _paymentTapped(String paymentId, double amount) async {
     final choice = await showModalBottomSheet<String>(
@@ -567,7 +601,9 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                   for (final (i, e) in entries.indexed)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      onTap: e['paymentId'] == null || e['type'] == 'REVERSAL'
+                      onTap: owner && e['type'] == 'DEBT_INCREASED' && e['cancelled'] != true
+                          ? () => _cancelIncrease(e)
+                          : e['paymentId'] == null || e['type'] == 'REVERSAL'
                           ? null
                           : owner && _isLivePayment(entries, i)
                               ? () => _paymentTapped(e['paymentId'] as String, (e['amount'] as num).toDouble())
@@ -578,7 +614,10 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                         (e['type'] as String).startsWith('PAYMENT') ? Icons.south_west : Icons.receipt_long_outlined,
                         color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green.shade700 : Colors.red.shade700,
                       ),
-                      title: Text(_labels[e['type']] ?? '${e['type']}'),
+                      title: Text([
+                        e['reversesEntryId'] != null ? 'Borc artımı ləğv edildi' : _labels[e['type']] ?? '${e['type']}',
+                        if (e['cancelled'] == true) '(ləğv edilib)',
+                      ].join(' ')),
                       subtitle: Text([
                         '${formatDateTime(DateTime.parse(e['createdAt'] as String))} · ${e['actorName']}',
                         if (e['entryDate'] != null) 'Tarix: ${formatDate(DateTime.parse(e['entryDate'] as String))}',

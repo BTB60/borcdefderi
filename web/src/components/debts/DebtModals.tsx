@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Alert, Button, EmptyState, Field, Input, Modal, Select, Spinner } from "@/components/ui";
+import { Alert, Button, EmptyState, Field, Input, Modal, Select, Spinner, useConfirm } from "@/components/ui";
 import { ApiError, api, canShareFiles, download, shareProtectedFile } from "@/lib/api";
 import { DEBT_TYPE_LABEL, METHOD_LABEL, formatDate, formatDateTime, formatMoney, todayBaku } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
@@ -360,6 +360,24 @@ export function HistoryModal({ debt, onClose, onChanged }: { debt: Debt; onClose
   const [action, setAction] = useState<{ kind: "edit" | "cancel"; payment: Payment } | null>(null);
   const [reload, setReload] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
+
+  async function cancelIncrease(e: LedgerEntry) {
+    const ok = await confirm(
+      `${formatMoney(e.amount)} borc artımı ləğv edilsin? Borc bu məbləğ qədər azalacaq (artımdan əvvəlki vəziyyətə qayıdacaq). Əməliyyat tarixçədə “ləğv edildi” kimi qalır.`,
+      { title: "Borc artımını ləğv et", confirmLabel: "Ləğv et", danger: true },
+    );
+    if (!ok) return;
+    try {
+      const updated = await api<Debt>(`/api/debts/${debt.id}/history/${e.id}/cancel`, { method: "POST", json: {} });
+      setRemaining(updated.remainingAmount);
+      setEntries(null);
+      setReload((n) => n + 1);
+      onChanged?.();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Əməliyyat ləğv edilmədi");
+    }
+  }
   useEffect(() => {
     api<LedgerEntry[]>(`/api/debts/${debt.id}/history`).then(setEntries).catch((e) => setError(e instanceof ApiError ? e.message : "Tarixçə yüklənmədi"));
     if (isOwner) {
@@ -406,6 +424,7 @@ export function HistoryModal({ debt, onClose, onChanged }: { debt: Debt; onClose
 
   return (
     <Modal open title={`Tarixçə — ${debt.partyName}`} onClose={onClose}>
+      {confirmDialog}
       {error && <Alert>{error}</Alert>}
       {!entries && !error && <Spinner />}
       {entries && (
@@ -413,7 +432,10 @@ export function HistoryModal({ debt, onClose, onChanged }: { debt: Debt; onClose
           {entries.map((e) => (
             <li key={e.id} className="relative">
               <span className={`absolute -left-[31px] top-1 h-3.5 w-3.5 rounded-full ring-4 ring-white ${e.type.startsWith("PAYMENT") ? "bg-emerald-500" : "bg-navy-800"}`} />
-              <p className="text-sm font-medium text-navy-800">{labels[e.type]}</p>
+              <p className="text-sm font-medium text-navy-800">
+                {e.reversesEntryId ? "Borc artımı ləğv edildi" : labels[e.type]}
+                {e.cancelled && <span className="ml-2 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">ləğv edilib</span>}
+              </p>
               <p className="text-xs text-slate-500">{formatDateTime(e.createdAt)} · {e.actorName}</p>
               {(e.entryDate || e.receiptNumber || e.note) && (
                 <p className="text-xs text-slate-500">
@@ -424,6 +446,11 @@ export function HistoryModal({ debt, onClose, onChanged }: { debt: Debt; onClose
                 <span className={`font-semibold tabular-nums ${e.type.startsWith("PAYMENT") ? "text-emerald-700" : "text-rose-700"}`}>{e.type === "DEBT_INCREASED" ? "+" : ""}{formatMoney(e.amount)}</span>
                 <span className="ml-2 text-xs text-slate-500">qalıq: {formatMoney(e.balanceAfter)}</span>
               </p>
+              {isOwner && e.type === "DEBT_INCREASED" && !e.cancelled && (
+                <button className="mt-1 text-xs font-medium text-rose-600 hover:text-rose-500" onClick={() => void cancelIncrease(e)}>
+                  Ləğv et
+                </button>
+              )}
               {e.paymentId && e.type !== "REVERSAL" && (
                 <div className="mt-1 flex flex-wrap gap-3">
                   <button

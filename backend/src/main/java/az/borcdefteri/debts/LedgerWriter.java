@@ -29,15 +29,24 @@ public class LedgerWriter {
     public void append(UUID storeId, UUID debtId, UUID paymentId, String type, BigDecimal amount,
                        BigDecimal balanceAfter, UUID actorId, java.time.LocalDate entryDate,
                        String receiptNumber, String note) {
+        append(storeId, debtId, paymentId, type, amount, balanceAfter, actorId, entryDate, receiptNumber, note, null);
+    }
+
+    /** Same, for an entry that cancels an earlier one ({@code reversesEntryId}; each can be cancelled once). */
+    public void append(UUID storeId, UUID debtId, UUID paymentId, String type, BigDecimal amount,
+                       BigDecimal balanceAfter, UUID actorId, java.time.LocalDate entryDate,
+                       String receiptNumber, String note, UUID reversesEntryId) {
         jdbc.sql("""
                 INSERT INTO financial_transactions (id, store_id, debt_id, payment_id, transaction_type, amount,
-                                                    balance_after, actor_id, entry_date, receipt_number, note, created_at)
+                                                    balance_after, actor_id, entry_date, receipt_number, note, created_at,
+                                                    reverses_entry_id)
                 VALUES (:id, :storeId, :debtId, :paymentId, :type, :amount, :balance, :actor,
-                        :entryDate, :receipt, :note, clock_timestamp())
+                        :entryDate, :receipt, :note, clock_timestamp(), :rev)
                 """)
                 .param("entryDate", entryDate)
                 .param("receipt", receiptNumber)
                 .param("note", note)
+                .param("rev", reversesEntryId)
                 .param("id", UUID.randomUUID())
                 .param("storeId", storeId)
                 .param("debtId", debtId)

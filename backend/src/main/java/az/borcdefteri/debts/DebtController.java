@@ -54,6 +54,15 @@ public class DebtController {
         return debts.update(id, req);
     }
 
+    public record CancelEntryRequest(@jakarta.validation.constraints.Size(max = 500) String reason) {}
+
+    /** Store owner only: cancels a "Borc artır" history entry; the debt goes back to what it was before it. */
+    @PostMapping("/{id}/history/{entryId}/cancel")
+    public DebtView cancelIncrease(@PathVariable UUID id, @PathVariable UUID entryId,
+                                   @RequestBody(required = false) @jakarta.validation.Valid CancelEntryRequest req) {
+        return debts.cancelIncrease(id, entryId, req == null ? null : req.reason());
+    }
+
     /** "Borc artır": add more to an existing debt (kept as its own history entry). */
     @PostMapping("/{id}/increase")
     public DebtView increase(@PathVariable UUID id, @Valid @RequestBody DebtIncreaseRequest req) {

@@ -35,7 +35,8 @@ public class DebtService {
 
     public record LedgerEntry(UUID id, String type, BigDecimal amount, BigDecimal balanceAfter,
                               UUID paymentId, UUID actorId, String actorName, OffsetDateTime createdAt,
-                              LocalDate entryDate, String receiptNumber, String note) {}
+                              LocalDate entryDate, String receiptNumber, String note,
+                              UUID reversesEntryId, boolean cancelled) {}
 
     static final String SELECT = """
             SELECT d.id, d.debt_type, d.customer_id, d.company_id,
@@ -100,7 +101,9 @@ public class DebtService {
         requireAccess(m, load(m, id).debtType());
         return jdbc.sql("""
                 SELECT t.id, t.transaction_type, t.amount, t.balance_after, t.payment_id, t.actor_id,
-                       u.full_name AS actor_name, t.created_at, t.entry_date, t.receipt_number, t.note
+                       u.full_name AS actor_name, t.created_at, t.entry_date, t.receipt_number, t.note,
+                       t.reverses_entry_id,
+                       EXISTS (SELECT 1 FROM financial_transactions r WHERE r.reverses_entry_id = t.id) AS cancelled
                 FROM financial_transactions t JOIN users u ON u.id = t.actor_id
                 WHERE t.debt_id = :debtId AND t.store_id = :storeId
                 ORDER BY t.created_at, t.id
@@ -116,7 +119,9 @@ public class DebtService {
                         rs.getObject("created_at", OffsetDateTime.class),
                         rs.getObject("entry_date", LocalDate.class),
                         rs.getString("receipt_number"),
-                        rs.getString("note")))
+                        rs.getString("note"),
+                        rs.getObject("reverses_entry_id", UUID.class),
+                        rs.getBoolean("cancelled")))
                 .list();
     }
 
@@ -251,6 +256,60 @@ public class DebtService {
         audit.log(m.storeId(), m.userId(), "DEBT_INCREASED", "DEBT", id.toString(),
                 current.partyName() + ": " + current.amount() + " -> " + newAmount + " AZN (+" + add + ")");
         return load(m, id);
+    }
+
+    /**
+     * Store owner only: cancels a "Borc artır" entry recorded by mistake. The debt amount and remaining go back down
+     * by that value (700 + 100 by mistake → cancel → 700 again). The entry stays in the history; a negative
+     * DEBT_ADJUSTED entry pointing at it records the cancellation. Not possible when payments already cover the
+     * increase (cancel those payments first), so the remaining balance never goes negative.
+     */
+    @Transactional
+    public DebtView cancelIncrease(UUID debtId, UUID entryId, String reason) {
+        CurrentMember m = tenant.requireBusinessMember();
+        if (!m.isOwner()) {
+            throw ApiException.forbidden("OWNER_ONLY", "Əməliyyatı yalnız mağaza sahibi ləğv edə bilər");
+        }
+        DebtView current = lockAndLoad(m, debtId);
+        record Entry(String type, BigDecimal amount, boolean cancelled) {}
+        Entry e = jdbc.sql("""
+                SELECT t.transaction_type, t.amount,
+                       EXISTS (SELECT 1 FROM financial_transactions r WHERE r.reverses_entry_id = t.id) AS cancelled
+                FROM financial_transactions t WHERE t.id = :id AND t.debt_id = :d AND t.store_id = :s""")
+                .param("id", entryId).param("d", debtId).param("s", m.storeId())
+                .query((rs, n) -> new Entry(rs.getString("transaction_type"), Money.of(rs.getBigDecimal("amount")),
+                        rs.getBoolean("cancelled")))
+                .optional().orElseThrow(() -> ApiException.notFound("Əməliyyat tapılmadı"));
+        if (!"DEBT_INCREASED".equals(e.type())) {
+            throw ApiException.badRequest("NOT_CANCELLABLE",
+                    "Yalnız “Borc artırıldı” əməliyyatı ləğv edilə bilər (ödənişi ödənişlər bölməsində ləğv edin)");
+        }
+        if (e.cancelled()) {
+            throw ApiException.conflict("ALREADY_CANCELLED", "Bu əməliyyat artıq ləğv edilib");
+        }
+        BigDecimal x = e.amount();
+        if (x.compareTo(current.remainingAmount()) > 0) {
+            throw ApiException.conflict("INCREASE_ALREADY_PAID",
+                    "Bu artım artıq ödənilib (qalıq " + current.remainingAmount()
+                            + " AZN). Əvvəlcə həmin ödənişi ləğv edin");
+        }
+        BigDecimal newAmount = Money.of(current.amount().subtract(x));
+        BigDecimal newRemaining = Money.of(current.remainingAmount().subtract(x));
+        String status = statusFor(current.paidAmount(), newRemaining);
+        jdbc.sql("""
+                UPDATE debts SET amount = :amount, remaining_amount = :remaining, status = :status,
+                       updated_at = now(), version = version + 1
+                WHERE id = :id AND store_id = :storeId
+                """).param("amount", newAmount).param("remaining", newRemaining).param("status", status)
+                .param("id", debtId).param("storeId", m.storeId()).update();
+        String why = blankToNull(reason);
+        String note = "Borc artımı ləğv edildi" + (why == null ? "" : ": " + why);
+        ledger.append(m.storeId(), debtId, null, "DEBT_ADJUSTED", x.negate(), newRemaining, m.userId(),
+                tenant.today(), null, note.length() > 500 ? note.substring(0, 500) : note, entryId);
+        audit.log(m.storeId(), m.userId(), "DEBT_INCREASE_CANCELLED", "DEBT", debtId.toString(),
+                current.partyName() + ": " + current.amount() + " -> " + newAmount + " AZN (-" + x + ")"
+                        + (why == null ? "" : ", səbəb: " + why));
+        return load(m, debtId);
     }
 
     /**

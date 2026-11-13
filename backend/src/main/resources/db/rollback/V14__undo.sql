@@ -22,3 +22,5 @@ CREATE TRIGGER trg_payments_immutable BEFORE UPDATE OR DELETE ON payments
 -- ALTER TABLE payments DROP COLUMN voided_at, DROP COLUMN voided_by, DROP COLUMN void_reason,
 --     DROP COLUMN edited_at, DROP COLUMN edited_by;
 ALTER TABLE cash_transactions DROP COLUMN IF EXISTS reverses_id;
+DROP INDEX IF EXISTS ux_fin_tx_reverses;
+ALTER TABLE financial_transactions DROP COLUMN IF EXISTS reverses_entry_id;

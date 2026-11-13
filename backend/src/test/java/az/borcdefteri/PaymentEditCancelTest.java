@@ -136,6 +136,105 @@ class PaymentEditCancelTest extends IntegrationTestBase {
         assertEquals(0.0, balance(owner, "CASH"));
     }
 
+    /** "Fariz" case: 700 owed, 100 paid by mistake (600 shown), payment cancelled → 700 again, for every section. */
+    @Test
+    void cancellingAPaymentRestoresTheFullBalanceInEverySection() throws Exception {
+        String owner = register("Fariz Mağazası");
+        activateSubscription(owner, "SEMI_ANNUAL");
+        UUID customer = createCustomer(owner, "Fariz", "+994501119903");
+        UUID company = createCompany(owner, "Fariz MMC");
+        String[][] cases = {{"CUSTOMER_DEBT", customer.toString()}, {"COMPANY_RECEIVABLE", company.toString()},
+                {"COMPANY_PAYABLE", company.toString()}};
+        for (String[] c : cases) {
+            UUID debt = debtIdOf(owner, c[0], UUID.fromString(c[1]), "700.00");
+            String paymentId = body(pay(owner, debt, "100.00", "CASH").andExpect(status().isCreated())).get("id").asText();
+            get(owner, "/api/debts/" + debt).andExpect(jsonPath("$.remainingAmount", is(600.0)));
+            post(owner, "/api/payments/" + paymentId + "/cancel", Map.of()).andExpect(status().isOk());
+            get(owner, "/api/debts/" + debt).andExpect(jsonPath("$.amount", is(700.0)))
+                    .andExpect(jsonPath("$.paidAmount", is(0.0)))
+                    .andExpect(jsonPath("$.remainingAmount", is(700.0)))
+                    .andExpect(jsonPath("$.status", is("OPEN")));
+        }
+        assertEquals(0.0, balance(owner, "CASH"));
+        get(owner, "/api/dashboard").andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.customerDebts", is(700.0)))
+                .andExpect(jsonPath("$.summary.companyReceivables", is(700.0)))
+                .andExpect(jsonPath("$.summary.companyPayables", is(700.0)))
+                .andExpect(jsonPath("$.summary.cashReceived", is(0.0)))
+                .andExpect(jsonPath("$.summary.todayTotal", is(0.0)))
+                .andExpect(jsonPath("$.recentTransactions", hasSize(0)));
+        get(owner, "/api/payments").andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    private UUID increase(String token, UUID debt, String amount) throws Exception {
+        long version = body(get(token, "/api/debts/" + debt)).get("version").asLong();
+        post(token, "/api/debts/" + debt + "/increase", Map.of("amount", amount, "version", version))
+                .andExpect(status().isOk());
+        JsonNode history = body(get(token, "/api/debts/" + debt + "/history"));
+        for (int i = history.size() - 1; i >= 0; i--) {
+            if ("DEBT_INCREASED".equals(history.get(i).get("type").asText())) {
+                return UUID.fromString(history.get(i).get("id").asText());
+            }
+        }
+        throw new AssertionError("no increase entry");
+    }
+
+    @Test
+    void cancellingADebtIncreaseRestoresThePreviousDebt() throws Exception {
+        String owner = register("Artım Ləğv");
+        activateSubscription(owner, "SEMI_ANNUAL");
+        UUID company = createCompany(owner, "Artım MMC");
+        UUID debt = debtIdOf(owner, "COMPANY_PAYABLE", company, "700.00");
+        UUID entry = increase(owner, debt, "100.00");
+        get(owner, "/api/debts/" + debt).andExpect(jsonPath("$.amount", is(800.0)));
+
+        String email = uniqueEmail("artim");
+        post(owner, "/api/employees", Map.of("email", email, "password", EMPLOYEE_PASSWORD,
+                "fullName", "İşçi", "permissions", perms("COMPANY_PAYABLES"))).andExpect(status().is2xxSuccessful());
+        String employee = login(email, EMPLOYEE_PASSWORD);
+        post(employee, "/api/debts/" + debt + "/history/" + entry + "/cancel", Map.of()).andExpect(status().isForbidden());
+
+        post(owner, "/api/debts/" + debt + "/history/" + entry + "/cancel", Map.of("reason", "səhv yazılıb"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.amount", is(700.0)))
+                .andExpect(jsonPath("$.remainingAmount", is(700.0)));
+        post(owner, "/api/debts/" + debt + "/history/" + entry + "/cancel", Map.of()).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error", is("ALREADY_CANCELLED")));
+        get(owner, "/api/dashboard").andExpect(jsonPath("$.summary.companyPayables", is(700.0)));
+
+        JsonNode history = body(get(owner, "/api/debts/" + debt + "/history"));
+        boolean marked = false;
+        for (JsonNode e : history) {
+            if (e.get("id").asText().equals(entry.toString())) marked = e.get("cancelled").asBoolean();
+        }
+        assertEquals(true, marked);
+        JsonNode last = history.get(history.size() - 1);
+        assertEquals("DEBT_ADJUSTED", last.get("type").asText());
+        assertEquals(-100.0, last.get("amount").asDouble());
+        assertEquals(entry.toString(), last.get("reversesEntryId").asText());
+
+        // only increases; the creation entry is not cancellable this way
+        String created = history.get(0).get("id").asText();
+        post(owner, "/api/debts/" + debt + "/history/" + created + "/cancel", Map.of()).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void anIncreaseThatIsAlreadyPaidCannotBeCancelledUntilThePaymentIs() throws Exception {
+        String owner = register("Artım Ödənib");
+        activateSubscription(owner, "MONTHLY");
+        UUID customer = createCustomer(owner, "Artım Müştəri", "+994501119904");
+        UUID debt = debtIdOf(owner, "CUSTOMER_DEBT", customer, "50.00");
+        UUID entry = increase(owner, debt, "30.00");
+        String paymentId = body(pay(owner, debt, "80.00", "CASH").andExpect(status().isCreated())).get("id").asText();
+        post(owner, "/api/debts/" + debt + "/history/" + entry + "/cancel", Map.of()).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error", is("INCREASE_ALREADY_PAID")));
+        post(owner, "/api/payments/" + paymentId + "/cancel", Map.of()).andExpect(status().isOk());
+        post(owner, "/api/debts/" + debt + "/history/" + entry + "/cancel", Map.of()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.amount", is(50.0)))
+                .andExpect(jsonPath("$.remainingAmount", is(50.0)))
+                .andExpect(jsonPath("$.status", is("OPEN")));
+    }
+
     @Test
     void onlyTheOwnerMayEditOrCancel() throws Exception {
         String owner = register("İcazə Ləğv");

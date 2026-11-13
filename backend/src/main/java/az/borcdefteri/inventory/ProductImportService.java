@@ -116,7 +116,7 @@ public class ProductImportService {
             try {
                 if (p == null) {
                     inventory.create(new ProductRequest(r.name(), r.code(), r.barcode(), categoryId, null, r.unit(), r.buy(),
-                            r.sell(), r.min(), r.qty(), r.active() == null || r.active(), null));
+                            r.sell(), r.min(), r.qty(), r.active() == null || r.active(), null, null));
                     created++;
                 } else {
                     String unit = r.unit() == null ? p.unit() : r.unit();
@@ -132,7 +132,7 @@ public class ProductImportService {
                         continue;
                     }
                     inventory.update(p.id(), new ProductRequest(r.name(), p.code(), barcode, cat, p.supplierId(), unit, r.buy(),
-                            r.sell(), min, null, active, p.version()));
+                            r.sell(), min, null, active, p.version(), null));
                     updated++;
                 }
             } catch (ApiException e) {

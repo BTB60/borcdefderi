@@ -160,6 +160,26 @@ class ProductTransferTest extends IntegrationTestBase {
         try (var doc = new com.lowagie.text.pdf.PdfReader(all)) {
             assertEquals(4, doc.getNumberOfPages(), "3 for the tea in stock, at least 1 for the product with no stock");
         }
+        // custom size, smaller barcode, no store name; a discounted product
+        put(owner, "/api/products/" + tea, Map.of("name", "Çay", "purchasePrice", "3.20", "salePrice", "10.00", "oldPrice", "15.00",
+                "barcode", "4760000000066", "version", body(get(owner, "/api/products/" + tea)).get("version").asLong()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.oldPrice", is(15.0)));
+        byte[] custom = get(owner, "/api/products/labels?size=custom&w=70&h=30&barcode=60&font=120&show=name,price,old&ids=" + tea)
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        try (var doc = new com.lowagie.text.pdf.PdfReader(custom)) {
+            assertEquals(1, doc.getNumberOfPages());
+            assertEquals(70 * 72 / 25.4, doc.getPageSize(1).getWidth(), 0.5);
+            String text = new com.lowagie.text.pdf.parser.PdfTextExtractor(doc).getTextFromPage(1);
+            assertTrue(text.contains("15,00") && text.contains("10,00"), text);
+        }
+        // oldPrice omitted keeps it, 0 removes it
+        put(owner, "/api/products/" + tea, Map.of("name", "Çay", "purchasePrice", "3.20", "salePrice", "10.00",
+                "version", body(get(owner, "/api/products/" + tea)).get("version").asLong()))
+                .andExpect(jsonPath("$.oldPrice", is(15.0)));
+        put(owner, "/api/products/" + tea, Map.of("name", "Çay", "purchasePrice", "3.20", "salePrice", "10.00", "oldPrice", "0",
+                "version", body(get(owner, "/api/products/" + tea)).get("version").asLong()))
+                .andExpect(jsonPath("$.oldPrice").doesNotExist());
+        get(owner, "/api/products/labels?size=custom&w=10&h=10").andExpect(status().isBadRequest());
         get(owner, "/api/products/labels?size=huge").andExpect(status().isBadRequest());
         get(owner, "/api/products/labels?copies=0").andExpect(status().isBadRequest());
     }

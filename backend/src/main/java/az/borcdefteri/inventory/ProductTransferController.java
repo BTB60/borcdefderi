@@ -31,9 +31,14 @@ public class ProductTransferController {
     @GetMapping("/labels")
     public ResponseEntity<byte[]> labels(@RequestParam(required = false) List<UUID> ids,
                                          @RequestParam(defaultValue = "medium") String size,
+                                         @RequestParam(required = false) Float w,
+                                         @RequestParam(required = false) Float h,
+                                         @RequestParam(required = false) Integer barcode,
+                                         @RequestParam(required = false) Integer font,
+                                         @RequestParam(required = false) String show,
                                          @RequestParam(defaultValue = "1") int copies,
                                          @RequestParam(defaultValue = "false") boolean perStock) {
-        ExportFile f = labels.labels(ids, size, copies, perStock);
+        ExportFile f = labels.labels(ids, ProductLabelService.design(size, w, h, barcode, font, show), copies, perStock);
         return FileResponses.inline(f.content(), f.contentType(), f.fileName());
     }
 

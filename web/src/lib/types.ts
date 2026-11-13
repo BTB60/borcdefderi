@@ -457,6 +457,8 @@ export interface Product {
   supplierId: string | null; supplierName: string | null; unit: string; purchasePrice: number; salePrice: number;
   stockQty: number; minStock: number; active: boolean; lowStock: boolean; outOfStock: boolean; hasImage: boolean;
   stockCostValue: number; stockSaleValue: number; version: number;
+  /** Price before a discount; shown struck through on labels. */
+  oldPrice?: number | null;
 }
 
 export interface StockMovement {

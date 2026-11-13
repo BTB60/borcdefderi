@@ -433,13 +433,14 @@ class _ProductSheetState extends State<_ProductSheet> {
   final _stock = TextEditingController();
   final _min = TextEditingController(text: '0');
   final _unit = TextEditingController(text: 'ədəd');
+  final _old = TextEditingController();
   ({Uint8List bytes, bool png})? _image;
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
-    for (final c in [_name, _barcode, _buy, _sell, _stock, _min, _unit]) {
+    for (final c in [_name, _barcode, _buy, _sell, _stock, _min, _unit, _old]) {
       c.dispose();
     }
     super.dispose();
@@ -462,6 +463,7 @@ class _ProductSheetState extends State<_ProductSheet> {
         'unit': _unit.text.trim(),
         'minStock': _d(_min).isEmpty ? '0' : _d(_min),
         'initialStock': _d(_stock).isEmpty ? null : _d(_stock),
+        'oldPrice': _d(_old).isEmpty ? null : _d(_old),
       }) as Map<String, dynamic>;
       var msg = 'Məhsul əlavə edildi: ${p['code']}';
       if (_image != null) {
@@ -589,6 +591,17 @@ class _ProductSheetState extends State<_ProductSheet> {
           ),
         ]),
         _margin(),
+        _gap,
+        TextField(
+          controller: _old,
+          keyboardType: _decimal,
+          decoration: const InputDecoration(
+            labelText: 'Endirimdən əvvəlki qiymət (istəyə bağlı)',
+            suffixText: '₼',
+            helperText: 'Etiketdə xətli göstərilir, satış qiyməti isə yeni qiymətdir',
+            helperMaxLines: 2,
+          ),
+        ),
         _section('Anbar'),
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
@@ -680,6 +693,78 @@ class _StockSheetState extends State<_StockSheet> {
     }
   }
 
+  /// Sale price and the price before a discount (shown struck through on the barcode label).
+  Future<void> _editPrice() async {
+    final p = _product;
+    final sale = TextEditingController(text: _n(p['salePrice']).toStringAsFixed(2));
+    final old = TextEditingController(text: p['oldPrice'] == null ? '' : _n(p['oldPrice']).toStringAsFixed(2));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Qiymət və endirim'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: sale,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Satış qiyməti (indiki)', suffixText: '₼'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: old,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Endirimdən əvvəlki qiymət',
+              suffixText: '₼',
+              helperText: 'Boş = endirim yoxdur. Etiketdə xətli göstərilir',
+              helperMaxLines: 2,
+            ),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ləğv et')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Saxla')),
+        ],
+      ),
+    );
+    final saleText = sale.text.trim().replaceAll(',', '.');
+    final oldText = old.text.trim().replaceAll(',', '.');
+    sale.dispose();
+    old.dispose();
+    if (ok != true || !mounted) return;
+    final newSale = double.tryParse(saleText);
+    final newOld = oldText.isEmpty ? 0.0 : double.tryParse(oldText);
+    if (newSale == null || newOld == null) {
+      showError(context, 'Qiyməti düzgün yazın');
+      return;
+    }
+    if (newOld != 0 && newOld <= newSale) {
+      showError(context, 'Endirimdən əvvəlki qiymət indiki qiymətdən böyük olmalıdır');
+      return;
+    }
+    try {
+      final saved = await widget.session.api.put('/api/products/${p['id']}', {
+        'name': p['name'],
+        'code': p['code'],
+        'barcode': p['barcode'],
+        'categoryId': p['categoryId'],
+        'supplierId': p['supplierId'],
+        'unit': p['unit'],
+        'purchasePrice': _n(p['purchasePrice']).toStringAsFixed(2),
+        'salePrice': newSale.toStringAsFixed(2),
+        'minStock': '${p['minStock']}',
+        'active': p['active'],
+        'version': p['version'],
+        'oldPrice': newOld.toStringAsFixed(2),
+      }) as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() => _product = saved);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(newOld == 0 ? 'Qiymət saxlandı' : 'Endirim: ${formatMoney(newOld)} → ${formatMoney(newSale)}')));
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
   Future<void> _changeImage() async {
     final img = await _pickProductImage(context);
     if (img == null || !mounted) return;
@@ -713,24 +798,63 @@ class _StockSheetState extends State<_StockSheet> {
             icon: const Icon(Icons.print_outlined),
             label: const Text('Barkod çap et'),
           ),
+          TextButton.icon(
+            onPressed: _editPrice,
+            icon: const Icon(Icons.local_offer_outlined),
+            label: const Text('Qiymət / endirim'),
+          ),
         ]),
         const SizedBox(height: 4),
         if (_error != null) ErrorBanner(_error!),
-        Wrap(spacing: 6, children: [
-          for (final k in const [['RECEIPT', 'Giriş'], ['ISSUE', 'Çıxış'], ['ADJUSTMENT', 'Düzəliş ±']])
-            ChoiceChip(label: Text(k[1]), selected: _kind == k[0], onSelected: (_) => setState(() => _kind = k[0])),
-        ]),
-        TextField(
-          controller: _qty,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-          decoration: InputDecoration(labelText: _kind == 'ADJUSTMENT' ? 'Fərq (+/−)' : 'Miqdar'),
+        const Divider(height: 24),
+        Text('STOK HƏRƏKƏTİ', style: TextStyle(fontSize: 12, letterSpacing: 0.8, fontWeight: FontWeight.w700, color: Colors.grey.shade600)),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: 'RECEIPT', icon: Icon(Icons.south_west), label: Text('Giriş')),
+            ButtonSegment(value: 'ISSUE', icon: Icon(Icons.north_east), label: Text('Çıxış')),
+            ButtonSegment(value: 'ADJUSTMENT', icon: Icon(Icons.tune), label: Text('Düzəliş')),
+          ],
+          selected: {_kind},
+          onSelectionChanged: (v) => setState(() => _kind = v.first),
         ),
-        if (_kind == 'RECEIPT')
-          TextField(controller: _cost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Alış qiyməti (₼)')),
-        TextField(controller: _note, decoration: const InputDecoration(labelText: 'Qeyd')),
-        const SizedBox(height: 14),
-        FilledButton(onPressed: _busy ? null : _save, child: const Text('Təsdiqlə')),
+        const SizedBox(height: 12),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: TextField(
+              controller: _qty,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              decoration: InputDecoration(
+                labelText: _kind == 'ADJUSTMENT' ? 'Fərq (+ və ya −)' : 'Miqdar',
+                suffixText: '${_product['unit'] ?? ''}',
+              ),
+            ),
+          ),
+          if (_kind == 'RECEIPT') ...[
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _cost,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Alış qiyməti', suffixText: '₼'),
+              ),
+            ),
+          ],
+        ]),
+        const SizedBox(height: 12),
+        TextField(controller: _note, decoration: const InputDecoration(labelText: 'Qeyd (istəyə bağlı)')),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 52,
+          child: FilledButton.icon(
+            onPressed: _busy ? null : _save,
+            icon: const Icon(Icons.check),
+            label: Text(_kind == 'RECEIPT' ? 'Anbara giriş et' : _kind == 'ISSUE' ? 'Anbardan çıxar' : 'Düzəlişi yaz',
+                style: const TextStyle(fontSize: 16)),
+          ),
+        ),
       ]);
 }
 
@@ -759,7 +883,12 @@ class _ProductHeader extends StatelessWidget {
           Text([p['code'], p['barcode']].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
               style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
           const SizedBox(height: 8),
-          Text('Satış: ${formatMoney(_n(p['salePrice']))}', style: const TextStyle(fontWeight: FontWeight.w600)),
+          Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
+            Text('Satış: ${formatMoney(_n(p['salePrice']))}', style: const TextStyle(fontWeight: FontWeight.w600)),
+            if (p['oldPrice'] != null && _n(p['oldPrice']) > _n(p['salePrice']))
+              Text(formatMoney(_n(p['oldPrice'])),
+                  style: TextStyle(color: Colors.red.shade700, decoration: TextDecoration.lineThrough, fontSize: 13)),
+          ]),
           Text('Alış: ${formatMoney(_n(p['purchasePrice']))}', style: TextStyle(color: Colors.grey.shade700)),
           const SizedBox(height: 4),
           Text('Qalıq: ${_q(p['stockQty'])} ${p['unit']}', style: TextStyle(fontWeight: FontWeight.w800, color: stockColor)),

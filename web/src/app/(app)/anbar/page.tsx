@@ -106,7 +106,7 @@ export default function InventoryPage() {
                   </Td>
                   <Td className="text-xs">{p.categoryName ?? "—"}</Td>
                   <Td className="text-right tabular-nums">{formatMoney(p.purchasePrice)}</Td>
-                  <Td className="text-right tabular-nums">{formatMoney(p.salePrice)}</Td>
+                  <Td className="text-right tabular-nums">{formatMoney(p.salePrice)}{p.oldPrice && p.oldPrice > p.salePrice ? <div className="text-xs text-rose-600 line-through">{formatMoney(p.oldPrice)}</div> : null}</Td>
                   <Td className="text-right">
                     <span className={`font-semibold tabular-nums ${p.outOfStock ? "text-rose-600" : p.lowStock ? "text-amber-600" : "text-navy-800"}`}>{q(p.stockQty)} {p.unit}</span>
                     {p.outOfStock ? <div><Badge tone="rose">bitib</Badge></div> : p.lowStock ? <div><Badge tone="amber">az qalıb</Badge></div> : null}
@@ -142,6 +142,7 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
     name: product?.name ?? "", code: product?.code ?? "", barcode: product?.barcode ?? "", categoryId: product?.categoryId ?? "",
     supplierId: product?.supplierId ?? "", unit: product?.unit ?? "ədəd", purchasePrice: product ? String(product.purchasePrice) : "",
     salePrice: product ? String(product.salePrice) : "", minStock: product ? String(product.minStock) : "0", initialStock: "", active: product?.active ?? true,
+    oldPrice: product?.oldPrice ? String(product.oldPrice) : "",
   });
   const [newCat, setNewCat] = useState("");
   const [image, setImage] = useState<File | null>(null);
@@ -170,6 +171,7 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
     const body = {
       ...form, code: form.code || null, barcode: form.barcode || null, categoryId: form.categoryId || null, supplierId: form.supplierId || null,
       initialStock: product ? null : form.initialStock || null, version: product?.version,
+      oldPrice: form.oldPrice ? form.oldPrice : (product?.oldPrice ? "0" : null),
     };
     try {
       const saved = await api<Product>(product ? `/api/products/${product.id}` : "/api/products", { method: product ? "PUT" : "POST", json: body });
@@ -212,6 +214,7 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
         <Field label="Ölçü vahidi"><Input maxLength={20} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="ədəd, kq, litr" /></Field>
         <Field label="Alış qiyməti (₼)"><Input required type="number" min="0" step="0.01" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} /></Field>
         <Field label="Satış qiyməti (₼)"><Input required type="number" min="0" step="0.01" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} /></Field>
+        <Field label="Endirimdən əvvəlki qiymət (₼)" hint="Boş = endirim yoxdur. Barkod etiketində xətli göstərilir"><Input type="number" min="0" step="0.01" value={form.oldPrice} onChange={(e) => setForm({ ...form, oldPrice: e.target.value })} /></Field>
         <Field label="Minimum stok" hint="Bundan az olanda xəbərdarlıq"><Input type="number" min="0" step="0.001" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: e.target.value })} /></Field>
         {!product && <Field label="Başlanğıc qalıq"><Input type="number" min="0" step="0.001" value={form.initialStock} onChange={(e) => setForm({ ...form, initialStock: e.target.value })} /></Field>}
         <Field label="Şəkil" hint="PNG/JPG, ≤5 MB"><input type="file" accept="image/png,image/jpeg" onChange={(e) => setImage(e.target.files?.[0] ?? null)} className="text-sm" /></Field>
@@ -348,23 +351,42 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (m: str
 }
 
 const LABEL_SIZES = [
-  { key: "small", title: "Balaca", mm: "40 × 25 mm", note: "Ad, barkod, qiymət", w: 40, h: 25 },
-  { key: "medium", title: "Orta", mm: "58 × 40 mm", note: "Mağaza, ad, barkod, böyük qiymət", w: 58, h: 40 },
-  { key: "large", title: "Böyük", mm: "100 × 50 mm", note: "Mağaza, ad, kod, böyük barkod və qiymət", w: 100, h: 50 },
+  { key: "small", title: "Balaca", w: 40, h: 25, show: ["name", "price", "old"] },
+  { key: "medium", title: "Orta", w: 58, h: 40, show: ["store", "name", "price", "old"] },
+  { key: "large", title: "Böyük", w: 100, h: 50, show: ["store", "name", "code", "price", "old"] },
 ] as const;
+const LABEL_PARTS = [["store", "Mağaza adı"], ["name", "Məhsulun adı"], ["code", "Kod və vahid"], ["price", "Qiymət"], ["old", "Endirim (köhnə qiymət xətli)"]] as const;
+const LABEL_KEY = "hesabpro.labelDesign.v1";
 
-/** Barcode labels: PDF with one label per page (page = label size), opened in a new tab to print on the label printer. */
+interface LabelDesign { size: string; w: number; h: number; barcode: number; font: number; show: string[] }
+
+function loadDesign(): LabelDesign {
+  try {
+    const raw = localStorage.getItem(LABEL_KEY);
+    if (raw) return JSON.parse(raw) as LabelDesign;
+  } catch { /* storage unavailable */ }
+  return { size: "medium", w: 58, h: 40, barcode: 100, font: 100, show: ["store", "name", "price", "old"] };
+}
+
+/** Barcode labels with a designer: size (preset or own mm), barcode / text scale, parts to show; PDF opens in a new tab. */
 function LabelModal({ product, onClose }: { product: Product | null; onClose: () => void }) {
-  const [size, setSize] = useState<(typeof LABEL_SIZES)[number]["key"]>("medium");
+  const [d, setD] = useState<LabelDesign>(loadDesign);
   const [copies, setCopies] = useState(1);
   const [perStock, setPerStock] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  function pick(key: string) {
+    const p = LABEL_SIZES.find((s) => s.key === key);
+    setD(p ? { ...d, size: key, w: p.w, h: p.h, show: [...p.show] } : { ...d, size: "custom" });
+  }
+
   async function print() {
+    if (d.w < 20 || d.w > 150 || d.h < 12 || d.h > 120) { setError("Etiket ölçüsü: en 20–150 mm, hündürlük 12–120 mm"); return; }
     setBusy(true);
     setError(null);
-    const qs = new URLSearchParams({ size });
+    try { localStorage.setItem(LABEL_KEY, JSON.stringify(d)); } catch { /* ignore */ }
+    const qs = new URLSearchParams({ size: "custom", w: String(d.w), h: String(d.h), barcode: String(d.barcode), font: String(d.font), show: d.show.join(",") });
     if (product) qs.set("ids", product.id);
     if (perStock) qs.set("perStock", "true"); else qs.set("copies", String(copies));
     try {
@@ -377,36 +399,93 @@ function LabelModal({ product, onClose }: { product: Product | null; onClose: ()
     }
   }
 
+  // preview (approximate; the PDF is the real label)
+  const scale = Math.min(300 / d.w, 160 / d.h);
+  const base = Math.max(6, Math.min(14, d.h * 0.25)) * (d.font / 100) * scale * 0.36;
+  const sale = product?.salePrice ?? 10;
+  const old = product ? product.oldPrice ?? null : 15;
+  const discount = d.show.includes("old") && old != null && old > sale;
+  const wide = d.show.includes("price") && d.w / d.h >= 1.8;
+  const money = (v: number) => `${v.toFixed(2).replace(".", ",")} AZN`;
+  const priceEl = (
+    <div className={wide ? "text-right" : "flex items-end justify-between"}>
+      {discount && <div className="text-slate-500 line-through" style={{ fontSize: base * 0.95 }}>{money(old!)}</div>}
+      <div className={wide || discount ? "" : "w-full text-center"} style={{ fontSize: base * 1.7, fontWeight: 900, lineHeight: 1 }}>{money(sale)}</div>
+    </div>
+  );
+  const bars = (
+    <div className="flex h-full w-full items-center justify-center">
+      <div className="flex h-full flex-col items-center" style={{ width: `${d.barcode}%`, height: `${d.barcode}%` }}>
+        <div className="w-full flex-1" style={{ background: "repeating-linear-gradient(90deg,#000 0 2px,#fff 2px 4px,#000 4px 5px,#fff 5px 8px)" }} />
+        <div style={{ fontSize: Math.max(6, base * 0.8), letterSpacing: 1 }}>{product?.barcode ?? product?.code ?? "4760000000011"}</div>
+      </div>
+    </div>
+  );
+
   return (
-    <Modal open title={product ? `Barkod çap et — ${product.name}` : "Bütün barkodları çap et"} onClose={onClose}
+    <Modal open size="xl" title={product ? `Barkod çap et — ${product.name}` : "Bütün barkodları çap et"} onClose={onClose}
       footer={<><Button variant="ghost" onClick={onClose}>Ləğv et</Button><Button variant="gold" disabled={busy} onClick={print}>{busy ? "Hazırlanır…" : "Çap et"}</Button></>}>
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Etiket ölçüsü</p>
-      <div className="grid gap-2">
-        {LABEL_SIZES.map((s) => (
-          <button key={s.key} type="button" onClick={() => setSize(s.key)}
-            className={`flex items-center gap-3 rounded-xl border p-3 text-left ${size === s.key ? "border-gold-500 bg-gold-500/10 ring-1 ring-gold-500" : "border-slate-200 bg-white hover:border-slate-300"}`}>
-            <span className="flex h-10 w-16 items-center justify-center">
-              <span className="rounded-sm border-2 border-navy-800" style={{ width: s.w * 0.6, height: s.h * 0.6 }} />
-            </span>
-            <span>
-              <span className="block font-semibold text-navy-800">{s.title} · {s.mm}</span>
-              <span className="block text-xs text-slate-500">{s.note}</span>
-            </span>
-          </button>
-        ))}
-      </div>
-      <label className="mt-5 flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={perStock} onChange={(e) => setPerStock(e.target.checked)} />
-        {product ? "Qalıq qədər (anbarda neçə ədəd varsa)" : "Hər məhsuldan qalıq qədər"}
-      </label>
-      {!perStock && (
-        <div className="mt-3 flex items-center gap-3 text-sm">
-          <span>{product ? "Nüsxə sayı" : "Hər məhsuldan"}</span>
-          <Input type="number" min={1} max={500} value={copies} onChange={(e) => setCopies(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} className="w-24" />
+      <div className="grid gap-6 md:grid-cols-2">
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Ölçü</p>
+          <div className="flex flex-wrap gap-2">
+            {LABEL_SIZES.map((s) => (
+              <button key={s.key} type="button" onClick={() => pick(s.key)}
+                className={`rounded-full border px-3 py-1.5 text-sm ${d.size === s.key ? "border-gold-500 bg-gold-500/10 font-semibold" : "border-slate-300"}`}>{s.title} {s.w}×{s.h}</button>
+            ))}
+            <button type="button" onClick={() => pick("custom")}
+              className={`rounded-full border px-3 py-1.5 text-sm ${d.size === "custom" ? "border-gold-500 bg-gold-500/10 font-semibold" : "border-slate-300"}`}>Öz ölçüm</button>
+          </div>
+          {d.size === "custom" && (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Field label="En (mm)" hint="20–150"><Input type="number" min={20} max={150} value={d.w} onChange={(e) => setD({ ...d, w: Number(e.target.value) })} /></Field>
+              <Field label="Hündürlük (mm)" hint="12–120"><Input type="number" min={12} max={120} value={d.h} onChange={(e) => setD({ ...d, h: Number(e.target.value) })} /></Field>
+            </div>
+          )}
+          <p className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wider text-slate-500">Dizayn</p>
+          <label className="flex items-center gap-3 text-sm"><span className="w-28">Barkod ölçüsü</span>
+            <input type="range" min={30} max={100} step={5} value={d.barcode} onChange={(e) => setD({ ...d, barcode: Number(e.target.value) })} className="flex-1" />
+            <span className="w-10 text-right">{d.barcode}%</span></label>
+          <label className="mt-2 flex items-center gap-3 text-sm"><span className="w-28">Yazı ölçüsü</span>
+            <input type="range" min={50} max={200} step={10} value={d.font} onChange={(e) => setD({ ...d, font: Number(e.target.value) })} className="flex-1" />
+            <span className="w-10 text-right">{d.font}%</span></label>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {LABEL_PARTS.map(([k, t]) => (
+              <label key={k} className="flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1 text-sm">
+                <input type="checkbox" checked={d.show.includes(k)} onChange={(e) => setD({ ...d, show: e.target.checked ? [...d.show, k] : d.show.filter((x) => x !== k) })} />{t}
+              </label>
+            ))}
+          </div>
+          <label className="mt-5 flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={perStock} onChange={(e) => setPerStock(e.target.checked)} />
+            {product ? "Qalıq qədər (anbarda neçə ədəd varsa)" : "Hər məhsuldan qalıq qədər"}
+          </label>
+          {!perStock && (
+            <div className="mt-3 flex items-center gap-3 text-sm">
+              <span>{product ? "Nüsxə sayı" : "Hər məhsuldan"}</span>
+              <Input type="number" min={1} max={500} value={copies} onChange={(e) => setCopies(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} className="w-24" />
+            </div>
+          )}
         </div>
-      )}
-      <p className="mt-4 text-xs text-slate-500">PDF yeni pəncərədə açılır. Çap pəncərəsində barkod printerini seçin və kağız ölçüsünü etiket ölçüsünə uyğun qoyun.</p>
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Önizləmə</p>
+          <div className="flex min-h-[180px] items-center justify-center rounded-xl bg-slate-100 p-4">
+            <div className="flex flex-col overflow-hidden rounded border border-slate-400 bg-white text-black shadow"
+              style={{ width: d.w * scale, height: d.h * scale, padding: Math.min(d.w, d.h) * 0.06 * scale }}>
+              {d.show.includes("store") && <div className="truncate text-slate-600" style={{ fontSize: base * 0.7 }}>Mağaza</div>}
+              {d.show.includes("name") && <div className={d.h >= 35 ? "line-clamp-2" : "truncate"} style={{ fontSize: base, fontWeight: 800, lineHeight: 1.1 }}>{product?.name ?? "Məhsulun adı"}</div>}
+              {d.show.includes("code") && <div style={{ fontSize: base * 0.75 }}>{product?.code ?? "P-000001"} · {product?.unit ?? "ədəd"}</div>}
+              <div className="flex min-h-0 flex-1 items-end gap-2">
+                <div className="h-full min-w-0 flex-1">{bars}</div>
+                {wide && d.show.includes("price") && <div>{discount && <div className="text-right font-extrabold" style={{ fontSize: base * 0.75 }}>ENDİRİM</div>}{priceEl}</div>}
+              </div>
+              {!wide && d.show.includes("price") && priceEl}
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">Dizayn bu brauzerdə yadda saxlanır. PDF yeni pəncərədə açılır; çap pəncərəsində barkod printerini seçin və kağız ölçüsünü etiket ölçüsünə uyğun qoyun.</p>
+        </div>
+      </div>
     </Modal>
   );
 }

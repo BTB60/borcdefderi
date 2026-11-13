@@ -396,32 +396,85 @@ class _ProductSheetState extends State<_ProductSheet> {
     }
   }
 
+  /// Purchase → sale margin shown under the prices while typing.
+  Widget _margin() {
+    final buy = double.tryParse(_d(_buy));
+    final sell = double.tryParse(_d(_sell));
+    if (buy == null || sell == null) return const SizedBox.shrink();
+    final profit = sell - buy;
+    final pct = buy > 0 ? profit / buy * 100 : null;
+    final color = profit < 0 ? Colors.red.shade700 : Colors.green.shade700;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, left: 4),
+      child: Row(children: [
+        Icon(profit < 0 ? Icons.trending_down : Icons.trending_up, size: 18, color: color),
+        const SizedBox(width: 6),
+        Text(
+          'Qazanc: ${formatMoney(profit)}${pct == null ? '' : ' (${pct.toStringAsFixed(0)}%)'}',
+          style: TextStyle(color: color, fontWeight: FontWeight.w600),
+        ),
+      ]),
+    );
+  }
+
+  Widget _section(String title) => Padding(
+        padding: const EdgeInsets.only(top: 18, bottom: 8),
+        child: Text(title.toUpperCase(),
+            style: TextStyle(fontSize: 12, letterSpacing: 0.8, fontWeight: FontWeight.w700, color: Colors.grey.shade600)),
+      );
+
+  static const _gap = SizedBox(height: 12);
+  static const _decimal = TextInputType.numberWithOptions(decimal: true);
+
   @override
-  Widget build(BuildContext context) => ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
-        const Text('Yeni məhsul', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: navy)),
-        if (_error != null) ErrorBanner(_error!),
-        const SizedBox(height: 8),
-        Row(children: [
-          ProductThumb(session: widget.session, product: null, size: 72, local: _image?.bytes),
-          const SizedBox(width: 12),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _busy
-                  ? null
-                  : () async {
-                      final img = await _pickProductImage(context);
-                      if (img != null && mounted) setState(() => _image = img);
-                    },
-              icon: const Icon(Icons.add_a_photo_outlined),
-              label: Text(_image == null ? 'Şəkil əlavə et' : 'Şəkli dəyiş'),
+  Widget build(BuildContext context) => ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(20, 0, 20, 24), children: [
+        const Text('Yeni məhsul', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: navy)),
+        const SizedBox(height: 4),
+        Text('Ulduzlu (*) sahələr mütləqdir', style: TextStyle(color: Colors.grey.shade600)),
+        if (_error != null) ...[const SizedBox(height: 12), ErrorBanner(_error!)],
+        const SizedBox(height: 16),
+        // picture: the whole card is the button
+        Material(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade300)),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: _busy
+                ? null
+                : () async {
+                    final img = await _pickProductImage(context);
+                    if (img != null && mounted) setState(() => _image = img);
+                  },
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(children: [
+                ProductThumb(session: widget.session, product: null, size: 64, local: _image?.bytes),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(_image == null ? 'Şəkil əlavə et' : 'Şəkli dəyiş',
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: navy)),
+                    const SizedBox(height: 2),
+                    Text('Kamera və ya qalereya', style: TextStyle(color: Colors.grey.shade600)),
+                  ]),
+                ),
+                Icon(_image == null ? Icons.add_a_photo_outlined : Icons.edit_outlined, color: navy),
+              ]),
             ),
           ),
-        ]),
-        TextField(controller: _name, decoration: const InputDecoration(labelText: 'Ad')),
+        ),
+        _section('Əsas məlumat'),
+        TextField(
+          controller: _name,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(labelText: 'Məhsulun adı *', prefixIcon: Icon(Icons.inventory_2_outlined)),
+        ),
+        _gap,
         TextField(
           controller: _barcode,
           decoration: InputDecoration(
             labelText: 'Barkod (istəyə bağlı)',
+            prefixIcon: const Icon(Icons.qr_code_2),
             suffixIcon: IconButton(
               tooltip: 'Barkod skan et',
               icon: const Icon(Icons.qr_code_scanner),
@@ -432,20 +485,64 @@ class _ProductSheetState extends State<_ProductSheet> {
             ),
           ),
         ),
-        Row(children: [
-          Expanded(child: TextField(controller: _buy, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Alış (₼)'))),
-          const SizedBox(width: 10),
-          Expanded(child: TextField(controller: _sell, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Satış (₼)'))),
+        _section('Qiymət'),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: TextField(
+              controller: _buy,
+              keyboardType: _decimal,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: 'Alış qiyməti *', suffixText: '₼'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: _sell,
+              keyboardType: _decimal,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: 'Satış qiyməti *', suffixText: '₼'),
+            ),
+          ),
         ]),
-        Row(children: [
-          Expanded(child: TextField(controller: _stock, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Başlanğıc qalıq'))),
-          const SizedBox(width: 10),
-          Expanded(child: TextField(controller: _min, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Minimum stok'))),
-          const SizedBox(width: 10),
-          Expanded(child: TextField(controller: _unit, decoration: const InputDecoration(labelText: 'Vahid'))),
+        _margin(),
+        _section('Anbar'),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            flex: 3,
+            child: TextField(
+              controller: _stock,
+              keyboardType: _decimal,
+              decoration: const InputDecoration(labelText: 'Başlanğıc qalıq', hintText: '0'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: TextField(controller: _unit, decoration: const InputDecoration(labelText: 'Vahid')),
+          ),
         ]),
-        const SizedBox(height: 14),
-        FilledButton(onPressed: _busy ? null : _save, child: const Text('Saxla')),
+        _gap,
+        TextField(
+          controller: _min,
+          keyboardType: _decimal,
+          decoration: const InputDecoration(
+            labelText: 'Minimum stok',
+            helperText: 'Qalıq bundan az olanda "Az qalan" kimi göstərilir',
+            prefixIcon: Icon(Icons.notifications_active_outlined),
+          ),
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          height: 52,
+          child: FilledButton.icon(
+            onPressed: _busy ? null : _save,
+            icon: _busy
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.check),
+            label: const Text('Məhsulu saxla', style: TextStyle(fontSize: 16)),
+          ),
+        ),
       ]);
 }
 

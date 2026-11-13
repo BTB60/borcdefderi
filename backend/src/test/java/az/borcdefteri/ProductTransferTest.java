@@ -138,4 +138,29 @@ class ProductTransferTest extends IntegrationTestBase {
         upload(owner, "not excel".getBytes()).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error", is("INVALID_FILE")));
     }
+
+    @Test
+    void barcodeLabelsInThreeSizes() throws Exception {
+        String owner = register("Etiket Bir");
+        activateSubscription(owner, "MONTHLY");
+        Map<String, Object> b = new HashMap<>(Map.of("name", "Çay qara Azərçay 100 qram paketdə uzun ad", "purchasePrice", "3.20",
+                "salePrice", "4.50", "barcode", "4760000000066", "initialStock", "3"));
+        String tea = body(post(owner, "/api/products", b).andExpect(status().isCreated())).get("id").asText();
+        product(owner, "Kodsuz barkodsuz", "1", "2", "0");
+        for (String size : new String[]{"small", "medium", "large"}) {
+            byte[] pdf = get(owner, "/api/products/labels?size=" + size + "&ids=" + tea + "&copies=2").andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsByteArray();
+            assertEquals("%PDF", new String(pdf, 0, 4));
+            try (var doc = new com.lowagie.text.pdf.PdfReader(pdf)) {
+                assertEquals(2, doc.getNumberOfPages());
+            }
+        }
+        byte[] all = get(owner, "/api/products/labels?perStock=true").andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        try (var doc = new com.lowagie.text.pdf.PdfReader(all)) {
+            assertEquals(4, doc.getNumberOfPages(), "3 for the tea in stock, at least 1 for the product with no stock");
+        }
+        get(owner, "/api/products/labels?size=huge").andExpect(status().isBadRequest());
+        get(owner, "/api/products/labels?copies=0").andExpect(status().isBadRequest());
+    }
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
-import { API_URL, ApiError, api, download, getToken } from "@/lib/api";
+import { API_URL, ApiError, api, download, getToken, openProtected } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import type { InventorySummary, Party, Product, ProductCategory, StockMovement } from "@/lib/types";
@@ -25,6 +25,7 @@ export default function InventoryPage() {
   const [stockOf, setStockOf] = useState<Product | null>(null);
   const [historyOf, setHistoryOf] = useState<Product | null>(null);
   const [importing, setImporting] = useState(false);
+  const [labelsFor, setLabelsFor] = useState<Product | "all" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
@@ -67,6 +68,7 @@ export default function InventoryPage() {
           <Button variant="outline" onClick={() => exportAs("xlsx")}>Excel</Button>
           <Button variant="outline" onClick={() => exportAs("pdf")}>PDF</Button>
           <Button variant="outline" onClick={() => setImporting(true)}>Excel-dən import</Button>
+          <Button variant="outline" onClick={() => setLabelsFor("all")}>Barkodları çap et</Button>
           <Link href="/anbar/sayim" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Sayım</Link>
           <Button variant="gold" onClick={() => setEditing("new")}>+ Məhsul əlavə et</Button>
         </div> : undefined} />
@@ -113,6 +115,7 @@ export default function InventoryPage() {
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" className="px-2.5 py-1.5" onClick={() => setHistoryOf(p)}>Tarixçə</Button>
                       {manage && <Button variant="outline" className="px-2.5 py-1.5" onClick={() => setStockOf(p)}>Stok</Button>}
+                      {manage && <Button variant="ghost" className="px-2.5 py-1.5" onClick={() => setLabelsFor(p)}>Barkod</Button>}
                       {manage && <Button variant="ghost" className="px-2.5 py-1.5" onClick={() => setEditing(p)}>Redaktə</Button>}
                       {manage && <Button variant="ghost" className="px-2.5 py-1.5 text-rose-600" onClick={() => remove(p)}>Sil</Button>}
                     </div>
@@ -127,6 +130,7 @@ export default function InventoryPage() {
         onCategory={(c) => setCategories((x) => [...x, c])} onClose={() => setEditing(null)} onSaved={(m) => { setEditing(null); setNotice(m); load(); }} />}
       {stockOf && <StockModal product={stockOf} onClose={() => setStockOf(null)} onSaved={(m) => { setStockOf(null); setNotice(m); load(); }} />}
       {historyOf && <HistoryModal product={historyOf} onClose={() => setHistoryOf(null)} />}
+      {labelsFor && <LabelModal product={labelsFor === "all" ? null : labelsFor} onClose={() => setLabelsFor(null)} />}
       {importing && <ImportModal onClose={() => setImporting(false)} onDone={(m) => { setImporting(false); setNotice(m); load(); }} />}
       {confirmDialog}
     </>
@@ -339,6 +343,70 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (m: str
           </ul>
         </div>
       )}
+    </Modal>
+  );
+}
+
+const LABEL_SIZES = [
+  { key: "small", title: "Balaca", mm: "40 × 25 mm", note: "Ad, barkod, qiymət", w: 40, h: 25 },
+  { key: "medium", title: "Orta", mm: "58 × 40 mm", note: "Mağaza, ad, barkod, böyük qiymət", w: 58, h: 40 },
+  { key: "large", title: "Böyük", mm: "100 × 50 mm", note: "Mağaza, ad, kod, böyük barkod və qiymət", w: 100, h: 50 },
+] as const;
+
+/** Barcode labels: PDF with one label per page (page = label size), opened in a new tab to print on the label printer. */
+function LabelModal({ product, onClose }: { product: Product | null; onClose: () => void }) {
+  const [size, setSize] = useState<(typeof LABEL_SIZES)[number]["key"]>("medium");
+  const [copies, setCopies] = useState(1);
+  const [perStock, setPerStock] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function print() {
+    setBusy(true);
+    setError(null);
+    const qs = new URLSearchParams({ size });
+    if (product) qs.set("ids", product.id);
+    if (perStock) qs.set("perStock", "true"); else qs.set("copies", String(copies));
+    try {
+      await openProtected(`/api/products/labels?${qs}`);
+      onClose();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Etiketlər hazırlanmadı");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open title={product ? `Barkod çap et — ${product.name}` : "Bütün barkodları çap et"} onClose={onClose}
+      footer={<><Button variant="ghost" onClick={onClose}>Ləğv et</Button><Button variant="gold" disabled={busy} onClick={print}>{busy ? "Hazırlanır…" : "Çap et"}</Button></>}>
+      {error && <div className="mb-4"><Alert>{error}</Alert></div>}
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Etiket ölçüsü</p>
+      <div className="grid gap-2">
+        {LABEL_SIZES.map((s) => (
+          <button key={s.key} type="button" onClick={() => setSize(s.key)}
+            className={`flex items-center gap-3 rounded-xl border p-3 text-left ${size === s.key ? "border-gold-500 bg-gold-500/10 ring-1 ring-gold-500" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+            <span className="flex h-10 w-16 items-center justify-center">
+              <span className="rounded-sm border-2 border-navy-800" style={{ width: s.w * 0.6, height: s.h * 0.6 }} />
+            </span>
+            <span>
+              <span className="block font-semibold text-navy-800">{s.title} · {s.mm}</span>
+              <span className="block text-xs text-slate-500">{s.note}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      <label className="mt-5 flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={perStock} onChange={(e) => setPerStock(e.target.checked)} />
+        {product ? "Qalıq qədər (anbarda neçə ədəd varsa)" : "Hər məhsuldan qalıq qədər"}
+      </label>
+      {!perStock && (
+        <div className="mt-3 flex items-center gap-3 text-sm">
+          <span>{product ? "Nüsxə sayı" : "Hər məhsuldan"}</span>
+          <Input type="number" min={1} max={500} value={copies} onChange={(e) => setCopies(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} className="w-24" />
+        </div>
+      )}
+      <p className="mt-4 text-xs text-slate-500">PDF yeni pəncərədə açılır. Çap pəncərəsində barkod printerini seçin və kağız ölçüsünü etiket ölçüsünə uyğun qoyun.</p>
     </Modal>
   );
 }

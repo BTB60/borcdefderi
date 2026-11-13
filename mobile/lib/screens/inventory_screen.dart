@@ -12,6 +12,7 @@ import '../state/session.dart';
 import '../theme.dart';
 import 'barcode_scanner.dart';
 import 'common.dart';
+import 'label_print_sheet.dart';
 import 'stock_count_screen.dart';
 
 double _n(Object? v) => (v as num?)?.toDouble() ?? 0;
@@ -318,7 +319,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
         if (_manage)
           PopupMenuButton<String>(
             tooltip: 'Export / import',
-            onSelected: (v) => v == 'import'
+            onSelected: (v) => v == 'labels'
+                ? showLabelPrintSheet(context, widget.session)
+                : v == 'import'
                 ? _import()
                 : v == 'template'
                     ? _share('/api/products/import-template', 'mehsul-import-sablonu.xlsx', _xlsx)
@@ -326,6 +329,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'pdf', child: ListTile(leading: Icon(Icons.picture_as_pdf_outlined), title: Text('Bütün məhsullar — PDF'))),
               PopupMenuItem(value: 'xlsx', child: ListTile(leading: Icon(Icons.table_chart_outlined), title: Text('Bütün məhsullar — Excel'))),
+              PopupMenuItem(value: 'labels', child: ListTile(leading: Icon(Icons.print_outlined), title: Text('Bütün barkodları çap et'))),
               PopupMenuDivider(),
               PopupMenuItem(value: 'import', child: ListTile(leading: Icon(Icons.upload_file_outlined), title: Text('Excel-dən import'))),
               PopupMenuItem(value: 'template', child: ListTile(leading: Icon(Icons.description_outlined), title: Text('Import şablonu'))),
@@ -696,16 +700,20 @@ class _StockSheetState extends State<_StockSheet> {
   @override
   Widget build(BuildContext context) => ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
         _ProductHeader(session: widget.session, product: _product),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
+        Wrap(spacing: 4, children: [
+          TextButton.icon(
             onPressed: _imageBusy ? null : _changeImage,
             icon: _imageBusy
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.add_a_photo_outlined),
             label: Text(_product['hasImage'] == true ? 'Şəkli dəyiş' : 'Şəkil əlavə et'),
           ),
-        ),
+          TextButton.icon(
+            onPressed: () => showLabelPrintSheet(context, widget.session, product: _product),
+            icon: const Icon(Icons.print_outlined),
+            label: const Text('Barkod çap et'),
+          ),
+        ]),
         const SizedBox(height: 4),
         if (_error != null) ErrorBanner(_error!),
         Wrap(spacing: 6, children: [

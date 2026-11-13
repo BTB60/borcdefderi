@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../api/api_client.dart';
 import '../format.dart';
@@ -206,6 +208,67 @@ class _InventoryScreenState extends State<InventoryScreen> {
     _reload();
   }
 
+  static const _xlsx = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+  /// Downloads a product list / template and hands it to the system share sheet (WhatsApp, e-mail, Drive, Files …).
+  Future<void> _share(String path, String name, String mime) async {
+    try {
+      final bytes = await widget.session.api.getBytes(path);
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile.fromData(Uint8List.fromList(bytes), mimeType: mime, name: name)],
+        fileNameOverrides: [name],
+      ));
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  /// Excel import: pick a file, send it, show what was created / updated or the wrong rows.
+  Future<void> _import() async {
+    final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['xlsx', 'xls']);
+    if (picked.isEmpty || !mounted) return;
+    final file = picked.first;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Import edilir…')));
+    try {
+      final bytes = await file.readAsBytes();
+      final r = await widget.session.api.upload('/api/products/import', 'file', bytes, file.name, _xlsx) as Map<String, dynamic>;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      final errors = (r['errors'] as List).cast<Map<String, dynamic>>();
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: Icon(r['applied'] == true ? Icons.check_circle_outline : Icons.error_outline,
+              color: r['applied'] == true ? Colors.green.shade700 : Colors.red.shade700, size: 40),
+          title: Text(r['applied'] == true ? 'Import tamamlandı' : 'Faylda səhv var'),
+          content: r['applied'] == true
+              ? Text('${r['created']} yeni məhsul\n${r['updated']} yenilənən\n${r['unchanged']} dəyişməyən',
+                  textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, height: 1.5))
+              : SizedBox(
+                  width: double.maxFinite,
+                  child: ListView(shrinkWrap: true, children: [
+                    const Text('Heç nə saxlanmadı. Düzəldib yenidən yükləyin.'),
+                    const SizedBox(height: 8),
+                    for (final e in errors)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Text('${e['row'] == 0 ? 'Fayl' : 'Sətir ${e['row']}'}: ${e['message']}',
+                            style: TextStyle(color: Colors.red.shade800)),
+                      ),
+                  ]),
+                ),
+          actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Oldu'))],
+        ),
+      );
+      if (r['applied'] == true) _reload();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        showError(context, e);
+      }
+    }
+  }
+
   /// Scan a product label: open its stock sheet, or offer to add a new product with that barcode.
   Future<void> _scan() async {
     final code = await scanBarcode(context);
@@ -252,6 +315,22 @@ class _InventoryScreenState extends State<InventoryScreen> {
             label: const Text('Sayım'),
           ),
         IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
+        if (_manage)
+          PopupMenuButton<String>(
+            tooltip: 'Export / import',
+            onSelected: (v) => v == 'import'
+                ? _import()
+                : v == 'template'
+                    ? _share('/api/products/import-template', 'mehsul-import-sablonu.xlsx', _xlsx)
+                    : _share('/api/products/export?format=$v', 'mehsullar.$v', v == 'pdf' ? 'application/pdf' : _xlsx),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'pdf', child: ListTile(leading: Icon(Icons.picture_as_pdf_outlined), title: Text('Bütün məhsullar — PDF'))),
+              PopupMenuItem(value: 'xlsx', child: ListTile(leading: Icon(Icons.table_chart_outlined), title: Text('Bütün məhsullar — Excel'))),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 'import', child: ListTile(leading: Icon(Icons.upload_file_outlined), title: Text('Excel-dən import'))),
+              PopupMenuItem(value: 'template', child: ListTile(leading: Icon(Icons.description_outlined), title: Text('Import şablonu'))),
+            ],
+          ),
       ]),
       floatingActionButton: _manage
           ? FloatingActionButton.extended(

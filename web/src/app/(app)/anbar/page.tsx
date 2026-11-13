@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
-import { API_URL, ApiError, api, getToken } from "@/lib/api";
+import { API_URL, ApiError, api, download, getToken } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import type { InventorySummary, Party, Product, ProductCategory, StockMovement } from "@/lib/types";
@@ -24,6 +24,7 @@ export default function InventoryPage() {
   const [editing, setEditing] = useState<Product | "new" | null>(null);
   const [stockOf, setStockOf] = useState<Product | null>(null);
   const [historyOf, setHistoryOf] = useState<Product | null>(null);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
@@ -43,6 +44,11 @@ export default function InventoryPage() {
 
   if (!manage && !can("SALES")) return <Card><EmptyState title="Anbar bölməsi üçün icazəniz yoxdur" /></Card>;
 
+  function exportAs(format: "xlsx" | "pdf") {
+    download(`/api/products/export?format=${format}`, `mehsullar.${format}`)
+      .catch((e) => setError(e instanceof ApiError ? e.message : "Fayl hazırlanmadı"));
+  }
+
   async function remove(p: Product) {
     if (!(await confirm(<>“{p.name}” silinsin? Hərəkəti və ya satışı olan məhsul silinmir, deaktiv edilir (tarixçə qalır).</>, { danger: true, confirmLabel: "Sil" }))) return;
     try {
@@ -57,7 +63,13 @@ export default function InventoryPage() {
   return (
     <>
       <PageHeader title="Anbar" subtitle="Məhsullar, qalıqlar və anbar hərəkətləri"
-        actions={manage ? <div className="flex gap-2"><Link href="/anbar/sayim" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Sayım</Link><Button variant="gold" onClick={() => setEditing("new")}>+ Məhsul əlavə et</Button></div> : undefined} />
+        actions={manage ? <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => exportAs("xlsx")}>Excel</Button>
+          <Button variant="outline" onClick={() => exportAs("pdf")}>PDF</Button>
+          <Button variant="outline" onClick={() => setImporting(true)}>Excel-dən import</Button>
+          <Link href="/anbar/sayim" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Sayım</Link>
+          <Button variant="gold" onClick={() => setEditing("new")}>+ Məhsul əlavə et</Button>
+        </div> : undefined} />
       {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -115,6 +127,7 @@ export default function InventoryPage() {
         onCategory={(c) => setCategories((x) => [...x, c])} onClose={() => setEditing(null)} onSaved={(m) => { setEditing(null); setNotice(m); load(); }} />}
       {stockOf && <StockModal product={stockOf} onClose={() => setStockOf(null)} onSaved={(m) => { setStockOf(null); setNotice(m); load(); }} />}
       {historyOf && <HistoryModal product={historyOf} onClose={() => setHistoryOf(null)} />}
+      {importing && <ImportModal onClose={() => setImporting(false)} onDone={(m) => { setImporting(false); setNotice(m); load(); }} />}
       {confirmDialog}
     </>
   );
@@ -265,6 +278,66 @@ function HistoryModal({ product, onClose }: { product: Product; onClose: () => v
             ))}
           </tbody>
         </Table>
+      )}
+    </Modal>
+  );
+}
+
+interface ImportResult { applied: boolean; created: number; updated: number; unchanged: number; errors: { row: number; message: string }[] }
+
+/** Excel import: the exported file (or the template) with edits; the whole file is rejected when a row is wrong. */
+function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (m: string) => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [result, setResult] = useState<ImportResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!file || busy) return;
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const token = getToken();
+      const res = await fetch(`${API_URL}/api/products/import`, { method: "POST", body: fd, headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new ApiError(res.status, body?.error ?? "IMPORT", body?.message ?? "Import alınmadı");
+      const r = body as ImportResult;
+      if (r.applied) onDone(`Import tamamlandı: ${r.created} yeni, ${r.updated} yenilənən, ${r.unchanged} dəyişməyən məhsul`);
+      else setResult(r);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Import alınmadı");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open size="xl" title="Excel-dən import" onClose={onClose}
+      footer={<><Button variant="ghost" onClick={onClose}>Bağla</Button><Button type="submit" form="import-form" variant="gold" disabled={!file || busy}>{busy ? "Yüklənir…" : "Import et"}</Button></>}>
+      <div className="mb-4 space-y-2 text-sm text-slate-600">
+        <p>Sütunlar: <strong>Kod, Barkod, Ad, Kateqoriya, Vahid, Alış qiyməti, Satış qiyməti, Qalıq, Minimum stok, Aktiv</strong>. Ad, alış və satış qiyməti mütləqdir.</p>
+        <p>Kodu (və ya barkodu) mövcud məhsula uyğun gələn sətir həmin məhsulu yeniləyir, qalanları yeni məhsul kimi əlavə olunur. Mövcud məhsulların qalığı importla dəyişmir — bunun üçün Sayım istifadə edin. Səhv sətir olsa, heç nə saxlanmır.</p>
+        <p>
+          <button type="button" className="font-medium text-navy-800 underline" onClick={() => download("/api/products/import-template", "mehsul-import-sablonu.xlsx")}>Boş şablonu yüklə</button>
+          {" "}və ya yuxarıdakı “Excel” düyməsi ilə indiki məhsulları yükləyib dəyişdirin.
+        </p>
+      </div>
+      {error && <div className="mb-4"><Alert>{error}</Alert></div>}
+      <form id="import-form" onSubmit={submit}>
+        <input type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+          onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); }} className="text-sm" />
+      </form>
+      {result && !result.applied && (
+        <div className="mt-4">
+          <Alert>Faylda {result.errors.length} səhv var, heç nə saxlanmadı. Düzəldib yenidən yükləyin.</Alert>
+          <ul className="mt-3 max-h-64 space-y-1 overflow-y-auto text-sm">
+            {result.errors.map((er, i) => <li key={i}><span className="font-semibold text-rose-600">{er.row ? `Sətir ${er.row}` : "Fayl"}:</span> {er.message}</li>)}
+          </ul>
+        </div>
       )}
     </Modal>
   );

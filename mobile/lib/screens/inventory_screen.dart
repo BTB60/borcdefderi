@@ -695,74 +695,8 @@ class _StockSheetState extends State<_StockSheet> {
 
   /// Sale price and the price before a discount (shown struck through on the barcode label).
   Future<void> _editPrice() async {
-    final p = _product;
-    final sale = TextEditingController(text: _n(p['salePrice']).toStringAsFixed(2));
-    final old = TextEditingController(text: p['oldPrice'] == null ? '' : _n(p['oldPrice']).toStringAsFixed(2));
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Qiymət və endirim'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-            controller: sale,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Satış qiyməti (indiki)', suffixText: '₼'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: old,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Endirimdən əvvəlki qiymət',
-              suffixText: '₼',
-              helperText: 'Boş = endirim yoxdur. Etiketdə xətli göstərilir',
-              helperMaxLines: 2,
-            ),
-          ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ləğv et')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Saxla')),
-        ],
-      ),
-    );
-    final saleText = sale.text.trim().replaceAll(',', '.');
-    final oldText = old.text.trim().replaceAll(',', '.');
-    sale.dispose();
-    old.dispose();
-    if (ok != true || !mounted) return;
-    final newSale = double.tryParse(saleText);
-    final newOld = oldText.isEmpty ? 0.0 : double.tryParse(oldText);
-    if (newSale == null || newOld == null) {
-      showError(context, 'Qiyməti düzgün yazın');
-      return;
-    }
-    if (newOld != 0 && newOld <= newSale) {
-      showError(context, 'Endirimdən əvvəlki qiymət indiki qiymətdən böyük olmalıdır');
-      return;
-    }
-    try {
-      final saved = await widget.session.api.put('/api/products/${p['id']}', {
-        'name': p['name'],
-        'code': p['code'],
-        'barcode': p['barcode'],
-        'categoryId': p['categoryId'],
-        'supplierId': p['supplierId'],
-        'unit': p['unit'],
-        'purchasePrice': _n(p['purchasePrice']).toStringAsFixed(2),
-        'salePrice': newSale.toStringAsFixed(2),
-        'minStock': '${p['minStock']}',
-        'active': p['active'],
-        'version': p['version'],
-        'oldPrice': newOld.toStringAsFixed(2),
-      }) as Map<String, dynamic>;
-      if (!mounted) return;
-      setState(() => _product = saved);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(newOld == 0 ? 'Qiymət saxlandı' : 'Endirim: ${formatMoney(newOld)} → ${formatMoney(newSale)}')));
-    } catch (e) {
-      if (mounted) showError(context, e);
-    }
+    final saved = await editProductPrice(context, widget.session, _product);
+    if (saved != null && mounted) setState(() => _product = saved);
   }
 
   Future<void> _changeImage() async {

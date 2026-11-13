@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../format.dart';
+import '../state/receipt_printer.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'barcode_scanner.dart';
@@ -39,7 +40,26 @@ class _SalesScreenState extends State<SalesScreen> {
     final sale = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => NewSaleScreen(session: widget.session)));
     if (sale == null || !mounted) return;
     _reload();
-    _share(sale);
+    final printer = ReceiptPrinter.instance;
+    await printer.load();
+    if (printer.autoPrint) {
+      try {
+        await printer.printSale(widget.session, sale);
+        return;
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Çek çap olunmadı: ${errorMessage(e)}')));
+      }
+    }
+    if (mounted) _share(sale);
+  }
+
+  Future<void> _printerSettings() async {
+    Map<String, dynamic>? last;
+    try {
+      final items = ((await _data)['items'] as List).cast<Map<String, dynamic>>();
+      if (items.isNotEmpty) last = items.first;
+    } catch (_) {}
+    if (mounted) await showReceiptPrinterSheet(context, widget.session, lastSale: last);
   }
 
   Future<void> _share(Map<String, dynamic> s) async {
@@ -78,7 +98,9 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Satış')),
+        appBar: AppBar(title: const Text('Satış'), actions: [
+          IconButton(tooltip: 'Çek printeri', icon: const Icon(Icons.print_outlined), onPressed: _printerSettings),
+        ]),
         floatingActionButton: FloatingActionButton.extended(
             onPressed: _new, icon: const Icon(Icons.add_shopping_cart), label: const Text('Yeni satış')),
         body: FutureBuilder<Map<String, dynamic>>(

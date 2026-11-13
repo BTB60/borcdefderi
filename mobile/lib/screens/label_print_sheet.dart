@@ -26,6 +26,81 @@ Future<void> showLabelPrintSheet(BuildContext context, Session session, {Map<Str
       ),
     );
 
+double _num(Object? v) => (v as num?)?.toDouble() ?? 0;
+
+/// Dialog for the sale price and the price before a discount; saves the product and returns it (null = cancelled).
+Future<Map<String, dynamic>?> editProductPrice(BuildContext context, Session session, Map<String, dynamic> p) async {
+  final sale = TextEditingController(text: _num(p['salePrice']).toStringAsFixed(2));
+  final old = TextEditingController(text: p['oldPrice'] == null ? '' : _num(p['oldPrice']).toStringAsFixed(2));
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Qiymət və endirim'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(
+          controller: old,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Köhnə qiymət (endirimdən əvvəl)',
+            suffixText: '₼',
+            helperText: 'Etiketdə üstündən xətt çəkilir. Boş = endirim yoxdur',
+            helperMaxLines: 2,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: sale,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'Endirim qiyməti (indiki satış qiyməti)', suffixText: '₼'),
+        ),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ləğv et')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Saxla')),
+      ],
+    ),
+  );
+  final saleText = sale.text.trim().replaceAll(',', '.');
+  final oldText = old.text.trim().replaceAll(',', '.');
+  sale.dispose();
+  old.dispose();
+  if (ok != true || !context.mounted) return null;
+  final newSale = double.tryParse(saleText);
+  final newOld = oldText.isEmpty ? 0.0 : double.tryParse(oldText);
+  if (newSale == null || newOld == null) {
+    showError(context, 'Qiyməti düzgün yazın');
+    return null;
+  }
+  if (newOld != 0 && newOld <= newSale) {
+    showError(context, 'Köhnə qiymət endirim qiymətindən böyük olmalıdır');
+    return null;
+  }
+  try {
+    final saved = await session.api.put('/api/products/${p['id']}', {
+      'name': p['name'],
+      'code': p['code'],
+      'barcode': p['barcode'],
+      'categoryId': p['categoryId'],
+      'supplierId': p['supplierId'],
+      'unit': p['unit'],
+      'purchasePrice': _num(p['purchasePrice']).toStringAsFixed(2),
+      'salePrice': newSale.toStringAsFixed(2),
+      'minStock': '${p['minStock']}',
+      'active': p['active'],
+      'version': p['version'],
+      'oldPrice': newOld.toStringAsFixed(2),
+    }) as Map<String, dynamic>;
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(newOld == 0 ? 'Qiymət saxlandı' : 'Endirim: ${formatMoney(newOld)} → ${formatMoney(newSale)}')));
+    }
+    return saved;
+  } catch (e) {
+    if (context.mounted) showError(context, e);
+    return null;
+  }
+}
+
 class _Preset {
   const _Preset(this.key, this.title, this.w, this.h, this.show);
 
@@ -73,8 +148,9 @@ class _LabelSheetState extends State<_LabelSheet> {
   int _copies = 1;
   bool _perStock = false;
   bool _busy = false;
+  late Map<String, dynamic>? _product = widget.product;
 
-  bool get _single => widget.product != null;
+  bool get _single => _product != null;
 
   @override
   void initState() {
@@ -144,11 +220,11 @@ class _LabelSheetState extends State<_LabelSheet> {
         'barcode=${_barcode.round()}',
         'font=${_font.round()}',
         'show=${_show.join(',')}',
-        if (_single) 'ids=${widget.product!['id']}',
+        if (_single) 'ids=${_product!['id']}',
         if (_perStock) 'perStock=true' else 'copies=$_copies',
       ].join('&');
       final bytes = await widget.session.api.getBytes('/api/products/labels?$q');
-      final name = _single ? 'barkod-${widget.product!['code']}.pdf' : 'barkodlar.pdf';
+      final name = _single ? 'barkod-${_product!['code']}.pdf' : 'barkodlar.pdf';
       await SharePlus.instance.share(ShareParams(
         files: [XFile.fromData(Uint8List.fromList(bytes), mimeType: 'application/pdf', name: name)],
         fileNameOverrides: [name],
@@ -173,7 +249,7 @@ class _LabelSheetState extends State<_LabelSheet> {
       Text(_single ? 'Barkod çap et' : 'Bütün barkodları çap et',
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: navy)),
       const SizedBox(height: 4),
-      Text(_single ? '${widget.product!['name']}' : 'Bütün aktiv məhsullar', style: TextStyle(color: Colors.grey.shade700)),
+      Text(_single ? '${_product!['name']}' : 'Bütün aktiv məhsullar', style: TextStyle(color: Colors.grey.shade700)),
       const SizedBox(height: 14),
 
       // live preview
@@ -184,8 +260,29 @@ class _LabelSheetState extends State<_LabelSheet> {
         fontPct: _font,
         show: _show,
         store: widget.session.me?.storeName ?? 'Mağaza',
-        product: widget.product,
+        product: _product,
       ),
+      if (_single) ...[
+        const SizedBox(height: 10),
+        Material(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+          child: ListTile(
+            leading: const Icon(Icons.local_offer_outlined),
+            title: Text(_product!['oldPrice'] != null && _num(_product!['oldPrice']) > _num(_product!['salePrice'])
+                ? 'Endirim: ${formatMoney(_num(_product!['oldPrice']))} → ${formatMoney(_num(_product!['salePrice']))}'
+                : 'Endirim yoxdur · ${formatMoney(_num(_product!['salePrice']))}'),
+            subtitle: const Text('Köhnə qiymət etiketdə xətli çıxır'),
+            trailing: TextButton(
+              onPressed: () async {
+                final saved = await editProductPrice(context, widget.session, _product!);
+                if (saved != null && mounted) setState(() => _product = saved);
+              },
+              child: const Text('Dəyiş'),
+            ),
+          ),
+        ),
+      ],
 
       _section('Ölçü'),
       Wrap(spacing: 8, runSpacing: 8, children: [

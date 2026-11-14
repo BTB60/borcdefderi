@@ -97,11 +97,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
         if (e is ApiException && e.status == 404) return null;
         throw e;
       }),
+      api.get('/api/finance/product-profit', query: {...range, 'limit': '200'}).catchError((Object e) {
+        if (e is ApiException && e.status == 404) return null;
+        throw e;
+      }),
     ]);
     return _ReportData(
       pnl: _Pnl.fromJson(results[0] as Map<String, dynamic>),
       months: (results[1] as List).map((e) => _MonthPoint.fromJson(e as Map<String, dynamic>)).toList(),
       top: (results[2] as List?)?.map((e) => _TopProduct.fromJson(e as Map<String, dynamic>)).toList(),
+      profits: (results[3] as List?)?.map((e) => _ProductProfit.fromJson(e as Map<String, dynamic>)).toList(),
     );
   }
 
@@ -172,7 +177,7 @@ class _ReportBody extends StatelessWidget {
         children: [
           StatTile(label: 'Xalis satış', value: formatMoney(p.netSales), hint: _change(p.netSales, p.prevNetSales)),
           StatTile(label: 'Xalis mənfəət', value: formatMoney(p.netResult), hint: _change(p.netResult, p.prevNetResult)),
-          StatTile(label: 'Ümumi mənfəət', value: formatMoney(p.grossProfit), hint: _margin(p.grossProfit, p.netSales)),
+          StatTile(label: 'Məhsul mənfəəti', value: formatMoney(p.grossProfit), hint: _margin(p.grossProfit, p.netSales)),
           StatTile(label: 'Xərclər', value: formatMoney(p.expenses), hint: _change(p.expenses, p.prevExpenses)),
         ],
       ),
@@ -182,7 +187,7 @@ class _ReportBody extends StatelessWidget {
         _Row('Qaytarma', -p.returns),
         _Row('Xalis satış', p.netSales, bold: true),
         _Row('Malın maya dəyəri', -p.costOfGoods),
-        _Row('Ümumi mənfəət', p.grossProfit, bold: true),
+        _Row('Məhsul mənfəəti', p.grossProfit, bold: true),
         _Row('Xərclər', -p.expenses),
         _Row('Xalis mənfəət', p.netResult, bold: true, colored: true),
       ]),
@@ -232,6 +237,34 @@ class _ReportBody extends StatelessWidget {
                   title: Text(t.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                   subtitle: Text('${_qty(t.quantity)} ədəd · mənfəət ${formatMoney(t.profit)}'),
                   trailing: Text(formatMoney(t.revenue), style: const TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ]),
+          ),
+      ],
+      if (data.profits != null) ...[
+        const SizedBox(height: 20),
+        const Text('Məhsullar üzrə mənfəət', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 2),
+        Text('Satış − maya dəyəri, ən çox mənfəət gətirən yuxarıda', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+        const SizedBox(height: 8),
+        if (data.profits!.isEmpty)
+          const EmptyState(title: 'Bu dövrdə satılan məhsul yoxdur')
+        else
+          Card(
+            margin: EdgeInsets.zero,
+            child: Column(children: [
+              for (final (i, t) in data.profits!.indexed) ...[
+                if (i > 0) const Divider(height: 1),
+                ListTile(
+                  title: Text(t.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text('${_qty(t.quantity)} ${t.unit} · satış ${formatMoney(t.revenue)} · maya ${formatMoney(t.cost)}',
+                      style: const TextStyle(fontSize: 12)),
+                  trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Text(formatMoney(t.profit),
+                        style: TextStyle(fontWeight: FontWeight.w800, color: t.profit < 0 ? Colors.red.shade700 : Colors.green.shade700)),
+                    Text('${t.margin.toStringAsFixed(0)}%', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                  ]),
                 ),
               ],
             ]),
@@ -379,11 +412,23 @@ class _MonthlyChart extends StatelessWidget {
 }
 
 class _ReportData {
-  const _ReportData({required this.pnl, required this.months, required this.top});
+  const _ReportData({required this.pnl, required this.months, required this.top, this.profits});
 
   final _Pnl pnl;
   final List<_MonthPoint> months;
   final List<_TopProduct>? top;
+  final List<_ProductProfit>? profits;
+}
+
+class _ProductProfit {
+  const _ProductProfit(this.name, this.unit, this.quantity, this.revenue, this.cost, this.profit, this.margin);
+
+  final String name;
+  final String unit;
+  final double quantity, revenue, cost, profit, margin;
+
+  factory _ProductProfit.fromJson(Map<String, dynamic> j) => _ProductProfit(j['name'] as String? ?? '',
+      j['unit'] as String? ?? 'ədəd', _n(j['quantity']), _n(j['revenue']), _n(j['cost']), _n(j['profit']), _n(j['marginPct']));
 }
 
 class _Pnl {

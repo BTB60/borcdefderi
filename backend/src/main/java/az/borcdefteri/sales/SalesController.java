@@ -83,4 +83,12 @@ public class SalesController {
             @RequestParam(defaultValue = "10") int limit) {
         return profit.topProducts(from, to, limit);
     }
+
+    @GetMapping("/finance/product-profit")
+    public List<ProfitService.ProductProfit> productProfit(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "100") int limit) {
+        return profit.productProfit(from, to, limit);
+    }
 }

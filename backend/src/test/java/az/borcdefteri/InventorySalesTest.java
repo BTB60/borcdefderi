@@ -93,6 +93,13 @@ class InventorySalesTest extends IntegrationTestBase {
 
         post(owner, "/api/expenses", Map.of("title", "İşıq", "categoryId", "10000000-0000-0000-0000-000000000003", "amount", "4.00",
                 "paymentMethod", "CASH")).andExpect(status().isCreated());
+        // product profit: Şəkər 10 − 5 = 5 (50%), Çay 10 − 6 = 4 (40%); most profitable first
+        get(owner, "/api/finance/product-profit").andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].name", is("Şəkər"))).andExpect(jsonPath("$[0].profit", is(5.0)))
+                .andExpect(jsonPath("$[0].marginPct", is(50.0)))
+                .andExpect(jsonPath("$[1].name", is("Çay"))).andExpect(jsonPath("$[1].cost", is(6.0)))
+                .andExpect(jsonPath("$[1].profit", is(4.0)));
         get(owner, "/api/finance/pnl").andExpect(status().isOk())
                 .andExpect(jsonPath("$.netSales", is(19.0)))
                 .andExpect(jsonPath("$.costOfGoods", is(11.0)))   // 2×3 + 5×1

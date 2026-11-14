@@ -35,6 +35,10 @@ public class ProfitService {
 
     public record MonthPoint(String month, BigDecimal netSales, BigDecimal costOfGoods, BigDecimal expenses, BigDecimal netResult) {}
 
+    /** Profit per product: revenue (after line and returned quantities) − cost of the goods sold; margin on revenue. */
+    public record ProductProfit(UUID productId, String name, String unit, BigDecimal quantity, BigDecimal revenue, BigDecimal cost,
+                                BigDecimal profit, BigDecimal marginPct) {}
+
     private final JdbcClient jdbc;
     private final TenantService tenant;
 
@@ -115,6 +119,45 @@ public class ProfitService {
                     return new TopProduct(rs.getObject("product_id", UUID.class), rs.getString("name"),
                             rs.getBigDecimal("qty"), revenue,
                             Money.of(revenue.subtract(rs.getBigDecimal("cost"))));
+                })
+                .list();
+    }
+
+    /**
+     * Profit of every product sold in the period (cancelled sales and returned quantities excluded), most profitable
+     * first. The sale-level discount is not spread over products, so the sum can be slightly above the gross profit.
+     */
+    public List<ProductProfit> productProfit(LocalDate from, LocalDate to, int limit) {
+        CurrentMember m = require();
+        LocalDate today = tenant.today();
+        LocalDate lo = from != null ? from : today.withDayOfMonth(1);
+        LocalDate hi = to != null ? to : today;
+        if (lo.isAfter(hi)) throw ApiException.badRequest("INVALID_RANGE", "Başlanğıc tarix son tarixdən sonra ola bilməz");
+        int n = Math.min(Math.max(limit, 1), 500);
+        return jdbc.sql("""
+                        SELECT si.product_id, MAX(si.name) AS name, MAX(p.unit) AS unit,
+                               SUM(si.quantity - si.returned_qty) AS qty,
+                               SUM(si.line_total * (si.quantity - si.returned_qty) / si.quantity) AS revenue,
+                               SUM((si.quantity - si.returned_qty) * si.unit_cost) AS cost
+                        FROM sale_items si
+                        JOIN sales s ON s.id = si.sale_id AND s.store_id = si.store_id
+                        LEFT JOIN products p ON p.id = si.product_id
+                        WHERE s.store_id = :s AND s.status = 'COMPLETED' AND s.sold_on BETWEEN :f AND :t
+                        GROUP BY si.product_id
+                        HAVING SUM(si.quantity - si.returned_qty) > 0
+                        ORDER BY SUM(si.line_total * (si.quantity - si.returned_qty) / si.quantity)
+                                 - SUM((si.quantity - si.returned_qty) * si.unit_cost) DESC
+                        LIMIT :n
+                        """)
+                .param("s", m.storeId()).param("f", lo).param("t", hi).param("n", n)
+                .query((rs, i) -> {
+                    BigDecimal revenue = Money.of(rs.getBigDecimal("revenue"));
+                    BigDecimal cost = Money.of(rs.getBigDecimal("cost"));
+                    BigDecimal prof = Money.of(revenue.subtract(cost));
+                    BigDecimal margin = revenue.signum() == 0 ? BigDecimal.ZERO
+                            : prof.multiply(BigDecimal.valueOf(100)).divide(revenue, 1, java.math.RoundingMode.HALF_UP);
+                    return new ProductProfit(rs.getObject("product_id", UUID.class), rs.getString("name"), rs.getString("unit"),
+                            rs.getBigDecimal("qty").stripTrailingZeros(), revenue, cost, prof, margin);
                 })
                 .list();
     }

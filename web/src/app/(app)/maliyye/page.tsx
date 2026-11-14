@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Alert, Card, EmptyState, Input, PageHeader, Spinner, StatCard } from "@/components/ui";
+import { Alert, Card, EmptyState, Input, PageHeader, Spinner, StatCard, Table, Td, Th } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDate, formatMoney, todayBaku } from "@/lib/format";
 import type { MonthPoint, Pnl } from "@/lib/types";
+
+interface ProductProfit { productId: string; name: string; unit: string | null; quantity: number; revenue: number; cost: number; profit: number; marginPct: number }
 
 function delta(now: number, before: number) {
   const d = now - before;
@@ -20,11 +22,13 @@ export default function FinancePage() {
   const [range, setRange] = useState({ from: today.slice(0, 8) + "01", to: today });
   const [pnl, setPnl] = useState<Pnl | null>(null);
   const [months, setMonths] = useState<MonthPoint[] | null>(null);
+  const [products, setProducts] = useState<ProductProfit[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOwner && !can("REPORTS")) return;
     api<Pnl>(`/api/finance/pnl?from=${range.from}&to=${range.to}`).then(setPnl).catch((e) => setError(e instanceof ApiError ? e.message : "Yüklənmədi"));
+    api<ProductProfit[]>(`/api/finance/product-profit?from=${range.from}&to=${range.to}&limit=200`).then(setProducts).catch(() => setProducts([]));
   }, [range, isOwner, can]);
   useEffect(() => {
     if (!isOwner && !can("REPORTS")) return;
@@ -47,11 +51,13 @@ export default function FinancePage() {
       </div>
       {!pnl ? <Spinner /> : (
         <>
-          <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <StatCard label="Xalis satış" value={formatMoney(pnl.netSales)} tone="emerald" hint={`${pnl.saleCount} satış · qaytarma ${formatMoney(pnl.returns)}`} />
             <StatCard label="Maya dəyəri" value={formatMoney(pnl.costOfGoods)} tone="sky" hint="satılan malların alış qiyməti" />
+            <StatCard label="Məhsul mənfəəti" value={formatMoney(pnl.grossProfit)} tone={pnl.grossProfit >= 0 ? "navy" : "rose"}
+              hint={`satış − maya dəyəri${pnl.netSales ? ` · marja ${Math.round((pnl.grossProfit / pnl.netSales) * 100)}%` : ""}`} />
             <StatCard label="Xərclər" value={formatMoney(pnl.expenses)} tone="rose" />
-            <StatCard label="Xalis nəticə" value={formatMoney(pnl.netResult)} tone={pnl.netResult >= 0 ? "gold" : "rose"} hint={`Ümumi mənfəət ${formatMoney(pnl.grossProfit)}`} />
+            <StatCard label="Xalis nəticə" value={formatMoney(pnl.netResult)} tone={pnl.netResult >= 0 ? "gold" : "rose"} hint="məhsul mənfəəti − xərclər" />
           </section>
           <div className="mb-6 grid gap-5 lg:grid-cols-2">
             <Card>
@@ -59,7 +65,7 @@ export default function FinancePage() {
               <dl className="space-y-2 text-sm">
                 {[
                   ["Satış", pnl.sales], ["− Qaytarmalar", -pnl.returns], ["= Xalis satış", pnl.netSales], ["− Maya dəyəri", -pnl.costOfGoods],
-                  ["= Ümumi mənfəət", pnl.grossProfit], ["− Xərclər", -pnl.expenses], ["= Xalis nəticə", pnl.netResult],
+                  ["= Məhsul mənfəəti", pnl.grossProfit], ["− Xərclər", -pnl.expenses], ["= Xalis nəticə", pnl.netResult],
                 ].map(([l, v]) => (
                   <div key={l as string} className={`flex justify-between ${(l as string).startsWith("=") ? "border-t border-slate-200 pt-2 font-semibold text-navy-800" : ""}`}>
                     <dt>{l}</dt><dd className="tabular-nums">{formatMoney(v as number)}</dd>
@@ -82,6 +88,30 @@ export default function FinancePage() {
               <p className="mt-4 text-xs text-slate-500">Kreditlə satış gəlir kimi satış günü bir dəfə sayılır; müştəri borcu sonra ödəyəndə bu, gəlir deyil, borcun yığılmasıdır.</p>
             </Card>
           </div>
+          <Card className="mb-6">
+            <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Məhsullar üzrə mənfəət</h2>
+            <p className="mb-4 text-xs text-slate-500">Seçilmiş dövrdə satılan hər məhsul: satış − maya dəyəri (qaytarılan miqdar çıxılıb, ləğv edilmiş satışlar sayılmır). Ən çox mənfəət gətirən yuxarıda.</p>
+            {!products ? <Spinner /> : products.length === 0 ? <EmptyState title="Bu dövrdə satılan məhsul yoxdur" /> : (
+              <Table>
+                <thead className="bg-slate-50/70"><tr>
+                  <Th>Məhsul</Th><Th className="text-right">Satılıb</Th><Th className="text-right">Satış</Th><Th className="text-right">Maya dəyəri</Th>
+                  <Th className="text-right">Mənfəət</Th><Th className="text-right">Marja</Th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {products.map((p) => (
+                    <tr key={p.productId}>
+                      <Td className="font-medium text-navy-800">{p.name}</Td>
+                      <Td className="text-right tabular-nums">{p.quantity} {p.unit ?? ""}</Td>
+                      <Td className="text-right tabular-nums">{formatMoney(p.revenue)}</Td>
+                      <Td className="text-right tabular-nums text-slate-500">{formatMoney(p.cost)}</Td>
+                      <Td className={`text-right font-semibold tabular-nums ${p.profit < 0 ? "text-rose-600" : "text-emerald-700"}`}>{formatMoney(p.profit)}</Td>
+                      <Td className={`text-right tabular-nums ${p.marginPct < 0 ? "text-rose-600" : ""}`}>{p.marginPct}%</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </Card>
         </>
       )}
       <Card>

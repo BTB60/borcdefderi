@@ -372,7 +372,20 @@ function loadDesign(): LabelDesign {
 function LabelModal({ product, onClose }: { product: Product | null; onClose: () => void }) {
   const [d, setD] = useState<LabelDesign>(loadDesign);
   const [copies, setCopies] = useState(1);
-  const [perStock, setPerStock] = useState(false);
+  const [ownCount, setOwnCount] = useState(false);
+  // all products: a count per product, quick fill "as many as in stock" / "N of each"
+  const [all, setAll] = useState<Product[] | null>(null);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [bulkMode, setBulkMode] = useState<"stock" | "each">("stock");
+  const [each, setEach] = useState(1);
+  const stockCount = (p: Product) => Math.max(0, Math.ceil(p.stockQty));
+  const fill = (list: Product[], mode: "stock" | "each", n: number) =>
+    setCounts(Object.fromEntries(list.map((p) => [p.id, mode === "stock" ? Math.min(500, stockCount(p)) : n])));
+  useEffect(() => {
+    if (product) return;
+    api<Product[]>("/api/products?active=true").then((l) => { setAll(l); fill(l, "stock", 1); }).catch(() => setAll([]));
+  }, [product]);
+  const total = product ? (ownCount ? copies : Math.max(1, Math.min(500, stockCount(product)))) : Object.values(counts).reduce((a, b) => a + b, 0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -387,8 +400,8 @@ function LabelModal({ product, onClose }: { product: Product | null; onClose: ()
     setError(null);
     try { localStorage.setItem(LABEL_KEY, JSON.stringify(d)); } catch { /* ignore */ }
     const qs = new URLSearchParams({ size: "custom", w: String(d.w), h: String(d.h), barcode: String(d.barcode), font: String(d.font), show: d.show.join(",") });
-    if (product) qs.set("ids", product.id);
-    if (perStock) qs.set("perStock", "true"); else qs.set("copies", String(copies));
+    if (total <= 0) { setError("Ən azı 1 etiket seçin"); setBusy(false); return; }
+    qs.set("items", product ? `${product.id}:${total}` : Object.entries(counts).filter(([, n]) => n > 0).map(([id, n]) => `${id}:${n}`).join(","));
     try {
       await openProtected(`/api/products/labels?${qs}`);
       onClose();
@@ -424,7 +437,7 @@ function LabelModal({ product, onClose }: { product: Product | null; onClose: ()
 
   return (
     <Modal open size="xl" title={product ? `Barkod çap et — ${product.name}` : "Bütün barkodları çap et"} onClose={onClose}
-      footer={<><Button variant="ghost" onClick={onClose}>Ləğv et</Button><Button variant="gold" disabled={busy} onClick={print}>{busy ? "Hazırlanır…" : "Çap et"}</Button></>}>
+      footer={<><Button variant="ghost" onClick={onClose}>Ləğv et</Button><Button variant="gold" disabled={busy} onClick={print}>{busy ? "Hazırlanır…" : `Çap et (${total})`}</Button></>}>
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       <div className="grid gap-6 md:grid-cols-2">
         <div>
@@ -457,16 +470,42 @@ function LabelModal({ product, onClose }: { product: Product | null; onClose: ()
               </label>
             ))}
           </div>
-          <label className="mt-5 flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={perStock} onChange={(e) => setPerStock(e.target.checked)} />
-            {product ? "Qalıq qədər (anbarda neçə ədəd varsa)" : "Hər məhsuldan qalıq qədər"}
-          </label>
-          {!perStock && (
-            <div className="mt-3 flex items-center gap-3 text-sm">
-              <span>{product ? "Nüsxə sayı" : "Hər məhsuldan"}</span>
-              <Input type="number" min={1} max={500} value={copies} onChange={(e) => setCopies(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} className="w-24" />
-            </div>
+          <p className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wider text-slate-500">Neçə etiket</p>
+          {product ? (
+            <>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setOwnCount(false)} className={`rounded-full border px-3 py-1.5 text-sm ${!ownCount ? "border-gold-500 bg-gold-500/10 font-semibold" : "border-slate-300"}`}>Qalıq qədər ({stockCount(product)})</button>
+                <button type="button" onClick={() => setOwnCount(true)} className={`rounded-full border px-3 py-1.5 text-sm ${ownCount ? "border-gold-500 bg-gold-500/10 font-semibold" : "border-slate-300"}`}>Özüm seçirəm</button>
+              </div>
+              {ownCount && (
+                <div className="mt-3 flex items-center gap-3 text-sm">
+                  <span>Nüsxə sayı</span>
+                  <Input type="number" min={1} max={500} value={copies} onChange={(e) => setCopies(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} className="w-24" />
+                </div>
+              )}
+              {!ownCount && stockCount(product) === 0 && <p className="mt-2 text-xs text-slate-500">Anbarda qalıq yoxdur — 1 etiket çap olunacaq</p>}
+            </>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => { setBulkMode("stock"); fill(all ?? [], "stock", each); }} className={`rounded-full border px-3 py-1.5 text-sm ${bulkMode === "stock" ? "border-gold-500 bg-gold-500/10 font-semibold" : "border-slate-300"}`}>Qalıq qədər</button>
+                <button type="button" onClick={() => { setBulkMode("each"); fill(all ?? [], "each", each); }} className={`rounded-full border px-3 py-1.5 text-sm ${bulkMode === "each" ? "border-gold-500 bg-gold-500/10 font-semibold" : "border-slate-300"}`}>Hər birindən</button>
+                {bulkMode === "each" && <Input type="number" min={1} max={500} value={each} onChange={(e) => { const n = Math.max(1, Math.min(500, Number(e.target.value) || 1)); setEach(n); fill(all ?? [], "each", n); }} className="w-20" />}
+              </div>
+              {!all ? <Spinner /> : (
+                <div className="mt-3 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200">
+                  {all.map((p) => (
+                    <div key={p.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+                      <input type="checkbox" checked={(counts[p.id] ?? 0) > 0} onChange={(e) => setCounts({ ...counts, [p.id]: e.target.checked ? Math.max(1, stockCount(p)) : 0 })} />
+                      <span className="min-w-0 flex-1 truncate">{p.name} <span className="text-xs text-slate-400">· anbarda {stockCount(p)}</span></span>
+                      <Input type="number" min={0} max={500} value={counts[p.id] ?? 0} onChange={(e) => setCounts({ ...counts, [p.id]: Math.max(0, Math.min(500, Number(e.target.value) || 0)) })} className="w-20" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
+          <p className="mt-3 text-sm font-semibold text-navy-800">Cəmi: {total} etiket</p>
         </div>
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Önizləmə</p>

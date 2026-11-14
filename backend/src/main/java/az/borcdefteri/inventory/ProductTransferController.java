@@ -37,8 +37,9 @@ public class ProductTransferController {
                                          @RequestParam(required = false) Integer font,
                                          @RequestParam(required = false) String show,
                                          @RequestParam(defaultValue = "1") int copies,
-                                         @RequestParam(defaultValue = "false") boolean perStock) {
-        ExportFile f = labels.labels(ids, ProductLabelService.design(size, w, h, barcode, font, show), copies, perStock);
+                                         @RequestParam(defaultValue = "false") boolean perStock,
+                                         @RequestParam(required = false) String items) {
+        ExportFile f = labels.labels(ids, items, ProductLabelService.design(size, w, h, barcode, font, show), copies, perStock);
         return FileResponses.inline(f.content(), f.contentType(), f.fileName());
     }
 

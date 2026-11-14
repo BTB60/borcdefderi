@@ -180,6 +180,14 @@ class ProductTransferTest extends IntegrationTestBase {
                 "version", body(get(owner, "/api/products/" + tea)).get("version").asLong()))
                 .andExpect(jsonPath("$.oldPrice").doesNotExist());
         get(owner, "/api/products/labels?size=custom&w=10&h=10").andExpect(status().isBadRequest());
+        // exact counts per product: 3 of the tea, the other product skipped with 0
+        String other = body(get(owner, "/api/products?q=Kodsuz")).get(0).get("id").asText();
+        byte[] picked = get(owner, "/api/products/labels?items=" + tea + ":3," + other + ":0").andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        try (var doc = new com.lowagie.text.pdf.PdfReader(picked)) {
+            assertEquals(3, doc.getNumberOfPages());
+        }
+        get(owner, "/api/products/labels?items=" + tea + ":999").andExpect(status().isBadRequest());
         get(owner, "/api/products/labels?size=huge").andExpect(status().isBadRequest());
         get(owner, "/api/products/labels?copies=0").andExpect(status().isBadRequest());
     }

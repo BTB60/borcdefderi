@@ -94,22 +94,47 @@ public class ProductLabelService {
      * @param perStock true = as many labels as the product has in stock (at least one)
      */
     public ExportFile labels(List<UUID> ids, Design design, int copies, boolean perStock) {
+        return labels(ids, null, design, copies, perStock);
+    }
+
+    /**
+     * @param items exact number of labels per product ("id:count,id:count"); when given it wins over ids / copies /
+     *              perStock, and a product with count 0 is skipped
+     */
+    public ExportFile labels(List<UUID> ids, String items, Design design, int copies, boolean perStock) {
         CurrentMember m = inventory.requireInventory();
         if (copies < 1 || copies > 500) throw ApiException.badRequest("INVALID_COPIES", "Nüsxə sayı 1–500 olmalıdır");
         List<Product> products = new ArrayList<>();
-        if (ids == null || ids.isEmpty()) {
+        java.util.Map<UUID, Integer> exact = new java.util.LinkedHashMap<>();
+        if (items != null && !items.isBlank()) {
+            for (String part : items.split(",")) {
+                String[] kv = part.trim().split(":");
+                try {
+                    UUID id = UUID.fromString(kv[0].trim());
+                    int n = kv.length > 1 ? Integer.parseInt(kv[1].trim()) : 1;
+                    if (n < 0 || n > 500) throw new IllegalArgumentException();
+                    if (n > 0) exact.merge(id, n, Integer::sum);
+                } catch (IllegalArgumentException | ArrayIndexOutOfBoundsException e) {
+                    throw ApiException.badRequest("INVALID_ITEMS", "Məhsul siyahısı yanlışdır (hər məhsul üçün 0–500 etiket)");
+                }
+            }
+            for (UUID id : exact.keySet()) products.add(inventory.load(m.storeId(), id));
+        } else if (ids == null || ids.isEmpty()) {
             products.addAll(inventory.products(null, null, null, true));
         } else {
             for (UUID id : ids) products.add(inventory.load(m.storeId(), id));
         }
         if (products.isEmpty()) throw ApiException.badRequest("NO_PRODUCTS", "Çap üçün məhsul yoxdur");
+        java.util.function.ToIntFunction<Product> howMany = exact.isEmpty()
+                ? p -> count(p, copies, perStock)
+                : p -> exact.get(p.id());
         long total = 0;
-        for (Product p : products) total += count(p, copies, perStock);
+        for (Product p : products) total += howMany.applyAsInt(p);
         if (total > MAX_LABELS) {
             throw ApiException.badRequest("TOO_MANY_LABELS", "Bir dəfəyə ən çox " + MAX_LABELS + " etiket çap etmək olar (" + total + " seçilib)");
         }
         String name = products.size() == 1 ? "barkod-" + products.get(0).code() : "barkodlar";
-        return new ExportFile(pdf(m.storeName(), products, design, copies, perStock), "application/pdf",
+        return new ExportFile(pdf(m.storeName(), products, design, howMany), "application/pdf",
                 name + "-" + Math.round(design.widthMm()) + "x" + Math.round(design.heightMm()) + ".pdf");
     }
 
@@ -118,7 +143,7 @@ public class ProductLabelService {
         return Math.max(1, p.stockQty().setScale(0, RoundingMode.CEILING).intValue());
     }
 
-    private byte[] pdf(String store, List<Product> products, Design d, int copies, boolean perStock) {
+    private byte[] pdf(String store, List<Product> products, Design d, java.util.function.ToIntFunction<Product> howMany) {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Document doc = new Document(new Rectangle(d.widthMm() * MM, d.heightMm() * MM), 0, 0, 0, 0);
             PdfWriter writer = PdfWriter.getInstance(doc, out);
@@ -127,7 +152,7 @@ public class ProductLabelService {
             PdfContentByte cb = writer.getDirectContent();
             boolean first = true;
             for (Product p : products) {
-                for (int i = 0, n = count(p, copies, perStock); i < n; i++) {
+                for (int i = 0, n = howMany.applyAsInt(p); i < n; i++) {
                     if (!first) doc.newPage();
                     first = false;
                     draw(cb, d, store, p, f);

@@ -145,17 +145,50 @@ class _LabelSheetState extends State<_LabelSheet> {
   double _barcode = 100;
   double _font = 100;
   Set<String> _show = {..._presets[1].show};
-  int _copies = 1;
-  bool _perStock = false;
   bool _busy = false;
   late Map<String, dynamic>? _product = widget.product;
 
+  // one product: as many as in stock, or your own number
+  bool _ownCount = false;
+  int _copies = 1;
+
+  // all products: a count per product; quick fill "as many as in stock" / "N of each"
+  List<Map<String, dynamic>>? _all;
+  final Map<String, int> _counts = {};
+  String _bulkMode = 'stock';
+  int _each = 1;
+
   bool get _single => _product != null;
+
+  static int _stockCount(Map<String, dynamic> p) => ((p['stockQty'] as num?)?.toDouble() ?? 0).ceil();
+
+  int get _total => _single ? (_ownCount ? _copies : _stockCount(_product!).clamp(1, 500)) : _counts.values.fold(0, (a, b) => a + b);
 
   @override
   void initState() {
     super.initState();
     _restore();
+    if (!_single) _loadProducts();
+  }
+
+  Future<void> _loadProducts() async {
+    try {
+      final list = (await widget.session.api.get('/api/products', query: {'active': 'true'}) as List).cast<Map<String, dynamic>>();
+      if (!mounted) return;
+      setState(() {
+        _all = list;
+        _fill();
+      });
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  /// Applies the quick choice to every product.
+  void _fill() {
+    for (final p in _all ?? const <Map<String, dynamic>>[]) {
+      _counts['${p['id']}'] = _bulkMode == 'stock' ? _stockCount(p).clamp(0, 500) : _each;
+    }
   }
 
   @override
@@ -206,6 +239,10 @@ class _LabelSheetState extends State<_LabelSheet> {
 
   Future<void> _print() async {
     final w = _wMm, h = _hMm;
+    if (_total <= 0) {
+      showError(context, 'Ən azı 1 etiket seçin');
+      return;
+    }
     if (w < 20 || w > 150 || h < 12 || h > 120) {
       showError(context, 'Etiket ölçüsü: en 20–150 mm, hündürlük 12–120 mm');
       return;
@@ -220,8 +257,10 @@ class _LabelSheetState extends State<_LabelSheet> {
         'barcode=${_barcode.round()}',
         'font=${_font.round()}',
         'show=${_show.join(',')}',
-        if (_single) 'ids=${_product!['id']}',
-        if (_perStock) 'perStock=true' else 'copies=$_copies',
+        if (_single)
+          'items=${_product!['id']}:$_total'
+        else
+          'items=${_counts.entries.where((e) => e.value > 0).map((e) => '${e.key}:${e.value}').join(',')}',
       ].join('&');
       final bytes = await widget.session.api.getBytes('/api/products/labels?$q');
       final name = _single ? 'barkod-${_product!['code']}.pdf' : 'barkodlar.pdf';
@@ -355,24 +394,97 @@ class _LabelSheetState extends State<_LabelSheet> {
           ),
       ]),
 
-      _section('Say'),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        title: const Text('Qalıq qədər'),
-        subtitle: Text(_single ? 'Anbarda neçə ədəd varsa, o qədər etiket' : 'Hər məhsuldan anbardakı sayı qədər etiket'),
-        value: _perStock,
-        onChanged: (v) => setState(() => _perStock = v),
-      ),
-      if (!_perStock)
-        Row(children: [
-          Expanded(child: Text(_single ? 'Nüsxə sayı' : 'Hər məhsuldan', style: const TextStyle(fontSize: 16))),
-          IconButton.outlined(onPressed: _copies > 1 ? () => setState(() => _copies--) : null, icon: const Icon(Icons.remove)),
-          SizedBox(
-            width: 52,
-            child: Text('$_copies', textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+      _section('Neçə etiket'),
+      if (_single) ...[
+        SegmentedButton<bool>(
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(value: false, label: Text('Qalıq qədər (${_stockCount(_product!)})')),
+            const ButtonSegment(value: true, label: Text('Özüm seçirəm')),
+          ],
+          selected: {_ownCount},
+          onSelectionChanged: (v) => setState(() => _ownCount = v.first),
+        ),
+        if (_ownCount) ...[
+          const SizedBox(height: 10),
+          _Stepper(value: _copies, onChanged: (v) => setState(() => _copies = v), min: 1, label: 'Nüsxə sayı'),
+        ],
+        if (!_ownCount && _stockCount(_product!) == 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('Anbarda qalıq yoxdur — 1 etiket çap olunacaq', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
           ),
-          IconButton.outlined(onPressed: _copies < 500 ? () => setState(() => _copies++) : null, icon: const Icon(Icons.add)),
-        ]),
+      ] else ...[
+        SegmentedButton<String>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: 'stock', label: Text('Qalıq qədər')),
+            ButtonSegment(value: 'each', label: Text('Hər birindən eyni say')),
+          ],
+          selected: {_bulkMode},
+          onSelectionChanged: (v) => setState(() {
+            _bulkMode = v.first;
+            _fill();
+          }),
+        ),
+        if (_bulkMode == 'each') ...[
+          const SizedBox(height: 10),
+          _Stepper(
+            value: _each,
+            min: 1,
+            label: 'Hər məhsuldan',
+            onChanged: (v) => setState(() {
+              _each = v;
+              _fill();
+            }),
+          ),
+        ],
+        const SizedBox(height: 10),
+        if (_all == null)
+          const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()))
+        else if (_all!.isEmpty)
+          const Text('Aktiv məhsul yoxdur')
+        else
+          Card(
+            margin: EdgeInsets.zero,
+            child: Column(children: [
+              for (final (i, p) in _all!.indexed) ...[
+                if (i > 0) const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 2, 4, 2),
+                  child: Row(children: [
+                    Checkbox(
+                      value: (_counts['${p['id']}'] ?? 0) > 0,
+                      onChanged: (v) => setState(() => _counts['${p['id']}'] = v == true ? (_stockCount(p) > 0 ? _stockCount(p) : 1) : 0),
+                    ),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('${p['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        Text('Anbarda: ${_stockCount(p)} ${p['unit'] ?? ''}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                      ]),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: (_counts['${p['id']}'] ?? 0) > 0 ? () => setState(() => _counts['${p['id']}'] = _counts['${p['id']}']! - 1) : null,
+                      icon: const Icon(Icons.remove_circle_outline),
+                    ),
+                    SizedBox(
+                      width: 34,
+                      child: Text('${_counts['${p['id']}'] ?? 0}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: (_counts['${p['id']}'] ?? 0) < 500 ? () => setState(() => _counts['${p['id']}'] = (_counts['${p['id']}'] ?? 0) + 1) : null,
+                      icon: const Icon(Icons.add_circle_outline),
+                    ),
+                  ]),
+                ),
+              ],
+            ]),
+          ),
+      ],
+      const SizedBox(height: 8),
+      Text('Cəmi: $_total etiket', style: const TextStyle(fontWeight: FontWeight.w700, color: navy)),
       const SizedBox(height: 20),
       SizedBox(
         height: 52,
@@ -381,7 +493,7 @@ class _LabelSheetState extends State<_LabelSheet> {
           icon: _busy
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Icon(Icons.print_outlined),
-          label: const Text('Çap et', style: TextStyle(fontSize: 16)),
+          label: Text('Çap et ($_total)', style: const TextStyle(fontSize: 16)),
         ),
       ),
       const SizedBox(height: 8),
@@ -522,4 +634,22 @@ class _BarsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BarsPainter old) => old.text != text;
+}
+
+/// − value + row for a count.
+class _Stepper extends StatelessWidget {
+  const _Stepper({required this.value, required this.onChanged, required this.label, this.min = 0});
+
+  final int value;
+  final int min;
+  final String label;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+        Expanded(child: Text(label, style: const TextStyle(fontSize: 16))),
+        IconButton.outlined(onPressed: value > min ? () => onChanged(value - 1) : null, icon: const Icon(Icons.remove)),
+        SizedBox(width: 52, child: Text('$value', textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+        IconButton.outlined(onPressed: value < 500 ? () => onChanged(value + 1) : null, icon: const Icon(Icons.add)),
+      ]);
 }

@@ -72,9 +72,11 @@ public class PartyCardController {
         return attach(statements.forStaff(true, id));
     }
 
+    /** type=COMPANY_RECEIVABLE (the company owes us) or COMPANY_PAYABLE (we owe it); without it both sides. */
     @GetMapping("/api/companies/{id}/statement")
-    public ResponseEntity<byte[]> companyStatement(@PathVariable UUID id) {
-        return attach(statements.forStaff(false, id));
+    public ResponseEntity<byte[]> companyStatement(@PathVariable UUID id,
+                                                   @RequestParam(required = false) az.borcdefteri.debts.DebtType type) {
+        return attach(statements.forStaff(false, id, type));
     }
 
     // ----- customer portal links -----

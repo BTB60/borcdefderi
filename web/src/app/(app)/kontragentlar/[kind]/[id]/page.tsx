@@ -120,14 +120,39 @@ export default function PartyProfilePage() {
             {party.note && <p className="mt-2 text-sm text-white/80">{party.note}</p>}
           </div>
         </div>
-        <div className="mt-6 grid grid-cols-3 gap-3 text-center">
-          {[["Ümumi borc", totals.totalDebt], ["Ödənilib", totals.paid], ["Qalıq borc", totals.remaining]].map(([l, v]) => (
-            <div key={l as string} className="rounded-2xl bg-white/10 px-3 py-3">
-              <p className="text-[11px] uppercase tracking-wider text-white/60">{l}</p>
-              <p className="mt-1 font-serif text-lg font-semibold tabular-nums sm:text-2xl">{formatMoney(v as number)}</p>
-            </div>
-          ))}
-        </div>
+        {isCustomer || !data.receivable || !data.payable ? (
+          <div className="mt-6 grid grid-cols-3 gap-3 text-center">
+            {[["Ümumi borc", totals.totalDebt], ["Ödənilib", totals.paid], ["Qalıq borc", totals.remaining]].map(([l, v]) => (
+              <div key={l as string} className="rounded-2xl bg-white/10 px-3 py-3">
+                <p className="text-[11px] uppercase tracking-wider text-white/60">{l}</p>
+                <p className="mt-1 font-serif text-lg font-semibold tabular-nums sm:text-2xl">{formatMoney(v as number)}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-6 grid gap-3 md:grid-cols-2">
+            {([["COMPANY_RECEIVABLE", "Şirkətin bizə borcu", data.receivable, "bg-emerald-500/20", "alacaq"], ["COMPANY_PAYABLE", "Bizim şirkətə borcumuz", data.payable, "bg-rose-500/20", "borcumuz"]] as const)
+              .filter(([type]) => can(type === "COMPANY_RECEIVABLE" ? "COMPANY_RECEIVABLES" : "COMPANY_PAYABLES"))
+              .map(([type, title, t, tone, file]) => (
+                <div key={type} className={`rounded-2xl ${tone} p-4`}>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">{title}</p>
+                    <button type="button" onClick={() => download(`${base}/statement?type=${type}`, `${file}.pdf`).catch((e) => setError(e instanceof ApiError ? e.message : "PDF hazırlanmadı"))}
+                      className="rounded-full bg-white/15 px-3 py-1 text-xs font-medium hover:bg-white/25">PDF hesabat</button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    {[["Ümumi", t.totalDebt], ["Ödənilib", t.paid], ["Qalıq", t.remaining]].map(([l, v]) => (
+                      <div key={l as string} className="rounded-xl bg-white/10 px-2 py-2">
+                        <p className="text-[10px] uppercase tracking-wider text-white/60">{l}</p>
+                        <p className="mt-0.5 font-serif text-base font-semibold tabular-nums sm:text-xl">{formatMoney(v as number)}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-white/60">{t.openDebtCount} açıq borc</p>
+                </div>
+              ))}
+          </div>
+        )}
         {overdue && <p className="mt-4 rounded-xl bg-rose-500/20 px-4 py-2 text-sm text-rose-100">Son ödəmə tarixi keçmiş {party.overdueDebts} borc var.</p>}
       </section>
 

@@ -173,8 +173,19 @@ class DebtIncreaseAndProfileTest extends IntegrationTestBase {
         debtIdOf(owner, "COMPANY_RECEIVABLE", company, "400.00");
         debtIdOf(owner, "COMPANY_PAYABLE", company, "150.00");
 
+        // the two sides are kept apart: 400 the company owes us, 150 we owe the company — never 550
         get(owner, "/api/companies/" + company + "/profile").andExpect(status().isOk())
-                .andExpect(jsonPath("$.debts", hasSize(2)));
+                .andExpect(jsonPath("$.debts", hasSize(2)))
+                .andExpect(jsonPath("$.receivable.remaining", is(400.0)))
+                .andExpect(jsonPath("$.payable.remaining", is(150.0)))
+                .andExpect(jsonPath("$.totals.remaining", is(400.0)));
+        for (String type : new String[]{"COMPANY_RECEIVABLE", "COMPANY_PAYABLE"}) {
+            byte[] pdf = get(owner, "/api/companies/" + company + "/statement?type=" + type).andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsByteArray();
+            String text = new com.lowagie.text.pdf.parser.PdfTextExtractor(new com.lowagie.text.pdf.PdfReader(pdf)).getTextFromPage(1);
+            org.junit.jupiter.api.Assertions.assertTrue(text.contains(type.equals("COMPANY_RECEIVABLE") ? "400" : "150"), text);
+            org.junit.jupiter.api.Assertions.assertFalse(text.contains("550"), text);
+        }
 
         String email = uniqueEmail("alacaq");
         post(owner, "/api/employees", Map.of("email", email, "password", EMPLOYEE_PASSWORD, "fullName", "Alacaq İşçisi",

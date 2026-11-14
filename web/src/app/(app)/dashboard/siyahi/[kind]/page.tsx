@@ -12,8 +12,8 @@ import type { DashboardListKind, DebtRow, EntryRow, ListPage, PartyRow, PaymentR
 const META: Record<DashboardListKind, { title: string; subtitle: string; sumLabel: string; shape: "party" | "debt" | "entry" | "payment"; partyFilter?: boolean }> = {
   "customer-debts": { title: "Müştəri borcu", subtitle: "Bizə borcu olan müştərilər", sumLabel: "Qalıq borc", shape: "party" },
   "active-customers": { title: "Aktiv müştərilər", subtitle: "Qalıq borcu olan müştərilər", sumLabel: "Qalıq borc", shape: "party" },
-  "company-receivables": { title: "Şirkətlər bizə borcludur", subtitle: "Bizə borcu olan şirkətlər", sumLabel: "Qalıq borc", shape: "party" },
-  "company-payables": { title: "Toplam borcum", subtitle: "Bizim şirkətlərə olan açıq öhdəliklərimiz", sumLabel: "Qalıq borcumuz", shape: "party" },
+  "company-receivables": { title: "Şirkətin bizə borcu", subtitle: "Bizə borcu olan şirkətlər", sumLabel: "Qalıq borc", shape: "party" },
+  "company-payables": { title: "Bizim şirkətə borcumuz", subtitle: "Bizim şirkətlərə olan açıq öhdəliklərimiz", sumLabel: "Qalıq borcumuz", shape: "party" },
   "today-debts": { title: "Yazılan borclar", subtitle: "Seçilmiş dövrdə yazılan və artırılan borclar (Bakı vaxtı)", sumLabel: "Yazılan məbləğ", shape: "entry", partyFilter: true },
   "active-debts": { title: "Aktiv borclar", subtitle: "Qalığı sıfırdan böyük olan borclar (qismən ödənilənlər daxil)", sumLabel: "Qalıq", shape: "debt", partyFilter: true },
   "overdue-debts": { title: "Gecikmiş borclar", subtitle: "Son ödəmə tarixi keçmiş və bağlanmamış borclar", sumLabel: "Qalıq", shape: "debt", partyFilter: true },

@@ -39,6 +39,9 @@ class _Profile {
   final List<Debt> debts;
   final List<Payment> payments;
   final List<Map<String, dynamic>> history;
+  /// Company only: what the company owes us / what we owe the company — kept apart, never added together.
+  final _Side? receivable;
+  final _Side? payable;
 
   _Profile(Map<String, dynamic> j, this.history)
       : party = Party.fromJson(j['party'] as Map<String, dynamic>),
@@ -46,7 +49,20 @@ class _Profile {
         paid = ((j['totals'] as Map)['paid'] as num).toDouble(),
         remaining = ((j['totals'] as Map)['remaining'] as num).toDouble(),
         debts = (j['debts'] as List).map((e) => Debt.fromJson(e as Map<String, dynamic>)).toList(),
-        payments = (j['payments'] as List).map((e) => Payment.fromJson(e as Map<String, dynamic>)).toList();
+        payments = (j['payments'] as List).map((e) => Payment.fromJson(e as Map<String, dynamic>)).toList(),
+        receivable = j['receivable'] == null ? null : _Side(j['receivable'] as Map<String, dynamic>),
+        payable = j['payable'] == null ? null : _Side(j['payable'] as Map<String, dynamic>);
+}
+
+class _Side {
+  _Side(Map<String, dynamic> j)
+      : total = (j['totalDebt'] as num).toDouble(),
+        paid = (j['paid'] as num).toDouble(),
+        remaining = (j['remaining'] as num).toDouble(),
+        open = (j['openDebtCount'] as num?)?.toInt() ?? 0;
+
+  final double total, paid, remaining;
+  final int open;
 }
 
 /// Premium customer / company card: code, status, quick actions, history, notes and the customer portal link.
@@ -134,9 +150,9 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
     }
   }
 
-  Future<void> _pdf(Party p) async {
+  Future<void> _pdf(Party p, [String? type]) async {
     try {
-      final bytes = await widget.session.api.getBytes('$_base/statement');
+      final bytes = await widget.session.api.getBytes(type == null ? '$_base/statement' : '$_base/statement?type=$type');
       final name = 'cixaris-${p.code ?? p.name}.pdf'.replaceAll(' ', '-');
       await SharePlus.instance.share(ShareParams(
         files: [XFile.fromData(Uint8List.fromList(bytes), mimeType: 'application/pdf', name: name)],
@@ -261,22 +277,30 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
               ),
             ]),
             const SizedBox(height: 14),
-            Row(children: [
-              for (final e in [['Ümumi borc', p.totalDebt], ['Ödənilib', p.paid], ['Qalıq', p.remaining]])
-                Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                    decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(12)),
-                    child: Column(children: [
-                      Text(e[0] as String, style: const TextStyle(color: Colors.white60, fontSize: 10)),
-                      FittedBox(
-                          child: Text(formatMoney(e[1] as double),
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15))),
-                    ]),
+            if (widget.isCustomer || p.receivable == null || p.payable == null)
+              Row(children: [
+                for (final e in [['Ümumi borc', p.totalDebt], ['Ödənilib', p.paid], ['Qalıq', p.remaining]])
+                  Expanded(
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                      decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(12)),
+                      child: Column(children: [
+                        Text(e[0] as String, style: const TextStyle(color: Colors.white60, fontSize: 10)),
+                        FittedBox(
+                            child: Text(formatMoney(e[1] as double),
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15))),
+                      ]),
+                    ),
                   ),
-                ),
-            ]),
+              ])
+            else ...[
+              if (widget.session.me!.can('COMPANY_RECEIVABLES'))
+                _SideBlock(title: 'Şirkətin bizə borcu', side: p.receivable!, color: Colors.green, onPdf: () => _pdf(party, 'COMPANY_RECEIVABLE')),
+              if (widget.session.me!.can('COMPANY_RECEIVABLES') && widget.session.me!.can('COMPANY_PAYABLES')) const SizedBox(height: 8),
+              if (widget.session.me!.can('COMPANY_PAYABLES'))
+                _SideBlock(title: 'Bizim şirkətə borcumuz', side: p.payable!, color: Colors.red, onPdf: () => _pdf(party, 'COMPANY_PAYABLE')),
+            ],
             const SizedBox(height: 10),
             Text(
               [
@@ -666,4 +690,48 @@ class _NotesAndPortalState extends State<_NotesAndPortal> {
           },
         ),
       ]);
+}
+
+/// One side of a company's account on the card header: total / paid / remaining and its own PDF statement.
+class _SideBlock extends StatelessWidget {
+  const _SideBlock({required this.title, required this.side, required this.color, required this.onPdf});
+
+  final String title;
+  final _Side side;
+  final MaterialColor color;
+  final VoidCallback onPdf;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 6, 10),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(14)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14))),
+            Text('${side.open} açıq', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            IconButton(
+              tooltip: 'PDF hesabat',
+              visualDensity: VisualDensity.compact,
+              onPressed: onPdf,
+              icon: const Icon(Icons.picture_as_pdf_outlined, color: Colors.white),
+            ),
+          ]),
+          Row(children: [
+            for (final e in [['Ümumi', side.total], ['Ödənilib', side.paid], ['Qalıq', side.remaining]])
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                  decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(10)),
+                  child: Column(children: [
+                    Text(e[0] as String, style: const TextStyle(color: Colors.white60, fontSize: 10)),
+                    FittedBox(
+                        child: Text(formatMoney(e[1] as double),
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14))),
+                  ]),
+                ),
+              ),
+          ]),
+        ]),
+      );
 }

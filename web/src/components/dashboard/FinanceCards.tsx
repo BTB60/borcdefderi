@@ -91,7 +91,7 @@ export function FinanceCards() {
         <BigCard
           href={listHref("company-payables")}
           gradient="from-violet-600 to-purple-800"
-          label="Toplam borcum"
+          label="Bizim şirkətə borcumuz"
           value={formatMoney(o.companyPayables.sum)}
           hint={`${o.companyPayables.count} şirkətə açıq öhdəlik`}
           icon={ICONS.wallet}
@@ -105,7 +105,7 @@ export function FinanceCards() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <SmallCard href={listHref("customer-debts")} label="Müştəri borcu" value={formatMoney(o.customerDebts.sum)} hint={`${o.customerDebts.count} borclu müştəri`} icon={ICONS.users} tone="bg-navy-50 text-navy-800"
           action={<DebtShortcuts section="customer" onSaved={saved} />} />
-        <SmallCard href={listHref("company-receivables")} label="Şirkətlər bizə borcludur" value={formatMoney(o.companyReceivables.sum)} hint={`${o.companyReceivables.count} şirkət`} icon={ICONS.building} tone="bg-sky-50 text-sky-700"
+        <SmallCard href={listHref("company-receivables")} label="Şirkətin bizə borcu" value={formatMoney(o.companyReceivables.sum)} hint={`${o.companyReceivables.count} şirkət`} icon={ICONS.building} tone="bg-sky-50 text-sky-700"
           action={<DebtShortcuts section="receivable" onSaved={saved} />} />
         <SmallCard href={listHref("today-debts")} label="Bu gün yazılan borclar" value={formatMoney(o.todayDebts.sum)} hint={`${o.todayDebts.count} əməliyyat`} icon={ICONS.today} tone="bg-violet-50 text-violet-700" />
         <SmallCard href={listHref("overdue-debts")} label="Gecikmiş borclar" value={String(o.overdueDebts.count)} hint={`Qalıq: ${formatMoney(o.overdueDebts.sum)}`} icon={ICONS.alert} tone="bg-rose-50 text-rose-700" />

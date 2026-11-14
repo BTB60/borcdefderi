@@ -62,13 +62,21 @@ public class StatementService {
     }
 
     public ExportFile forStaff(boolean customer, UUID partyId) {
+        return forStaff(customer, partyId, null);
+    }
+
+    /** [only] limits a company statement to one side: COMPANY_RECEIVABLE or COMPANY_PAYABLE (null = both). */
+    public ExportFile forStaff(boolean customer, UUID partyId, DebtType only) {
         CurrentMember m = tenant.requireBusinessMember();
         Party p = customer ? parties.customer(m, partyId) : parties.company(m, partyId);
         List<String> types = new ArrayList<>();
         for (DebtType t : DebtType.values()) {
-            if (t.isCustomer() == customer && m.has(t.permission())) {
+            if (t.isCustomer() == customer && m.has(t.permission()) && (only == null || t == only)) {
                 types.add(t.name());
             }
+        }
+        if (only != null && types.isEmpty()) {
+            throw ApiException.forbidden("PERMISSION_DENIED", "Bu bölmə üçün icazəniz yoxdur");
         }
         return build(m.storeId(), customer, p.id(), p.name(), p.phone(), p.code(), types);
     }
@@ -140,7 +148,9 @@ public class StatementService {
             top.addCell(storeCell);
             doc.add(top);
 
-            Paragraph t = new Paragraph("Borc çıxarışı", title);
+            Paragraph t = new Paragraph(customer || types.size() != 1 ? "Borc çıxarışı"
+                    : DebtType.valueOf(types.get(0)) == DebtType.COMPANY_RECEIVABLE ? "Şirkətin bizə borcu — çıxarış"
+                    : "Bizim şirkətə borcumuz — çıxarış", title);
             t.setSpacingBefore(10);
             doc.add(t);
             doc.add(new Paragraph((customer ? "Müştəri: " : "Şirkət: ") + nz(name)
@@ -180,7 +190,7 @@ public class StatementService {
             for (HistoryEntry e : history) {
                 add(table, e.entryDate() == null ? "" : e.entryDate().format(DATE), cell, Element.ALIGN_LEFT);
                 if (!customer) {
-                    add(table, e.debtType() == DebtType.COMPANY_PAYABLE ? "Biz borcluyuq" : "Firma borcludur", cell, Element.ALIGN_LEFT);
+                    add(table, e.debtType() == DebtType.COMPANY_PAYABLE ? "Bizim borcumuz" : "Şirkətin borcu", cell, Element.ALIGN_LEFT);
                 }
                 add(table, typeLabel(e.type()), cell, Element.ALIGN_LEFT);
                 add(table, nz(e.receiptNumber()), cell, Element.ALIGN_LEFT);

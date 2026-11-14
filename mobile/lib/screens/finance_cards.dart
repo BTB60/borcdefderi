@@ -29,8 +29,8 @@ class _ListMeta {
 const _meta = {
   'customer-debts': _ListMeta('Müştəri borcu', 'Qalıq borc', 'party'),
   'active-customers': _ListMeta('Aktiv müştərilər', 'Qalıq borc', 'party'),
-  'company-receivables': _ListMeta('Şirkətlər bizə borcludur', 'Qalıq borc', 'party'),
-  'company-payables': _ListMeta('Şirkətlərə borcum', 'Qalıq borcumuz', 'party'),
+  'company-receivables': _ListMeta('Şirkətin bizə borcu', 'Qalıq borc', 'party'),
+  'company-payables': _ListMeta('Bizim şirkətə borcumuz', 'Qalıq borcumuz', 'party'),
   'all-open-debts': _ListMeta('Toplam borc', 'Qalıq', 'debt', partyFilter: true),
   'today-debts': _ListMeta('Yazılan borclar', 'Yazılan məbləğ', 'entry', partyFilter: true),
   'active-debts': _ListMeta('Aktiv borclar', 'Qalıq', 'debt', partyFilter: true),
@@ -120,7 +120,7 @@ class FinanceCardsState extends State<FinanceCards> {
             children: [
               _SmallCard('Müştəri borcu', formatMoney(_Fig.of(o['customerDebts']).sum), '${_Fig.of(o['customerDebts']).count} müştəri',
                   Icons.people_alt_outlined, navy, () => _open('customer-debts')),
-              _SmallCard('Şirkətlər bizə borcludur', formatMoney(_Fig.of(o['companyReceivables']).sum),
+              _SmallCard('Şirkətin bizə borcu', formatMoney(_Fig.of(o['companyReceivables']).sum),
                   '${_Fig.of(o['companyReceivables']).count} şirkət', Icons.business_outlined, Colors.blue.shade700, () => _open('company-receivables')),
               _SmallCard('Bu gün yazılan', formatMoney(_Fig.of(o['todayDebts']).sum), '${_Fig.of(o['todayDebts']).count} əməliyyat',
                   Icons.today_outlined, Colors.deepPurple, () => _open('today-debts')),
@@ -128,7 +128,7 @@ class FinanceCardsState extends State<FinanceCards> {
                   Icons.warning_amber_rounded, Colors.red.shade700, () => _open('overdue-debts')),
               _SmallCard('Alınan ödənişlər', formatMoney(_Fig.of(o['paymentsIn']).sum), '${_Fig.of(o['paymentsIn']).count} ödəniş',
                   Icons.south_west, Colors.green.shade700, () => _open('payments-in')),
-              _SmallCard('Şirkətlərə borcum', formatMoney(payables.sum), '${payables.count} şirkətə açıq öhdəlik',
+              _SmallCard('Bizim şirkətə borcumuz', formatMoney(payables.sum), '${payables.count} şirkətə açıq öhdəlik',
                   Icons.north_east, Colors.deepPurple.shade400, () => _open('company-payables')),
             ],
           ),

@@ -124,10 +124,15 @@ export interface LedgerEntry {
 /** GET /api/customers/{id}/profile and /api/companies/{id}/profile */
 export interface PartyProfile {
   party: Party;
-  totals: { totalDebt: number; paid: number; remaining: number; debtCount: number; openDebtCount: number };
+  totals: PartyTotals;
   debts: Debt[];
   payments: Payment[];
+  /** Company only: what the company owes us / what we owe the company — never added together. */
+  receivable?: PartyTotals | null;
+  payable?: PartyTotals | null;
 }
+
+export interface PartyTotals { totalDebt: number; paid: number; remaining: number; debtCount: number; openDebtCount: number }
 
 export interface Payment {
   id: string;

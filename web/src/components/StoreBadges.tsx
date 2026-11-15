@@ -1,5 +1,7 @@
 /** Android app download (the latest signed APK) and App Store (not published yet: "Tezliklə"). */
 export const ANDROID_APK_URL = "https://github.com/BTB60/borcdefderi/releases/download/mobile-latest/HesabPro.apk";
+/** HesabPro Kassa — the Windows till app (installer, updates itself). */
+export const WINDOWS_SETUP_URL = "https://github.com/BTB60/borcdefderi/releases/download/desktop-latest/HesabPro-Kassa-Setup.exe";
 
 function PlayIcon() {
   return (
@@ -20,6 +22,17 @@ function AppleIcon() {
   );
 }
 
+function WindowsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-7 w-7 shrink-0" aria-hidden>
+      <path d="M1 3.5 10 2.3v8.9H1V3.5Z" fill="#00A4EF" />
+      <path d="M11.2 2.1 23 .5v10.7H11.2V2.1Z" fill="#00A4EF" />
+      <path d="M1 12.6h9v8.9L1 20.3v-7.7Z" fill="#00A4EF" />
+      <path d="M11.2 12.6H23v10.9l-11.8-1.6v-9.3Z" fill="#00A4EF" />
+    </svg>
+  );
+}
+
 export function StoreBadges({ className = "" }: { className?: string }) {
   const badge = "flex items-center gap-3 rounded-xl border border-white/20 bg-black/80 px-4 py-2.5 text-left text-white transition";
   return (
@@ -29,6 +42,13 @@ export function StoreBadges({ className = "" }: { className?: string }) {
         <span className="leading-tight">
           <span className="block text-[10px] uppercase tracking-wider text-white/70">Android üçün yüklə</span>
           <span className="block text-lg font-semibold">Google Play</span>
+        </span>
+      </a>
+      <a href={WINDOWS_SETUP_URL} className={`${badge} hover:border-white/50 hover:bg-black`} title="HesabPro Kassa — Windows proqramını yüklə">
+        <WindowsIcon />
+        <span className="leading-tight">
+          <span className="block text-[10px] uppercase tracking-wider text-white/70">Kassa proqramı</span>
+          <span className="block text-lg font-semibold">Windows</span>
         </span>
       </a>
       <div className={`${badge} cursor-default opacity-80`} title="iPhone tətbiqi tezliklə App Store-da" aria-disabled>

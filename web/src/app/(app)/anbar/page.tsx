@@ -197,7 +197,12 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
       <form id="product-form" onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2"><Field label="Ad" error={errors.name}><Input required maxLength={200} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field></div>
         <Field label="Məhsul kodu" hint="Boş qalsa avtomatik (P-000001)"><Input maxLength={30} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></Field>
-        <Field label="Barkod" error={errors.barcode}><Input maxLength={64} value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} /></Field>
+        <Field label="Barkod" error={errors.barcode}>
+          <div className="flex gap-2">
+            <Input maxLength={64} value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} />
+            <Button type="button" variant="outline" title="Avtomatik barkod" onClick={() => setForm({ ...form, barcode: randomEan13() })}>Avtomatik</Button>
+          </div>
+        </Field>
         <Field label="Kateqoriya">
           <div className="flex gap-2">
             <Select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
@@ -527,4 +532,13 @@ function LabelModal({ product, onClose }: { product: Product | null; onClose: ()
       </div>
     </Modal>
   );
+}
+
+/** A random in-store EAN-13 (prefix 20 — a shop's own goods) with a valid check digit. */
+function randomEan13(): string {
+  const r = new Uint8Array(10);
+  crypto.getRandomValues(r);
+  const d = [2, 0, ...Array.from(r, (x) => x % 10)];
+  const sum = d.reduce((a, x, i) => a + x * (i % 2 ? 3 : 1), 0);
+  return d.join("") + ((10 - (sum % 10)) % 10);
 }

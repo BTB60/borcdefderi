@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../whatsapp.dart';
 import 'account_sheet.dart';
 import 'common.dart';
+import 'swipe_actions.dart';
 import 'debts_screen.dart';
 import 'parties_screen.dart';
 import 'payment_edit_sheet.dart';
@@ -98,9 +99,9 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
 
   void _snack(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
-  Future<void> _account(AccountMode mode) async {
+  Future<void> _account(AccountMode mode, [String? type]) async {
     final msg = await openAccountSheet(context,
-        session: widget.session, isCustomer: widget.isCustomer, partyId: widget.partyId, mode: mode);
+        session: widget.session, isCustomer: widget.isCustomer, partyId: widget.partyId, mode: mode, initialType: type);
     if (msg == null || !mounted) return;
     _snack(msg);
     _reload();
@@ -210,7 +211,7 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
                                 backgroundColor: const Color(0xFF0D9488), padding: const EdgeInsets.symmetric(vertical: 14)),
                             onPressed: () => _account(AccountMode.pay),
                             icon: const Icon(Icons.payments_outlined),
-                            label: const FittedBox(child: Text('Ödəniş qəbul et')),
+                            label: FittedBox(child: Text(widget.isCustomer ? 'Ödəniş qəbul et' : 'Ödəniş')),
                           ),
                         ),
                       ]),
@@ -296,10 +297,12 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
               ])
             else ...[
               if (widget.session.me!.can('COMPANY_RECEIVABLES'))
-                _SideBlock(title: 'Şirkətin bizə borcu', side: p.receivable!, color: Colors.green, onPdf: () => _pdf(party, 'COMPANY_RECEIVABLE')),
+                _SideBlock(title: 'Şirkətin bizə borcu', side: p.receivable!, color: Colors.green, onPdf: () => _pdf(party, 'COMPANY_RECEIVABLE'),
+                    payLabel: 'Ödəniş qəbul et', onPay: () => _account(AccountMode.pay, 'COMPANY_RECEIVABLE')),
               if (widget.session.me!.can('COMPANY_RECEIVABLES') && widget.session.me!.can('COMPANY_PAYABLES')) const SizedBox(height: 8),
               if (widget.session.me!.can('COMPANY_PAYABLES'))
-                _SideBlock(title: 'Bizim şirkətə borcumuz', side: p.payable!, color: Colors.red, onPdf: () => _pdf(party, 'COMPANY_PAYABLE')),
+                _SideBlock(title: 'Bizim şirkətə borcumuz', side: p.payable!, color: Colors.red, onPdf: () => _pdf(party, 'COMPANY_PAYABLE'),
+                    payLabel: 'Ödəniş et', onPay: () => _account(AccountMode.pay, 'COMPANY_PAYABLE')),
             ],
             const SizedBox(height: 10),
             Text(
@@ -391,10 +394,17 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
 
   Widget _paymentsTab(_Profile p) {
     if (p.payments.isEmpty) return const EmptyState(title: 'Ödəniş yoxdur');
-    final owner = widget.session.me!.isOwner;
+    final me = widget.session.me!;
     return ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 24), children: [
       for (final pay in p.payments)
-        ListTile(
+        SwipeActions(
+          actions: [
+            if (me.mayChange(pay.recordedBy) && !pay.isVoided) ...[
+              SwipeAction.edit(() => _paymentActions(pay, 'edit')),
+              SwipeAction.delete(() => _paymentActions(pay, 'cancel')),
+            ],
+          ],
+          child: ListTile(
           leading: Icon(pay.isVoided ? Icons.block : Icons.south_west, color: pay.isVoided ? Colors.red.shade400 : Colors.green),
           title: Text(methodLabels[pay.paymentMethod] ?? pay.paymentMethod,
               style: pay.isVoided ? TextStyle(color: Colors.grey.shade600, decoration: TextDecoration.lineThrough) : null),
@@ -409,17 +419,18 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
                     fontWeight: FontWeight.w700,
                     color: pay.isVoided ? Colors.grey.shade500 : Colors.green.shade700,
                     decoration: pay.isVoided ? TextDecoration.lineThrough : null)),
-            if (owner && !pay.isVoided)
+            if (me.mayChange(pay.recordedBy) && !pay.isVoided)
               IconButton(tooltip: 'Düzəlt / ləğv et', icon: const Icon(Icons.more_vert), onPressed: () => _paymentActions(pay)),
           ]),
-          onTap: owner && !pay.isVoided ? () => _paymentActions(pay) : null,
+          onTap: me.mayChange(pay.recordedBy) && !pay.isVoided ? () => _paymentActions(pay) : null,
+        ),
         ),
     ]);
   }
 
   /// Owner only: edit or cancel one of this customer's / company's payments; the card and its debts reload.
-  Future<void> _paymentActions(Payment pay) async {
-    final changed = await showPaymentActions(context, widget.session, pay);
+  Future<void> _paymentActions(Payment pay, [String? action]) async {
+    final changed = await showPaymentActions(context, widget.session, pay, action: action);
     if (changed == null || !mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(changed.isVoided ? 'Ödəniş ləğv edildi, borc geri qaytarıldı' : 'Ödəniş düzəldildi')));
@@ -694,12 +705,15 @@ class _NotesAndPortalState extends State<_NotesAndPortal> {
 
 /// One side of a company's account on the card header: total / paid / remaining and its own PDF statement.
 class _SideBlock extends StatelessWidget {
-  const _SideBlock({required this.title, required this.side, required this.color, required this.onPdf});
+  const _SideBlock(
+      {required this.title, required this.side, required this.color, required this.onPdf, required this.payLabel, required this.onPay});
 
   final String title;
   final _Side side;
   final MaterialColor color;
   final VoidCallback onPdf;
+  final String payLabel;
+  final VoidCallback onPay;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -732,6 +746,18 @@ class _SideBlock extends StatelessWidget {
                 ),
               ),
           ]),
+          if (side.remaining > 0) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: color.shade800),
+                onPressed: onPay,
+                icon: const Icon(Icons.payments_outlined, size: 18),
+                label: Text(payLabel),
+              ),
+            ),
+          ],
         ]),
       );
 }

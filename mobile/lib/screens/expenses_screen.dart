@@ -6,6 +6,7 @@ import '../state/session.dart';
 import '../theme.dart';
 import 'cash_screen.dart' show newRequestId;
 import 'common.dart';
+import 'swipe_actions.dart';
 
 const _freqLabels = {'DAILY': 'Gündəlik', 'WEEKLY': 'Həftəlik', 'MONTHLY': 'Aylıq', 'YEARLY': 'İllik'};
 
@@ -207,9 +208,17 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   if (items.isEmpty) const EmptyState(title: 'Xərc yoxdur', text: '“Xərc əlavə et” ilə başlayın.'),
                   for (final e in items)
                     Card(
-                      child: ListTile(
+                      clipBehavior: Clip.antiAlias,
+                      child: SwipeActions(
+                        actions: [
+                          if (widget.session.me!.mayChange(e['createdBy'])) ...[
+                            SwipeAction.edit(() => _edit(e)),
+                            SwipeAction.delete(() => _delete(e)),
+                          ],
+                        ],
+                        child: ListTile(
                         onTap: () => _edit(e),
-                        onLongPress: () => _delete(e),
+                        onLongPress: widget.session.me!.mayChange(e['createdBy']) ? () => _delete(e) : null,
                         title: Text('${e['title']}', style: const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: Text([
                           formatDate(DateTime.parse(e['expenseDate'] as String)),
@@ -217,11 +226,21 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                           '${e['accountName']}',
                           if ((e['attachmentCount'] as num) > 0) '📎',
                         ].join(' · ')),
-                        trailing: Text(formatMoney(_n(e['amount'])), style: TextStyle(fontWeight: FontWeight.w800, color: Colors.red.shade700)),
+                        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Text(formatMoney(_n(e['amount'])), style: TextStyle(fontWeight: FontWeight.w800, color: Colors.red.shade700)),
+                          if (widget.session.me!.mayChange(e['createdBy']))
+                            IconButton(
+                              tooltip: 'Sil',
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(Icons.delete_outline, color: Colors.red.shade400),
+                              onPressed: () => _delete(e),
+                            ),
+                        ]),
+                      ),
                       ),
                     ),
                   if (items.isNotEmpty)
-                    Text('Redaktə üçün toxunun, silmək üçün basıb saxlayın.', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                    Text('Redaktə üçün toxunun, silmək üçün sola sürüşdürün və ya 🗑 basın.', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                 ]),
               ),
               ListView(padding: const EdgeInsets.fromLTRB(12, 12, 12, 96), children: [

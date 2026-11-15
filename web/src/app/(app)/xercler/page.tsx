@@ -49,6 +49,7 @@ export default function ExpensesPage() {
 }
 
 function ExpenseList({ categories, accounts, onNotice, onCategory }: { categories: ExpenseCategory[]; accounts: CashAccount[]; onNotice: (m: string) => void; onCategory: () => void }) {
+  const { mayChange } = useAuth();
   const today = todayBaku();
   const [filter, setFilter] = useState({ from: today.slice(0, 8) + "01", to: today, categoryId: "", q: "" });
   const [data, setData] = useState<ExpensePage | null>(null);
@@ -112,7 +113,7 @@ function ExpenseList({ categories, accounts, onNotice, onCategory }: { categorie
                     <Td className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" className="px-2.5 py-1.5" onClick={() => setEditing(e)}>Redaktə</Button>
-                        <Button variant="ghost" className="px-2.5 py-1.5 text-rose-600" onClick={() => remove(e)}>Sil</Button>
+                        {mayChange(e.createdBy) && <Button variant="ghost" className="px-2.5 py-1.5 text-rose-600" onClick={() => remove(e)}>Sil</Button>}
                       </div>
                     </Td>
                   </tr>

@@ -8,8 +8,10 @@ import 'common.dart';
 
 /// Store owner only: "Düzəlt" / "Ləğv et" for one payment. Returns the changed payment, or null when nothing changed.
 /// [maxAmount] (remaining debt + this payment) is checked locally when known; the server checks it anyway.
-Future<Payment?> showPaymentActions(BuildContext context, Session session, Payment payment, {double? maxAmount}) async {
-  final choice = await showModalBottomSheet<String>(
+/// [action] 'edit' / 'cancel' skips the chooser (swipe buttons).
+Future<Payment?> showPaymentActions(BuildContext context, Session session, Payment payment,
+    {double? maxAmount, String? action}) async {
+  final choice = action ?? await showModalBottomSheet<String>(
     context: context,
     showDragHandle: true,
     builder: (ctx) => SafeArea(

@@ -170,6 +170,9 @@ class Me {
   bool get isSuperAdmin => platformRole == 'SUPER_ADMIN';
   bool can(String permission) => isOwner || permissions.contains(permission);
 
+  /// The owner may change / delete anything; an employee only what they recorded themselves.
+  bool mayChange(Object? recordedBy) => isOwner || (recordedBy != null && '$recordedBy' == userId);
+
   factory Me.fromJson(Map<String, dynamic> j) => Me(
         userId: j['userId'] as String,
         email: j['email'] as String,
@@ -275,6 +278,9 @@ class Payment {
   final String? description;
   final String? note;
 
+  /// Who recorded it (user id).
+  final String? recordedBy;
+
   /// Set when the store owner cancelled (ləğv) the payment; it no longer counts anywhere.
   final DateTime? voidedAt;
   final String? voidReason;
@@ -295,6 +301,7 @@ class Payment {
     required this.paidAt,
     required this.description,
     this.note,
+    this.recordedBy,
     this.voidedAt,
     this.voidReason,
     this.editedAt,
@@ -313,6 +320,7 @@ class Payment {
         paidAt: DateTime.parse(j['paidAt'] as String),
         description: _str(j['description']),
         note: _str(j['note']),
+        recordedBy: j['recordedBy'] as String?,
         voidedAt: _date(j['voidedAt']),
         voidReason: _str(j['voidReason']),
         editedAt: _date(j['editedAt']),

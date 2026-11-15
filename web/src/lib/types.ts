@@ -440,6 +440,7 @@ export interface Expense {
   id: string; title: string; categoryId: string; categoryName: string; amount: number; expenseDate: string;
   paymentMethod: PaymentMethod; accountId: string; accountName: string; payee: string | null; note: string | null;
   recurringId: string | null; periodDate: string | null; createdByName: string; createdAt: string; version: number; attachmentCount: number;
+  createdBy: string | null;
 }
 
 export interface ExpensePage { items: Expense[]; total: number; sum: number; page: number; size: number }
@@ -498,6 +499,7 @@ export interface Sale {
   subtotal: number; discount: number; total: number; paidCash: number; paidCard: number; creditAmount: number; returnedAmount: number;
   costTotal: number; debtId: string | null; soldOn: string; note: string | null; createdByName: string; createdAt: string; items: SaleItem[];
   returns: { id: string; amount: number; debtReduced: number; refunded: number; returnedOn: string; reason: string | null; createdByName: string; createdAt: string }[];
+  createdBy: string | null;
 }
 
 export interface SalePage { items: Sale[]; total: number; sum: number; page: number; size: number }

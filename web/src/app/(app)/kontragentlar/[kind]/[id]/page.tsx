@@ -44,7 +44,7 @@ export default function PartyProfilePage() {
   const params = useParams<{ kind: string; id: string }>();
   const isCustomer = params.kind === "musteri";
   const base = `/api/${isCustomer ? "customers" : "companies"}/${params.id}`;
-  const { can, me, isOwner } = useAuth();
+  const { can, me, mayChange } = useAuth();
   const [data, setData] = useState<PartyProfile | null>(null);
   const [paymentAction, setPaymentAction] = useState<{ kind: "edit" | "cancel"; payment: Payment } | null>(null);
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
@@ -86,6 +86,7 @@ export default function PartyProfilePage() {
   if (!data) return <Spinner />;
 
   const { party, totals, debts, payments } = data;
+  const anyMine = payments.some((p) => mayChange(p.recordedBy));
   const byType = (t: DebtType) => Math.round(debts.filter((d) => d.debtType === t).reduce((s, d) => s + d.remainingAmount, 0) * 100) / 100;
   const overdue = (party.overdueDebts ?? 0) > 0;
   const status = overdue ? { label: "Gecikmiş", tone: "rose" as const } : totals.remaining > 0 ? { label: "Aktiv borc", tone: "amber" as const } : { label: "Borcsuz", tone: "emerald" as const };
@@ -161,7 +162,7 @@ export default function PartyProfilePage() {
         <QuickButton onClick={() => (hasPhone ? setWhatsapp(true) : setError("Telefon nömrəsi yoxdur və ya düzgün deyil"))} icon={<WhatsAppIcon />} label="WhatsApp" tone="bg-emerald-50 text-emerald-700" />
         <QuickButton href={party.phone ? `tel:${party.phone.replace(/[^\d+]/g, "")}` : undefined} onClick={() => (party.phone ? logContact("CALL") : setError("Telefon nömrəsi yoxdur"))} icon={svg("M5 4h4l2 5-3 2a11 11 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z")} label="Zəng et" tone="bg-sky-50 text-sky-700" />
         {writable.length > 0 && <QuickButton onClick={() => setAccount("charge")} icon={svg("M12 5v14M5 12h14")} label="Borc əlavə et" tone="bg-violet-50 text-violet-700" />}
-        {writable.length > 0 && <QuickButton onClick={() => setAccount("pay")} icon={svg("M4 7h16v10H4V7Zm0 3h16")} label="Ödəniş qəbul et" tone="bg-teal-50 text-teal-700" />}
+        {writable.length > 0 && <QuickButton onClick={() => setAccount("pay")} icon={svg("M4 7h16v10H4V7Zm0 3h16")} label={isCustomer ? "Ödəniş qəbul et" : "Ödəniş"} tone="bg-teal-50 text-teal-700" />}
         <QuickButton onClick={() => download(`${base}/statement`, "cixaris.pdf").catch((e) => setError(e instanceof ApiError ? e.message : "PDF hazırlanmadı"))} icon={svg("M7 3h7l5 5v13H7V3Zm7 0v5h5")} label="PDF hesabat" tone="bg-rose-50 text-rose-700" />
         <QuickButton onClick={() => setEditing(true)} icon={svg("M4 20h4L19 9l-4-4L4 16v4Z")} label="Redaktə et" />
       </section>
@@ -221,19 +222,19 @@ export default function PartyProfilePage() {
             ))}
             {tab === "payments" && (payments.length === 0 ? <EmptyState title="Ödəniş yoxdur" /> : (
               <Table>
-                <thead className="bg-slate-50/70"><tr><Th>Tarix</Th><Th>Üsul</Th><Th>Qəbul edən</Th><Th className="text-right">Məbləğ</Th>{isOwner && <Th />}</tr></thead>
+                <thead className="bg-slate-50/70"><tr><Th>Tarix</Th><Th>Üsul</Th><Th>Qəbul edən</Th><Th className="text-right">Məbləğ</Th>{anyMine && <Th />}</tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {payments.map((p) => (
                     <tr key={p.id}>
                       <Td>{formatDateTime(p.paidAt)}</Td><Td>{METHOD_LABEL[p.paymentMethod]}</Td><Td className="text-slate-500">{p.recordedByName ?? "—"}</Td>
                       <Td className="text-right font-semibold tabular-nums text-emerald-700">{formatMoney(p.amount)}</Td>
-                      {isOwner && (
-                        <Td className="text-right">
+                      {anyMine && (
+                        <Td className="text-right">{mayChange(p.recordedBy) && (
                           <div className="flex justify-end gap-3 text-xs font-medium">
                             <button className="text-navy-700 hover:text-navy-500" onClick={() => setPaymentAction({ kind: "edit", payment: p })}>Düzəlt</button>
                             <button className="text-rose-600 hover:text-rose-500" onClick={() => setPaymentAction({ kind: "cancel", payment: p })}>Ləğv et</button>
                           </div>
-                        </Td>
+                        )}</Td>
                       )}
                     </tr>
                   ))}

@@ -85,7 +85,8 @@ public class SalesService {
     public record Sale(UUID id, String number, UUID customerId, String customerName, String customerCode, String status,
                        BigDecimal subtotal, BigDecimal discount, BigDecimal total, BigDecimal paidCash, BigDecimal paidCard,
                        BigDecimal creditAmount, BigDecimal returnedAmount, BigDecimal costTotal, UUID debtId, LocalDate soldOn,
-                       String note, String createdByName, OffsetDateTime createdAt, List<Item> items, List<ReturnView> returns) {}
+                       String note, String createdByName, OffsetDateTime createdAt, List<Item> items, List<ReturnView> returns,
+                       UUID createdBy) {}
 
     public record SalePage(List<Sale> items, long total, BigDecimal sum, int page, int size) {}
 
@@ -241,6 +242,9 @@ public class SalesService {
     public Sale cancel(UUID saleId, CancelRequest req) {
         CurrentMember m = requireSales();
         Sale sale = lock(m.storeId(), saleId);
+        if (!m.isOwner() && !m.userId().equals(sale.createdBy())) {
+            throw ApiException.forbidden("NOT_YOUR_OPERATION", "Yalnız özünüzün etdiyi satışı ləğv edə bilərsiniz");
+        }
         if (!"COMPLETED".equals(sale.status())) throw ApiException.conflict("SALE_CANCELLED", "Satış artıq ləğv edilib");
         BigDecimal cost = Money.zero();
         for (Item it : sale.items()) {
@@ -356,7 +360,7 @@ public class SalesService {
                         Money.of(rs.getBigDecimal("credit_amount")), Money.of(rs.getBigDecimal("returned_amount")),
                         Money.of(rs.getBigDecimal("cost_total")), rs.getObject("debt_id", UUID.class),
                         rs.getObject("sold_on", LocalDate.class), rs.getString("note"), rs.getString("created_by_name"),
-                        rs.getObject("created_at", OffsetDateTime.class), items, returns))
+                        rs.getObject("created_at", OffsetDateTime.class), items, returns, rs.getObject("created_by", UUID.class)))
                 .optional().orElseThrow(() -> ApiException.notFound("Satış tapılmadı"));
     }
 }

@@ -10,6 +10,7 @@ import '../theme.dart';
 import 'barcode_scanner.dart';
 import 'cash_screen.dart' show newRequestId;
 import 'common.dart';
+import 'swipe_actions.dart';
 import 'finance_cards.dart' show pickParty;
 
 double _n(Object? v) => (v as num?)?.toDouble() ?? 0;
@@ -117,7 +118,13 @@ class _SalesScreenState extends State<SalesScreen> {
                 if (items.isEmpty) const EmptyState(title: 'Bu ay satış yoxdur'),
                 for (final s in items)
                   Card(
-                    child: ListTile(
+                    clipBehavior: Clip.antiAlias,
+                    child: SwipeActions(
+                      actions: [
+                        if (s['status'] == 'COMPLETED' && widget.session.me!.mayChange(s['createdBy']))
+                          SwipeAction.delete(() => _cancel(s), label: 'Ləğv et'),
+                      ],
+                      child: ListTile(
                       title: Text('${s['number']}${s['customerName'] != null ? ' · ${s['customerName']}' : ''}',
                           style: const TextStyle(fontWeight: FontWeight.w600)),
                       subtitle: Text([
@@ -126,16 +133,26 @@ class _SalesScreenState extends State<SalesScreen> {
                         if (s['status'] == 'CANCELLED') 'LƏĞV',
                         if (_n(s['returnedAmount']) > 0 && s['status'] != 'CANCELLED') 'qaytarılıb ${formatMoney(_n(s['returnedAmount']))}',
                       ].join(' · ')),
-                      trailing: Text(formatMoney(_n(s['total'])),
-                          style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              decoration: s['status'] == 'CANCELLED' ? TextDecoration.lineThrough : null)),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Text(formatMoney(_n(s['total'])),
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                decoration: s['status'] == 'CANCELLED' ? TextDecoration.lineThrough : null)),
+                        if (s['status'] == 'COMPLETED' && widget.session.me!.mayChange(s['createdBy']))
+                          IconButton(
+                            tooltip: 'Ləğv et',
+                            visualDensity: VisualDensity.compact,
+                            icon: Icon(Icons.delete_outline, color: Colors.red.shade400),
+                            onPressed: () => _cancel(s),
+                          ),
+                      ]),
                       onTap: () => _share(s),
-                      onLongPress: s['status'] == 'COMPLETED' ? () => _cancel(s) : null,
+                      onLongPress: s['status'] == 'COMPLETED' && widget.session.me!.mayChange(s['createdBy']) ? () => _cancel(s) : null,
+                    ),
                     ),
                   ),
                 if (items.isNotEmpty)
-                  Text('Çeki paylaşmaq üçün toxunun, ləğv etmək üçün basıb saxlayın. Qismən qaytarma veb paneldədir.',
+                  Text('Çeki paylaşmaq üçün toxunun, ləğv etmək üçün sola sürüşdürün və ya 🗑 basın. Qismən qaytarma veb paneldədir.',
                       style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
               ]),
             );

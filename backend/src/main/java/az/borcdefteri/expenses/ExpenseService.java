@@ -42,7 +42,7 @@ public class ExpenseService {
     public record Expense(UUID id, String title, UUID categoryId, String categoryName, BigDecimal amount,
                           LocalDate expenseDate, String paymentMethod, UUID accountId, String accountName, String payee,
                           String note, UUID recurringId, LocalDate periodDate, String createdByName,
-                          OffsetDateTime createdAt, long version, long attachmentCount) {}
+                          OffsetDateTime createdAt, long version, long attachmentCount, UUID createdBy) {}
 
     public record ExpenseRequest(
             @jakarta.validation.constraints.NotBlank(message = "Xərcin adını daxil edin")
@@ -264,6 +264,9 @@ public class ExpenseService {
     public void delete(UUID id) {
         CurrentMember m = requireExpenses();
         Expense cur = lock(m.storeId(), id);
+        if (!m.isOwner() && !m.userId().equals(cur.createdBy())) {
+            throw ApiException.forbidden("NOT_YOUR_OPERATION", "Yalnız özünüzün yazdığı xərci silə bilərsiniz");
+        }
         jdbc.sql("UPDATE expenses SET deleted_at = now(), deleted_by = :by, version = version + 1 WHERE id = :id AND store_id = :s")
                 .param("by", m.userId()).param("id", id).param("s", m.storeId()).update();
         cash.post(m.storeId(), cur.accountId(), "IN", cur.amount(), "EXPENSE_REVERSAL", tenant.today(), null, id,
@@ -512,7 +515,7 @@ public class ExpenseService {
     private static final String SELECT = """
             SELECT e.id, e.title, e.category_id, c.name AS category_name, e.amount, e.expense_date, e.payment_method,
                    e.account_id, a.name AS account_name, e.payee, e.note, e.recurring_id, e.period_date,
-                   u.full_name AS created_by_name, e.created_at, e.version,
+                   u.full_name AS created_by_name, e.created_by, e.created_at, e.version,
                    (SELECT COUNT(*) FROM expense_attachments x WHERE x.expense_id = e.id) AS attachment_count
             FROM expenses e
             JOIN expense_categories c ON c.id = e.category_id
@@ -530,7 +533,8 @@ public class ExpenseService {
                 rs.getString("payment_method"), rs.getObject("account_id", UUID.class), rs.getString("account_name"),
                 rs.getString("payee"), rs.getString("note"), rs.getObject("recurring_id", UUID.class),
                 rs.getObject("period_date", LocalDate.class), rs.getString("created_by_name"),
-                rs.getObject("created_at", OffsetDateTime.class), rs.getLong("version"), rs.getLong("attachment_count"));
+                rs.getObject("created_at", OffsetDateTime.class), rs.getLong("version"), rs.getLong("attachment_count"),
+                rs.getObject("created_by", UUID.class));
     }
 
     private static Recurring mapRec(java.sql.ResultSet rs, LocalDate today) throws java.sql.SQLException {

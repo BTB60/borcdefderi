@@ -4,6 +4,7 @@ import '../format.dart';
 import '../models/models.dart';
 import '../state/session.dart';
 import 'common.dart';
+import 'swipe_actions.dart';
 import 'payment_edit_sheet.dart';
 
 /// Payment history across all sections the user may see, with method filter and text search.
@@ -31,8 +32,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
 
   /// Owner only: edit or cancel one payment, then reload the list.
-  Future<void> _actions(Payment p) async {
-    final changed = await showPaymentActions(context, widget.session, p);
+  Future<void> _actions(Payment p, [String? action]) async {
+    final changed = await showPaymentActions(context, widget.session, p, action: action);
     if (changed == null || !mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(changed.isVoided ? 'Ödəniş ləğv edildi' : 'Ödəniş düzəldildi')));
@@ -76,7 +77,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               final visible = snap.data!.where((p) => _query.isEmpty || p.partyName.toLowerCase().contains(_query)).toList();
               if (visible.isEmpty) return const EmptyState(title: 'Ödəniş tapılmadı');
               final total = visible.where((p) => !p.isVoided).fold<double>(0, (s, p) => s + p.amount);
-              final owner = widget.session.me!.isOwner;
+              final me = widget.session.me!;
               return RefreshIndicator(
                 onRefresh: () async => _reload(),
                 child: ListView.builder(
@@ -96,7 +97,15 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                         : [if (p.description != null) p.description!, if (p.editedAt != null) 'düzəldilib'].join(' · ');
                     return Card(
                       color: voided ? Colors.grey.shade100 : null,
-                      child: ListTile(
+                      clipBehavior: Clip.antiAlias,
+                      child: SwipeActions(
+                        actions: [
+                          if (me.mayChange(p.recordedBy) && !voided) ...[
+                            SwipeAction.edit(() => _actions(p, 'edit')),
+                            SwipeAction.delete(() => _actions(p, 'cancel')),
+                          ],
+                        ],
+                        child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: voided ? Colors.grey.shade200 : _methodColor(p.paymentMethod).shade50,
                           child: Icon(voided ? Icons.block : _methodIcon(p.paymentMethod),
@@ -112,14 +121,15 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                                   fontWeight: FontWeight.w700,
                                   color: voided ? Colors.grey.shade500 : Colors.green.shade700,
                                   decoration: voided ? TextDecoration.lineThrough : null)),
-                          if (owner && !voided)
+                          if (me.mayChange(p.recordedBy) && !voided)
                             IconButton(
                               tooltip: 'Düzəlt / ləğv et',
                               icon: const Icon(Icons.more_vert),
                               onPressed: () => _actions(p),
                             ),
                         ]),
-                        onTap: owner && !voided ? () => _actions(p) : null,
+                        onTap: me.mayChange(p.recordedBy) && !voided ? () => _actions(p) : null,
+                      ),
                       ),
                     );
                   },

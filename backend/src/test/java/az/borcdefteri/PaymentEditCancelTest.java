@@ -192,7 +192,13 @@ class PaymentEditCancelTest extends IntegrationTestBase {
         post(owner, "/api/employees", Map.of("email", email, "password", EMPLOYEE_PASSWORD,
                 "fullName", "İşçi", "permissions", perms("COMPANY_PAYABLES"))).andExpect(status().is2xxSuccessful());
         String employee = login(email, EMPLOYEE_PASSWORD);
-        post(employee, "/api/debts/" + debt + "/history/" + entry + "/cancel", Map.of()).andExpect(status().isForbidden());
+        // recorded by the owner: an employee may not cancel it
+        post(employee, "/api/debts/" + debt + "/history/" + entry + "/cancel", Map.of()).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error", is("NOT_YOUR_OPERATION")));
+        // their own increase they may
+        UUID ownEntry = increase(employee, debt, "5.00");
+        post(employee, "/api/debts/" + debt + "/history/" + ownEntry + "/cancel", Map.of()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.amount", is(800.0)));
 
         post(owner, "/api/debts/" + debt + "/history/" + entry + "/cancel", Map.of("reason", "səhv yazılıb"))
                 .andExpect(status().isOk())
@@ -236,26 +242,45 @@ class PaymentEditCancelTest extends IntegrationTestBase {
     }
 
     @Test
-    void onlyTheOwnerMayEditOrCancel() throws Exception {
+    void ownerChangesAnyEmployeeOnlyTheirOwn() throws Exception {
         String owner = register("İcazə Ləğv");
         activateSubscription(owner, "SEMI_ANNUAL");
         UUID customer = createCustomer(owner, "İcazə Müştəri", "+994501119902");
-        String email = uniqueEmail("kassir");
-        post(owner, "/api/employees", Map.of("email", email, "password", EMPLOYEE_PASSWORD,
-                "fullName", "Kassir", "permissions", perms("CUSTOMER_DEBTS"))).andExpect(status().is2xxSuccessful());
-        String employee = login(email, EMPLOYEE_PASSWORD);
-        UUID debt = debtIdOf(employee, "CUSTOMER_DEBT", customer, "20.00");
-        String paymentId = body(pay(employee, debt, "20.00", "CASH").andExpect(status().isCreated())).get("id").asText();
+        String[] staff = new String[2];
+        for (int i = 0; i < 2; i++) {
+            String email = uniqueEmail("kassir" + i);
+            post(owner, "/api/employees", Map.of("email", email, "password", EMPLOYEE_PASSWORD,
+                    "fullName", "Kassir " + i, "permissions", perms("CUSTOMER_DEBTS", "EXPENSES"))).andExpect(status().is2xxSuccessful());
+            staff[i] = login(email, EMPLOYEE_PASSWORD);
+        }
+        String employee = staff[0], colleague = staff[1];
+        UUID debt = debtIdOf(employee, "CUSTOMER_DEBT", customer, "60.00");
+        String own = body(pay(employee, debt, "20.00", "CASH").andExpect(status().isCreated())).get("id").asText();
+        String byOwner = body(pay(owner, debt, "10.00", "CASH").andExpect(status().isCreated())).get("id").asText();
 
-        put(employee, "/api/payments/" + paymentId, edit("10.00", "CASH")).andExpect(status().isForbidden());
-        post(employee, "/api/payments/" + paymentId + "/cancel", Map.of()).andExpect(status().isForbidden());
+        // a colleague may not touch it, the employee who recorded it may
+        post(colleague, "/api/payments/" + own + "/cancel", Map.of()).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error", is("NOT_YOUR_OPERATION")));
+        put(employee, "/api/payments/" + own, edit("15.00", "CASH")).andExpect(status().isOk());
+        post(employee, "/api/payments/" + byOwner + "/cancel", Map.of()).andExpect(status().isForbidden());
 
         // another store's owner does not even see it
         String other = register("Başqa Mağaza");
         activateSubscription(other, "MONTHLY");
-        post(other, "/api/payments/" + paymentId + "/cancel", Map.of()).andExpect(status().isNotFound());
+        post(other, "/api/payments/" + own + "/cancel", Map.of()).andExpect(status().isNotFound());
 
-        post(owner, "/api/payments/" + paymentId + "/cancel", Map.of()).andExpect(status().isOk());
-        get(owner, "/api/debts/" + debt).andExpect(jsonPath("$.remainingAmount", is(20.0)));
+        post(employee, "/api/payments/" + own + "/cancel", Map.of()).andExpect(status().isOk());
+        post(owner, "/api/payments/" + byOwner + "/cancel", Map.of()).andExpect(status().isOk());
+        get(owner, "/api/debts/" + debt).andExpect(jsonPath("$.remainingAmount", is(60.0)));
+
+        // expenses follow the same rule
+        Map<String, Object> exp = Map.of("title", "Çay", "categoryId", "10000000-0000-0000-0000-000000000003", "amount", "3.00",
+                "paymentMethod", "CASH");
+        String ownExp = body(post(employee, "/api/expenses", exp).andExpect(status().isCreated())).get("id").asText();
+        String ownerExp = body(post(owner, "/api/expenses", exp).andExpect(status().isCreated())).get("id").asText();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/expenses/" + ownerExp)
+                .header("Authorization", "Bearer " + employee)).andExpect(status().isForbidden());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/expenses/" + ownExp)
+                .header("Authorization", "Bearer " + employee)).andExpect(status().is2xxSuccessful());
     }
 }

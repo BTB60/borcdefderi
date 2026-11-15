@@ -244,7 +244,7 @@ public class PaymentService {
      */
     @Transactional
     public PaymentView update(UUID paymentId, PaymentRequest req) {
-        CurrentMember m = requireOwner();
+        CurrentMember m = requireMayChange(paymentId);
         UUID debtId = debtOf(m, paymentId);
         DebtView debt = debts.lockAndLoad(m, debtId);
         Stored old = lockPayment(m, paymentId);
@@ -324,7 +324,7 @@ public class PaymentService {
      */
     @Transactional
     public PaymentView cancel(UUID paymentId, String reason) {
-        CurrentMember m = requireOwner();
+        CurrentMember m = requireMayChange(paymentId);
         UUID debtId = debtOf(m, paymentId);
         DebtView debt = debts.lockAndLoad(m, debtId);
         Stored old = lockPayment(m, paymentId);
@@ -351,10 +351,15 @@ public class PaymentService {
         return get(m, paymentId, remaining, status);
     }
 
-    private CurrentMember requireOwner() {
+    /** The store owner may change any payment; an employee only the payments they recorded themselves. */
+    private CurrentMember requireMayChange(UUID paymentId) {
         CurrentMember m = tenant.requireBusinessMember();
-        if (!m.isOwner()) {
-            throw ApiException.forbidden("OWNER_ONLY", "Ödənişi yalnız mağaza sahibi dəyişə və ya ləğv edə bilər");
+        if (m.isOwner()) return m;
+        UUID by = jdbc.sql("SELECT recorded_by FROM payments WHERE id = :id AND store_id = :s")
+                .param("id", paymentId).param("s", m.storeId()).query(UUID.class).optional()
+                .orElseThrow(() -> ApiException.notFound("Ödəniş tapılmadı"));
+        if (!by.equals(m.userId())) {
+            throw ApiException.forbidden("NOT_YOUR_OPERATION", "Yalnız özünüzün yazdığı ödənişi dəyişə və ya ləğv edə bilərsiniz");
         }
         return m;
     }

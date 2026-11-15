@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -560,14 +561,21 @@ class _ProductSheetState extends State<_ProductSheet> {
           decoration: InputDecoration(
             labelText: 'Barkod (istəyə bağlı)',
             prefixIcon: const Icon(Icons.qr_code_2),
-            suffixIcon: IconButton(
-              tooltip: 'Barkod skan et',
-              icon: const Icon(Icons.qr_code_scanner),
-              onPressed: () async {
-                final code = await scanBarcode(context);
-                if (code != null && mounted) setState(() => _barcode.text = code);
-              },
-            ),
+            suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(
+                tooltip: 'Avtomatik barkod',
+                icon: const Icon(Icons.auto_fix_high),
+                onPressed: () => setState(() => _barcode.text = randomEan13()),
+              ),
+              IconButton(
+                tooltip: 'Barkod skan et',
+                icon: const Icon(Icons.qr_code_scanner),
+                onPressed: () async {
+                  final code = await scanBarcode(context);
+                  if (code != null && mounted) setState(() => _barcode.text = code);
+                },
+              ),
+            ]),
           ),
         ),
         _section('Qiymət'),
@@ -845,4 +853,15 @@ class _ProductInfo extends StatelessWidget {
         const SizedBox(height: 16),
         OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text('Bağla')),
       ]);
+}
+
+/// A random in-store EAN-13 (prefix 20 — reserved for a shop's own goods) with a valid check digit.
+String randomEan13() {
+  final r = Random.secure();
+  final d = [2, 0, for (var i = 0; i < 10; i++) r.nextInt(10)];
+  var sum = 0;
+  for (var i = 0; i < 12; i++) {
+    sum += d[i] * (i.isOdd ? 3 : 1);
+  }
+  return '${d.join()}${(10 - sum % 10) % 10}';
 }

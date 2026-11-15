@@ -10,6 +10,7 @@ import '../models/models.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'swipe_actions.dart';
 import 'debt_edit_sheet.dart';
 import 'debt_increase_sheet.dart';
 import 'payment_edit_sheet.dart';
@@ -294,8 +295,8 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
   }
 
   /// Owner: tap on a payment in the history → receipt, edit or cancel.
-  Future<void> _paymentTapped(String paymentId, double amount) async {
-    final choice = await showModalBottomSheet<String>(
+  Future<void> _paymentTapped(String paymentId, double amount, [String? action]) async {
+    final choice = action != null ? 'change' : await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
       builder: (ctx) => SafeArea(
@@ -327,7 +328,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
           .firstWhere((p) => p.id == paymentId);
       if (!mounted) return;
       final changed = await showPaymentActions(context, widget.session, payment,
-          maxAmount: _debt.remainingAmount + payment.amount);
+          maxAmount: _debt.remainingAmount + payment.amount, action: action);
       if (changed == null || !mounted) return;
       final fresh = await widget.session.api.get('/api/debts/${_debt.id}') as Map<String, dynamic>;
       if (!mounted) return;
@@ -548,7 +549,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                           style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: navy),
                           onPressed: _pay,
                           icon: const Icon(Icons.payments_outlined),
-                          label: const FittedBox(child: Text('Ödəniş qəbul et')),
+                          label: FittedBox(child: Text(_debt.debtType == 'COMPANY_PAYABLE' ? 'Ödəniş et' : 'Ödəniş qəbul et')),
                         ),
                       ),
                     ],
@@ -596,9 +597,8 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                 if (snap.hasError) return ErrorBanner(errorMessage(snap.error!));
                 if (!snap.hasData) return const Center(child: CircularProgressIndicator());
                 final entries = snap.data!;
-                final owner = widget.session.me!.isOwner;
                 return Column(children: [
-                  for (final (i, e) in entries.indexed) _historyTile(entries, i, e, owner),
+                  for (final (i, e) in entries.indexed) _historyTile(entries, i, e, widget.session.me!.mayChange(e['actorId'])),
                 ]);
               },
             ),
@@ -616,7 +616,17 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
             : e['paymentId'] != null && e['type'] != 'REVERSAL' && _isLivePayment(entries, i)
                 ? () => _paymentTapped(e['paymentId'] as String, (e['amount'] as num).toDouble())
                 : null;
-    return ListTile(
+    final increase = owner && e['type'] == 'DEBT_INCREASED' && e['cancelled'] != true;
+    final payment = owner && e['paymentId'] != null && e['type'] != 'REVERSAL' && _isLivePayment(entries, i);
+    return SwipeActions(
+      actions: [
+        if (increase) SwipeAction.delete(() => _cancelIncrease(e)),
+        if (!increase && payment) ...[
+          SwipeAction.edit(() => _paymentTapped(e['paymentId'] as String, (e['amount'] as num).toDouble(), 'edit')),
+          SwipeAction.delete(() => _paymentTapped(e['paymentId'] as String, (e['amount'] as num).toDouble(), 'cancel')),
+        ],
+      ],
+      child: ListTile(
       contentPadding: EdgeInsets.zero,
       onTap: owner && e['type'] == 'DEBT_INCREASED' && e['cancelled'] != true
           ? () => _cancelIncrease(e)
@@ -654,6 +664,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
         if (ownerAction != null)
           IconButton(tooltip: 'Düzəlt / ləğv et', icon: const Icon(Icons.more_vert), onPressed: ownerAction),
       ]),
+    ),
     );
   }
 

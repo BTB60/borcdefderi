@@ -12,6 +12,8 @@ interface AuthContextValue {
   refresh: () => Promise<void>;
   can: (permission: Permission) => boolean;
   isOwner: boolean;
+  /** The owner may change / delete anything; an employee only what they recorded themselves. */
+  mayChange: (recordedBy: string | null | undefined) => boolean;
   isSuperAdmin: boolean;
 }
 
@@ -57,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut,
       refresh,
       isOwner,
+      mayChange: (by: string | null | undefined) => isOwner || (!!by && by === me?.userId),
       isSuperAdmin: me?.platformRole === "SUPER_ADMIN",
       can: (permission: Permission) => isOwner || (me?.permissions ?? []).includes(permission),
     };

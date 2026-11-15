@@ -304,7 +304,7 @@ export function PaymentModal({ debt, storeName, canNotify, onClose, onSaved }: {
   return (
     <Modal
       open
-      title="Ödəniş qəbulu"
+      title={debt.debtType === "COMPANY_PAYABLE" ? "Ödəniş et" : "Ödəniş qəbulu"}
       onClose={onClose}
       footer={<><Button variant="ghost" onClick={onClose}>Ləğv et</Button><Button type="submit" form="payment-form" disabled={busy || exceeds || !(amountNumber > 0)}>{busy ? "Saxlanılır…" : "Ödənişi qeydə al"}</Button></>}
     >
@@ -353,7 +353,7 @@ export function PaymentModal({ debt, storeName, canNotify, onClose, onSaved }: {
 }
 
 export function HistoryModal({ debt, onClose, onChanged }: { debt: Debt; onClose: () => void; onChanged?: () => void }) {
-  const { isOwner } = useAuth();
+  const { mayChange } = useAuth();
   const [entries, setEntries] = useState<LedgerEntry[] | null>(null);
   const [payments, setPayments] = useState<Record<string, Payment>>({});
   const [remaining, setRemaining] = useState(debt.remainingAmount);
@@ -380,12 +380,12 @@ export function HistoryModal({ debt, onClose, onChanged }: { debt: Debt; onClose
   }
   useEffect(() => {
     api<LedgerEntry[]>(`/api/debts/${debt.id}/history`).then(setEntries).catch((e) => setError(e instanceof ApiError ? e.message : "Tarixçə yüklənmədi"));
-    if (isOwner) {
+    {
       api<Payment[]>(`/api/payments?debtId=${debt.id}&limit=500&includeVoided=true`)
         .then((list) => setPayments(Object.fromEntries(list.map((p) => [p.id, p]))))
         .catch(() => setPayments({}));
     }
-  }, [debt.id, isOwner, reload]);
+  }, [debt.id, reload]);
 
   // A payment entry is still in effect when no REVERSAL of the same payment follows it.
   const live = new Set<string>();
@@ -446,7 +446,7 @@ export function HistoryModal({ debt, onClose, onChanged }: { debt: Debt; onClose
                 <span className={`font-semibold tabular-nums ${e.type.startsWith("PAYMENT") ? "text-emerald-700" : "text-rose-700"}`}>{e.type === "DEBT_INCREASED" ? "+" : ""}{formatMoney(e.amount)}</span>
                 <span className="ml-2 text-xs text-slate-500">qalıq: {formatMoney(e.balanceAfter)}</span>
               </p>
-              {isOwner && e.type === "DEBT_INCREASED" && !e.cancelled && (
+              {mayChange(e.actorId) && e.type === "DEBT_INCREASED" && !e.cancelled && (
                 <button className="mt-1 text-xs font-medium text-rose-600 hover:text-rose-500" onClick={() => void cancelIncrease(e)}>
                   Ləğv et
                 </button>
@@ -459,7 +459,7 @@ export function HistoryModal({ debt, onClose, onChanged }: { debt: Debt; onClose
                   >
                     Çek (PDF) →
                   </button>
-                  {isOwner && live.has(e.id) && payments[e.paymentId] && !payments[e.paymentId].voidedAt && (
+                  {live.has(e.id) && payments[e.paymentId] && !payments[e.paymentId].voidedAt && mayChange(payments[e.paymentId].recordedBy) && (
                     <>
                       <button className="text-xs font-medium text-navy-700 hover:text-navy-500" onClick={() => setAction({ kind: "edit", payment: payments[e.paymentId!] })}>
                         Düzəlt

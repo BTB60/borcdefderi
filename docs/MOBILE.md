@@ -34,6 +34,10 @@ Aşağı panel (icazəyə görə): **Panel** (sahib və ya REPORTS), **Borclar**
 
 İcazələr (`Me.can`): `CUSTOMER_DEBTS`, `COMPANY_RECEIVABLES`, `COMPANY_PAYABLES`, `REPORTS`, `SALES`, `INVENTORY`, `CASH`, `EXPENSES`. Mağaza sahibi hamısını görür.
 
+Əməliyyatı dəyişmək / silmək (`Me.mayChange`): sahibkar hər şeyi, işçi yalnız özünün yazdığı ödənişi, borc artımını, satışı və xərci (server `NOT_YOUR_OPERATION` qaytarır). Siyahılarda sətri sola sürüşdürəndə "Redaktə" və "Sil" düymələri çıxır (`swipe_actions.dart`).
+
+Məhsul formunda barkodun yanında "Avtomatik barkod" düyməsi mağazadaxili EAN-13 yaradır (20 prefiksi, düzgün yoxlama rəqəmi).
+
 ## Android build (Windows)
 
 ```bash

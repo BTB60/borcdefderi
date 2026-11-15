@@ -12,7 +12,7 @@ import { PaymentCancelModal, PaymentEditModal } from "@/components/payments/Paym
 const METHODS: PaymentMethod[] = ["CASH", "CARD", "TRANSFER", "OTHER"];
 
 export default function PaymentsPage() {
-  const { can, me, isOwner } = useAuth();
+  const { can, me, mayChange } = useAuth();
   const [action, setAction] = useState<{ kind: "edit" | "cancel"; payment: Payment } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
@@ -139,7 +139,7 @@ export default function PaymentsPage() {
                   <Td className={`text-right font-semibold tabular-nums ${p.voidedAt ? "text-slate-400 line-through" : "text-emerald-700"}`}>{formatMoney(p.amount)}</Td>
                   <Td className="text-right">
                     <div className="flex items-center justify-end gap-3">
-                      {isOwner && !p.voidedAt && (
+                      {mayChange(p.recordedBy) && !p.voidedAt && (
                         <>
                           <button className="text-xs font-medium text-navy-700 hover:text-navy-500" onClick={() => setAction({ kind: "edit", payment: p })}>Düzəlt</button>
                           <button className="text-xs font-medium text-rose-600 hover:text-rose-500" onClick={() => setAction({ kind: "cancel", payment: p })}>Ləğv et</button>

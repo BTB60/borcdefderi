@@ -259,7 +259,7 @@ public class DebtService {
     }
 
     /**
-     * Store owner only: cancels a "Borc artır" entry recorded by mistake. The debt amount and remaining go back down
+     * Cancels a "Borc artır" entry recorded by mistake (the owner any, an employee only their own). The debt amount and remaining go back down
      * by that value (700 + 100 by mistake → cancel → 700 again). The entry stays in the history; a negative
      * DEBT_ADJUSTED entry pointing at it records the cancellation. Not possible when payments already cover the
      * increase (cancel those payments first), so the remaining balance never goes negative.
@@ -267,19 +267,20 @@ public class DebtService {
     @Transactional
     public DebtView cancelIncrease(UUID debtId, UUID entryId, String reason) {
         CurrentMember m = tenant.requireBusinessMember();
-        if (!m.isOwner()) {
-            throw ApiException.forbidden("OWNER_ONLY", "Əməliyyatı yalnız mağaza sahibi ləğv edə bilər");
-        }
         DebtView current = lockAndLoad(m, debtId);
-        record Entry(String type, BigDecimal amount, boolean cancelled) {}
+        record Entry(String type, BigDecimal amount, boolean cancelled, UUID actor) {}
         Entry e = jdbc.sql("""
-                SELECT t.transaction_type, t.amount,
+                SELECT t.transaction_type, t.amount, t.actor_id,
                        EXISTS (SELECT 1 FROM financial_transactions r WHERE r.reverses_entry_id = t.id) AS cancelled
                 FROM financial_transactions t WHERE t.id = :id AND t.debt_id = :d AND t.store_id = :s""")
                 .param("id", entryId).param("d", debtId).param("s", m.storeId())
                 .query((rs, n) -> new Entry(rs.getString("transaction_type"), Money.of(rs.getBigDecimal("amount")),
-                        rs.getBoolean("cancelled")))
+                        rs.getBoolean("cancelled"), rs.getObject("actor_id", UUID.class)))
                 .optional().orElseThrow(() -> ApiException.notFound("Əməliyyat tapılmadı"));
+        // the owner may cancel any entry, an employee only what they recorded themselves
+        if (!m.isOwner() && !m.userId().equals(e.actor())) {
+            throw ApiException.forbidden("NOT_YOUR_OPERATION", "Yalnız özünüzün yazdığı əməliyyatı ləğv edə bilərsiniz");
+        }
         if (!"DEBT_INCREASED".equals(e.type())) {
             throw ApiException.badRequest("NOT_CANCELLABLE",
                     "Yalnız “Borc artırıldı” əməliyyatı ləğv edilə bilər (ödənişi ödənişlər bölməsində ləğv edin)");

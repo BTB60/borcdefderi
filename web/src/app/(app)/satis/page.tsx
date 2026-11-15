@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
 import { ApiError, api, openProtected } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { formatDate, formatDateTime, formatMoney, todayBaku } from "@/lib/format";
 import type { Party, Product, Sale, SalePage } from "@/lib/types";
 
@@ -226,6 +227,7 @@ function SalesList() {
 }
 
 function SaleModal({ sale, onClose, onChanged }: { sale: Sale; onClose: () => void; onChanged: (s: Sale) => void }) {
+  const { mayChange } = useAuth();
   const [ret, setRet] = useState<Record<string, string>>({});
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -262,7 +264,7 @@ function SaleModal({ sale, onClose, onChanged }: { sale: Sale; onClose: () => vo
     <Modal open size="xl" title={`Satış ${sale.number}`} onClose={onClose}
       footer={<>
         <Button variant="outline" onClick={() => openProtected(`/api/sales/${sale.id}/receipt`)}>Çek (PDF)</Button>
-        {active && <Button variant="danger" disabled={busy} onClick={cancel}>Satışı ləğv et</Button>}
+        {active && mayChange(sale.createdBy) && <Button variant="danger" disabled={busy} onClick={cancel}>Satışı ləğv et</Button>}
         <Button variant="ghost" onClick={onClose}>Bağla</Button>
       </>}>
       {error && <div className="mb-3"><Alert>{error}</Alert></div>}

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../format.dart';
+import '../state/offline_sales.dart';
 import '../state/receipt_printer.dart';
 import '../state/session.dart';
 import '../theme.dart';
@@ -37,10 +38,98 @@ class _SalesScreenState extends State<SalesScreen> {
 
   void _reload() => setState(() => _data = _fetch());
 
+  /// Sales saved without internet: send now, or drop one the server refused.
+  Future<void> _offlineSheet() async {
+    final off = OfflineSales.of(widget.session);
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => ListenableBuilder(
+        listenable: off,
+        builder: (ctx, _) => ListView(
+          shrinkWrap: true,
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + sheetBottomInset(ctx)),
+          children: [
+            const Text('Göndərilməmiş satışlar', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: navy)),
+            const SizedBox(height: 4),
+            Text('İnternet olmayanda edilən satışlar. İnternet gələndə özü göndərilir.', style: TextStyle(color: Colors.grey.shade600)),
+            const SizedBox(height: 8),
+            for (final q in off.queue)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(q['error'] != null ? Icons.error_outline : Icons.cloud_upload_outlined,
+                    color: q['error'] != null ? Colors.red.shade700 : Colors.orange.shade800),
+                title: Text('${formatMoney(_n(q['total']))}${q['customerName'] != null ? ' · ${q['customerName']}' : ''}'),
+                subtitle: Text(q['error'] != null
+                    ? 'Server qəbul etmədi: ${q['error']}'
+                    : formatDateTime(DateTime.tryParse('${q['savedAt']}') ?? DateTime.now())),
+                trailing: IconButton(
+                  tooltip: 'Sil',
+                  icon: Icon(Icons.delete_outline, color: Colors.red.shade400),
+                  onPressed: () async {
+                    final ok = await showDialog<bool>(
+                      context: ctx,
+                      builder: (d) => AlertDialog(
+                        title: const Text('Satışı sil?'),
+                        content: const Text('Bu satış serverə göndərilməyəcək.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Xeyr')),
+                          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Sil')),
+                        ],
+                      ),
+                    );
+                    if (ok == true) await off.remove(q);
+                  },
+                ),
+              ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: off.syncing || off.pending == 0
+                  ? null
+                  : () async {
+                      final n = await off.sync();
+                      if (n > 0) _reload();
+                    },
+              icon: const Icon(Icons.sync),
+              label: Text(off.syncing ? 'Göndərilir…' : 'İndi göndər'),
+            ),
+          ],
+        ),
+      ),
+    );
+    _reload();
+  }
+
+  Widget _offlineBanner() => ListenableBuilder(
+        listenable: OfflineSales.of(widget.session),
+        builder: (context, _) {
+          final off = OfflineSales.of(widget.session);
+          if (off.pending == 0) return const SizedBox.shrink();
+          final failed = off.queue.where((q) => q['error'] != null).length;
+          return Card(
+            color: failed > 0 ? Colors.red.shade50 : Colors.orange.shade50,
+            child: ListTile(
+              leading: Icon(failed > 0 ? Icons.error_outline : Icons.cloud_off, color: failed > 0 ? Colors.red.shade700 : Colors.orange.shade800),
+              title: Text('${off.pending} satış göndərilməyib'),
+              subtitle: Text(failed > 0 ? '$failed satışı server qəbul etmədi — baxın' : 'İnternet gələndə özü göndəriləcək'),
+              trailing: off.syncing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.chevron_right),
+              onTap: _offlineSheet,
+            ),
+          );
+        },
+      );
+
   Future<void> _new() async {
     final sale = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => NewSaleScreen(session: widget.session)));
     if (sale == null || !mounted) return;
     _reload();
+    if (sale['offline'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('İnternet yoxdur: satış telefonda saxlanıldı, internet gələndə özü göndəriləcək')));
+      return;
+    }
     final printer = ReceiptPrinter.instance;
     await printer.load();
     if (printer.autoPrint) {
@@ -121,12 +210,18 @@ class _SalesScreenState extends State<SalesScreen> {
         body: FutureBuilder<Map<String, dynamic>>(
           future: _data,
           builder: (context, snap) {
-            if (snap.hasError) return ListView(children: [Padding(padding: const EdgeInsets.all(16), child: ErrorBanner(errorMessage(snap.error!)))]);
+            if (snap.hasError) {
+              return ListView(padding: const EdgeInsets.all(12), children: [
+                _offlineBanner(),
+                ErrorBanner(errorMessage(snap.error!)),
+              ]);
+            }
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
             final items = (snap.data!['items'] as List).cast<Map<String, dynamic>>();
             return RefreshIndicator(
               onRefresh: () async => _reload(),
               child: ListView(padding: const EdgeInsets.fromLTRB(12, 12, 12, 96), children: [
+                _offlineBanner(),
                 StatTile(label: 'Bu ayın satışları (xalis)', value: formatMoney(_n(snap.data!['sum'])), hint: '${snap.data!['total']} satış'),
                 const SizedBox(height: 8),
                 if (items.isEmpty) const EmptyState(title: 'Bu ay satış yoxdur'),
@@ -224,6 +319,13 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    // keep the product list on the phone for sales without internet
+    OfflineSales.of(widget.session).refreshProducts().ignore();
+  }
+
+  @override
   void dispose() {
     for (final c in [_search, _discount, _cash, _card, _bonus]) {
       c.dispose();
@@ -239,7 +341,11 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
     try {
       final r = (await widget.session.api.get('/api/products', query: {'active': 'true', 'q': q.trim()}) as List).cast<Map<String, dynamic>>();
       if (mounted) setState(() => _results = r.take(8).toList());
-    } catch (_) {}
+    } catch (e) {
+      if (!OfflineSales.isOffline(e)) return;
+      final r = await OfflineSales.of(widget.session).search(q);
+      if (mounted) setState(() => _results = r);
+    }
   }
 
   void _add(Map<String, dynamic> p) {
@@ -263,11 +369,18 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
         title: 'Satış üçün skan',
         onCode: (code) async {
           try {
-            final p = await productByBarcode(widget.session, code);
+            Map<String, dynamic>? p;
+            try {
+              p = await productByBarcode(widget.session, code);
+            } catch (e) {
+              if (!OfflineSales.isOffline(e)) rethrow;
+              p = await OfflineSales.of(widget.session).byCode(code);
+            }
             if (p == null) return 'Tapılmadı: $code';
             if (!mounted) return null;
             _add(p);
-            final line = _cart.firstWhere((l) => l.product['id'] == p['id']);
+            final pid = p['id'];
+            final line = _cart.firstWhere((l) => l.product['id'] == pid);
             return '✓ ${p['name']} — ${line.qty.toStringAsFixed(0)} ədəd · cəmi ${formatMoney(_subtotal)}';
           } catch (e) {
             return errorMessage(e);
@@ -331,8 +444,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
       _busy = true;
       _error = null;
     });
-    try {
-      final s = await widget.session.api.post('/api/sales', {
+    final payload = <String, dynamic>{
         'items': [
           for (final l in _cart) {'productId': l.product['id'], 'quantity': l.qty.toString(), 'unitPrice': l.price.toStringAsFixed(2)}
         ],
@@ -342,7 +454,17 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
         'paidCash': _cashPaid.toStringAsFixed(2),
         'paidCard': _cardPaid.toStringAsFixed(2),
         'clientRequestId': _requestId,
-      }) as Map<String, dynamic>;
+      };
+    try {
+      Map<String, dynamic> s;
+      try {
+        s = await widget.session.api.post('/api/sales', payload) as Map<String, dynamic>;
+      } catch (e) {
+        if (!OfflineSales.isOffline(e)) rethrow;
+        // no internet: keep the sale on the phone; it is sent by itself later (same request id = no double sale)
+        await OfflineSales.of(widget.session).enqueue(payload, _total, _customerName);
+        s = {'offline': true};
+      }
       if (!mounted) return;
       if (change > 0) {
         await showDialog<void>(

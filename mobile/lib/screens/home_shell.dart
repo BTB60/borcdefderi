@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../state/offline_sales.dart';
 import '../state/session.dart';
 import 'cash_screen.dart';
 import 'dashboard_screen.dart';
@@ -22,6 +23,13 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // sales made without internet are sent in the background as soon as the server can be reached
+    if (widget.session.me?.can('SALES') ?? false) OfflineSales.of(widget.session);
+  }
 
   @override
   Widget build(BuildContext context) {

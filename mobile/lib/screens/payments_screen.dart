@@ -96,7 +96,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                         ? 'Ləğv edildi${p.voidReason == null ? '' : ': ${p.voidReason}'}'
                         : [if (p.description != null) p.description!, if (p.editedAt != null) 'düzəldilib'].join(' · ');
                     return Card(
-                      color: voided ? Colors.grey.shade100 : null,
+                      color: voided ? voidedCard : null,
                       clipBehavior: Clip.antiAlias,
                       child: SwipeActions(
                         actions: [
@@ -107,9 +107,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                         ],
                         child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: voided ? Colors.grey.shade200 : _methodColor(p.paymentMethod).shade50,
-                          child: Icon(voided ? Icons.block : _methodIcon(p.paymentMethod),
-                              color: voided ? Colors.red.shade400 : _methodColor(p.paymentMethod)),
+                          backgroundColor: voided ? voidedBg : _methodColor(p.paymentMethod).shade50,
+                          child: Icon(voided ? voidedIcon : _methodIcon(p.paymentMethod),
+                              color: voided ? voidedColor : _methodColor(p.paymentMethod)),
                         ),
                         title: Text(p.partyName,
                             style: voided ? TextStyle(color: Colors.grey.shade600, decoration: TextDecoration.lineThrough) : null),
@@ -119,7 +119,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                           Text(formatMoney(p.amount),
                               style: TextStyle(
                                   fontWeight: FontWeight.w700,
-                                  color: voided ? Colors.grey.shade500 : Colors.green.shade700,
+                                  color: voided ? voidedColor : Colors.green.shade700,
                                   decoration: voided ? TextDecoration.lineThrough : null)),
                           if (me.mayChange(p.recordedBy) && !voided)
                             IconButton(

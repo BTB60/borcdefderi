@@ -364,6 +364,7 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
         final payment = pay ? livePayments[e['paymentId']] : null;
         final paymentEditable = payment != null && me.mayChange(payment.recordedBy);
         // already cancelled: may be removed from the history (with what cancelled it)
+        final voidedRow = type == 'REVERSAL' || (pay && voidedPayments.contains(e['paymentId']));
         final removable = me.mayChange(e['actorId']) &&
             (cancelled ||
                 e['reversesEntryId'] != null ||
@@ -384,8 +385,9 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
           child: ListTile(
             contentPadding: EdgeInsets.zero,
             leading: CircleAvatar(
-              backgroundColor: pay ? Colors.green.shade50 : Colors.red.shade50,
-              child: Icon(pay ? Icons.south_west : Icons.north_east, color: pay ? Colors.green.shade700 : Colors.red.shade700, size: 18),
+              backgroundColor: voidedRow ? voidedBg : pay ? Colors.green.shade50 : Colors.red.shade50,
+              child: Icon(voidedRow ? voidedIcon : pay ? Icons.south_west : Icons.north_east,
+                  color: voidedRow ? voidedColor : pay ? Colors.green.shade700 : Colors.red.shade700, size: 18),
             ),
             title: Text(
               cancelled ? '$label (ləğv edilib)' : label,
@@ -401,8 +403,8 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
               Text('${minus ? '−' : '+'}${formatMoney(signed.abs())}',
                   style: TextStyle(
                       fontWeight: FontWeight.w800,
-                      color: pay ? Colors.green.shade700 : Colors.red.shade700,
-                      decoration: cancelled ? TextDecoration.lineThrough : null)),
+                      color: voidedRow ? voidedColor : pay ? Colors.green.shade700 : Colors.red.shade700,
+                      decoration: cancelled || voidedRow ? TextDecoration.lineThrough : null)),
               Text('qalıq ${formatMoney((e['balanceAfter'] as num).toDouble())}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
             ]),
           ),
@@ -510,7 +512,10 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
             ],
           ],
           child: ListTile(
-          leading: Icon(pay.isVoided ? Icons.block : Icons.south_west, color: pay.isVoided ? Colors.red.shade400 : Colors.green),
+          leading: CircleAvatar(
+            backgroundColor: pay.isVoided ? voidedBg : Colors.green.shade50,
+            child: Icon(pay.isVoided ? voidedIcon : Icons.south_west, color: pay.isVoided ? voidedColor : Colors.green.shade700, size: 20),
+          ),
           title: Text(methodLabels[pay.paymentMethod] ?? pay.paymentMethod,
               style: pay.isVoided ? TextStyle(color: Colors.grey.shade600, decoration: TextDecoration.lineThrough) : null),
           subtitle: Text([
@@ -522,7 +527,7 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
             Text(formatMoney(pay.amount),
                 style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: pay.isVoided ? Colors.grey.shade500 : Colors.green.shade700,
+                    color: pay.isVoided ? voidedColor : Colors.green.shade700,
                     decoration: pay.isVoided ? TextDecoration.lineThrough : null)),
             if (me.mayChange(pay.recordedBy) && !pay.isVoided)
               IconButton(tooltip: 'Düzəlt / ləğv et', icon: const Icon(Icons.more_vert), onPressed: () => _paymentActions(pay)),

@@ -159,6 +159,13 @@ class _SalesScreenState extends State<SalesScreen> {
                             style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 decoration: s['status'] == 'CANCELLED' ? TextDecoration.lineThrough : null)),
+                        if (s['status'] == 'COMPLETED' && _n(s['returnedAmount']) < _n(s['total']))
+                          IconButton(
+                            tooltip: 'Mal qaytar',
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.assignment_return_outlined, color: Color(0xFFEA580C)),
+                            onPressed: () => _return(s),
+                          ),
                         if (s['status'] == 'COMPLETED' && widget.session.me!.mayChange(s['createdBy']))
                           IconButton(
                             tooltip: 'Ləğv et',

@@ -100,3 +100,9 @@ class StatusChip extends StatelessWidget {
     );
   }
 }
+
+/// Look of a cancelled (ləğv edilmiş) payment and of its reversal row: orange "money off", never the green of a live one.
+const voidedIcon = Icons.money_off_rounded;
+final voidedColor = Colors.deepOrange.shade700;
+final voidedBg = Colors.deepOrange.shade50;
+const voidedCard = Color(0xFFFFF7ED);

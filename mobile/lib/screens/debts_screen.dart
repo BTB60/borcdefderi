@@ -653,6 +653,8 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
             : e['paymentId'] != null && e['type'] != 'REVERSAL' && _isLivePayment(entries, i)
                 ? () => _paymentTapped(e['paymentId'] as String, (e['amount'] as num).toDouble())
                 : null;
+    final voidedRow = e['type'] == 'REVERSAL' ||
+        ((e['type'] as String).startsWith('PAYMENT') && e['paymentId'] != null && !_isLivePayment(entries, i));
     final increase = owner && (e['type'] == 'DEBT_INCREASED' || e['type'] == 'DEBT_CREATED') && e['cancelled'] != true;
     final payment = owner && e['paymentId'] != null && e['type'] != 'REVERSAL' && _isLivePayment(entries, i);
     return SwipeActions(
@@ -678,8 +680,8 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                   : () => _offerReceipt(e['paymentId'] as String, (e['amount'] as num).toDouble(),
                 paidAt: DateTime.parse(e['createdAt'] as String)),
       leading: Icon(
-        (e['type'] as String).startsWith('PAYMENT') ? Icons.south_west : Icons.receipt_long_outlined,
-        color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green.shade700 : Colors.red.shade700,
+        voidedRow ? voidedIcon : (e['type'] as String).startsWith('PAYMENT') ? Icons.south_west : Icons.receipt_long_outlined,
+        color: voidedRow ? voidedColor : (e['type'] as String).startsWith('PAYMENT') ? Colors.green.shade700 : Colors.red.shade700,
       ),
       title: Text([
         e['reversesEntryId'] != null ? 'Borc artımı ləğv edildi' : _labels[e['type']] ?? '${e['type']}',
@@ -698,7 +700,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
         style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: (e['type'] as String).startsWith('PAYMENT') ? Colors.green.shade700 : Colors.red.shade700),
+            color: voidedRow ? voidedColor : (e['type'] as String).startsWith('PAYMENT') ? Colors.green.shade700 : Colors.red.shade700),
         ),
         if (ownerAction != null)
           IconButton(tooltip: 'Düzəlt / ləğv et', icon: const Icon(Icons.more_vert), onPressed: ownerAction),

@@ -17,6 +17,7 @@ import 'notifications_screen.dart';
 import 'parties_screen.dart';
 import 'pocket_screen.dart';
 import 'profile_screen.dart';
+import 'reminders_screen.dart';
 import 'reports_screen.dart';
 import 'subscription_screen.dart';
 
@@ -140,6 +141,16 @@ class MoreScreen extends StatelessWidget {
               subtitle: const Text('Əlavə et, icazələr, şifrə sıfırlama'),
               trailing: me.lockedFor('EMPLOYEES') ? const Icon(Icons.lock_outline, color: gold) : const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => me.lockedFor('EMPLOYEES') ? SubscriptionScreen(session: session) : EmployeesScreen(session: session))),
+            ),
+          ),
+        if (me.can('CUSTOMER_DEBTS'))
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.notifications_active_outlined, color: navy),
+              title: const Text('Borc xatırlatmaları'),
+              subtitle: const Text('Kimə xatırlatmaq lazımdır — bir toxunuşla WhatsApp / SMS'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RemindersScreen(session: session))),
             ),
           ),
         if (me.can('CUSTOMER_DEBTS'))

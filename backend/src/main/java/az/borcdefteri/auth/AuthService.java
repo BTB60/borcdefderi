@@ -138,7 +138,8 @@ public class AuthService {
                 base.avatarAt() == null ? null : base.avatarAt().toInstant().toEpochMilli(),
                 base.mustChangePassword(),
                 member == null ? null : jdbc.sql("SELECT job_title FROM store_members WHERE user_id = :u AND store_id = :s")
-                        .param("u", userId).param("s", member.storeId()).query(String.class).optional().orElse(null)
+                        .param("u", userId).param("s", member.storeId()).query(String.class).optional().orElse(null),
+                member == null ? java.util.List.<String>of() : tenant.lockedModulesOf(member.storeId()).stream().sorted().toList()
         );
     }
 

@@ -104,3 +104,11 @@ export const JOB_TITLE_PERMISSIONS: Record<import("./types").JobTitle, import(".
   SELLER: ["SALES", "CUSTOMER_DEBTS"],
   OTHER: [],
 };
+
+/** Paid modules a package can include; names as on the package card. */
+export const PLAN_MODULE_LABEL: Record<import("./types").PlanModule, string> = {
+  SALES: "Satış və kassa terminalı",
+  INVENTORY: "Anbar, sayım, barkod",
+  CASH: "Kassa və bank",
+  EXPENSES: "Xərclər və büdcə",
+};

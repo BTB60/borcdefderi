@@ -293,6 +293,35 @@ class SubscriptionPaymentFlowTest extends IntegrationTestBase {
     }
 
     @Test
+    void aPackageOpensOnlyItsModulesAndLimitsProducts() throws Exception {
+        Map<String, Object> body = planBody("Modul " + UUID.randomUUID().toString().substring(0, 6));
+        body.put("maxProducts", 1);
+        body.put("modules", List.of("INVENTORY"));
+        JsonNode plan = body(post(adminToken(), "/api/admin/plans", body).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.maxProducts", is(1))).andExpect(jsonPath("$.modules", contains("INVENTORY"))));
+        String owner = register("Modul mağaza " + UUID.randomUUID());
+        String id = requestPayment(owner, plan.get("code").asText(), "MONTHLY", "M10", "25").get("id").asText();
+        post(adminToken(), "/api/admin/subscriptions/" + id + "/approve", Map.of()).andExpect(status().isOk());
+
+        get(owner, "/api/auth/me").andExpect(jsonPath("$.lockedModules", contains("CASH", "EXPENSES", "SALES")));
+        get(owner, "/api/sales").andExpect(status().isForbidden()).andExpect(jsonPath("$.error", is("PLAN_MODULE")));
+        get(owner, "/api/expenses").andExpect(status().isForbidden());
+        get(owner, "/api/products").andExpect(status().isOk());
+        get(owner, "/api/debts?type=CUSTOMER_DEBT").andExpect(status().isOk());
+
+        post(owner, "/api/products", Map.of("name", "Birinci", "salePrice", "2.00", "purchasePrice", "1.00", "unit", "ədəd"))
+                .andExpect(status().isCreated());
+        post(owner, "/api/products", Map.of("name", "İkinci", "salePrice", "2.00", "purchasePrice", "1.00", "unit", "ədəd"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error", is("PLAN_LIMIT_PRODUCTS")));
+
+        // ticking every module means no restriction
+        body.put("modules", List.of("SALES", "INVENTORY", "CASH", "EXPENSES"));
+        put(adminToken(), "/api/admin/plans/" + plan.get("id").asText(), body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.modules").doesNotExist());
+        get(owner, "/api/sales").andExpect(status().isOk());
+    }
+
+    @Test
     void packageLimitsApplyToEmployeesAndCustomers() throws Exception {
         JsonNode plan = createPlan("Limit " + UUID.randomUUID().toString().substring(0, 6)); // 1 employee, 2 customers
         String owner = register("Limit mağaza " + UUID.randomUUID());

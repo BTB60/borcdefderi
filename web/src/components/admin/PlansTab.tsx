@@ -7,6 +7,10 @@ import { ApiError, api } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { HEX_RE, PALETTES, optionLabel, type PlanColors } from "@/lib/plans";
 import type { PeriodCode, PeriodOption, Plan } from "@/lib/types";
+import { PLAN_MODULE_LABEL } from "@/lib/format";
+import type { PlanModule } from "@/lib/types";
+
+const ALL_MODULES: PlanModule[] = ["SALES", "INVENTORY", "CASH", "EXPENSES"];
 
 type Props = { onError: (m: string | null) => void; onNotice?: (m: string | null) => void };
 
@@ -179,6 +183,8 @@ interface PlanForm extends PlanColors {
   customPrice: string;
   maxEmployees: string;
   maxCustomers: string;
+  maxProducts: string;
+  modules: PlanModule[];
   active: boolean;
   recommended: boolean;
 }
@@ -186,7 +192,7 @@ interface PlanForm extends PlanColors {
 const EMPTY: PlanForm = {
   name: "", description: "", features: "",
   priceMonthly: "", priceQuarterly: "", priceSemiAnnual: "", priceYearly: "", customDays: "", customPrice: "",
-  maxEmployees: "", maxCustomers: "", active: true, recommended: false,
+  maxEmployees: "", maxCustomers: "", maxProducts: "", modules: [...ALL_MODULES], active: true, recommended: false,
   ...PALETTES[0].colors,
 };
 
@@ -208,6 +214,8 @@ function toForm(p: Plan): PlanForm {
     customPrice: priceOf(p, "CUSTOM"),
     maxEmployees: p.maxEmployees == null ? "" : String(p.maxEmployees),
     maxCustomers: p.maxCustomers == null ? "" : String(p.maxCustomers),
+    maxProducts: p.maxProducts == null ? "" : String(p.maxProducts),
+    modules: p.modules == null ? [...ALL_MODULES] : [...p.modules],
     active: p.active,
     recommended: p.recommended,
     primaryColor: p.primaryColor,
@@ -234,6 +242,8 @@ function toPayload(f: PlanForm) {
     customPrice: num(f.customPrice),
     maxEmployees: int(f.maxEmployees),
     maxCustomers: int(f.maxCustomers),
+    maxProducts: int(f.maxProducts),
+    modules: f.modules,
     active: f.active,
     recommended: f.recommended,
     primaryColor: f.primaryColor,
@@ -343,7 +353,24 @@ function PlanEditor({ plan, onClose, onSaved }: { plan: Plan | null; onClose: ()
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="İşçi sayı" hint="Boş = limitsiz"><Input type="number" min="0" value={f.maxEmployees} onChange={(e) => set("maxEmployees", e.target.value)} /></Field>
               <Field label="Müştəri sayı" hint="Boş = limitsiz"><Input type="number" min="0" value={f.maxCustomers} onChange={(e) => set("maxCustomers", e.target.value)} /></Field>
+              <Field label="Məhsul sayı (anbar)" hint="Boş = limitsiz"><Input type="number" min="0" value={f.maxProducts} onChange={(e) => set("maxProducts", e.target.value)} /></Field>
             </div>
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium text-slate-700">Paketə daxil bölmələr</legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {ALL_MODULES.map((m) => {
+                  const on = f.modules.includes(m);
+                  return (
+                    <label key={m} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm ${on ? "border-gold-500 bg-gold-500/5" : "border-slate-200"}`}>
+                      <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={on}
+                        onChange={() => set("modules", on ? f.modules.filter((x) => x !== m) : [...f.modules, m])} />
+                      {PLAN_MODULE_LABEL[m]}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">Borclar, ödənişlər, müştərilər və hesabatlar hər pakətdə var. İşarələnməyən bölmə bu paketdə bağlı olur.</p>
+            </fieldset>
             <div className="flex flex-wrap gap-5 text-sm text-slate-700">
               <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-navy-800" checked={f.active} onChange={(e) => set("active", e.target.checked)} /> Aktiv (satışda)</label>
               <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-navy-800" checked={f.recommended} onChange={(e) => set("recommended", e.target.checked)} /> Tövsiyə olunan / populyar</label>
@@ -395,6 +422,8 @@ function PlanEditor({ plan, onClose, onSaved }: { plan: Plan | null; onClose: ()
               recommended: f.recommended,
               maxEmployees: int(f.maxEmployees),
               maxCustomers: int(f.maxCustomers),
+              maxProducts: int(f.maxProducts),
+              modules: f.modules.length === ALL_MODULES.length ? null : f.modules,
               ...pickColors(badColor ? (plan ? toForm(plan) : EMPTY) : f),
             } as Plan}
             period={period}

@@ -83,7 +83,11 @@ public class InventoryService {
     private final AuditService audit;
     private final ReceiptStorage files;
 
-    public InventoryService(JdbcClient jdbc, TenantService tenant, AuditService audit, ReceiptStorage files) {
+    private final az.borcdefteri.subscriptions.PlanService plans;
+
+    public InventoryService(JdbcClient jdbc, TenantService tenant, AuditService audit, ReceiptStorage files,
+                            az.borcdefteri.subscriptions.PlanService plans) {
+        this.plans = plans;
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.audit = audit;
@@ -180,6 +184,16 @@ public class InventoryService {
     @Transactional
     public Product create(ProductRequest req) {
         CurrentMember m = requireInventory();
+        Integer maxProducts = plans.limitsFor(m.storeId()).maxProducts();
+        if (maxProducts != null) {
+            jdbc.sql("SELECT id FROM stores WHERE id = :s FOR UPDATE").param("s", m.storeId()).query(UUID.class).single();
+            long current = jdbc.sql("SELECT COUNT(*) FROM products WHERE store_id = :s AND active")
+                    .param("s", m.storeId()).query(Long.class).single();
+            if (current >= maxProducts) {
+                throw ApiException.conflict("PLAN_LIMIT_PRODUCTS",
+                        "Paketinizdə ən çox " + maxProducts + " məhsul ola bilər. Daha çox məhsul üçün paketi yüksəldin.");
+            }
+        }
         checkRefs(m.storeId(), req.categoryId(), req.supplierId());
         UUID id = UUID.randomUUID();
         String code = req.code() == null || req.code().isBlank()

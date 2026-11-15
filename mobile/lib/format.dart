@@ -40,6 +40,14 @@ const permissionLabels = {
   'SALES': 'Satış',
 };
 
+/// Paid modules a package may include (debts, payments and reports are in every package).
+const planModuleLabels = {
+  'SALES': 'Satış və kassa',
+  'INVENTORY': 'Anbar, sayım, barkod',
+  'CASH': 'Kassa və bank',
+  'EXPENSES': 'Xərclər və büdcə',
+};
+
 /// Employee's job (vəzifə).
 const jobTitleLabels = {
   'CASHIER': 'Kassir',

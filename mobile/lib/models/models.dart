@@ -154,6 +154,9 @@ class Me {
   /// Employee's job: CASHIER, STOREKEEPER, ACCOUNTANT, SELLER, OTHER (null for the owner).
   final String? jobTitle;
 
+  /// Paid modules the store's package does not include (SALES, INVENTORY, CASH, EXPENSES).
+  final List<String> lockedModules;
+
   const Me({
     required this.userId,
     required this.email,
@@ -168,14 +171,18 @@ class Me {
     this.avatarVersion,
     this.mustChangePassword = false,
     this.jobTitle,
+    this.lockedModules = const [],
   });
 
   bool get isOwner => role == 'STORE_OWNER';
 
+  /// The owner sees a module their package lacks with a lock that leads to the packages.
+  bool lockedFor(String module) => isOwner && lockedModules.contains(module);
+
   /// May see any debt section (customer debts, company receivables / payables).
   bool get canAnyDebt => can('CUSTOMER_DEBTS') || can('COMPANY_RECEIVABLES') || can('COMPANY_PAYABLES');
   bool get isSuperAdmin => platformRole == 'SUPER_ADMIN';
-  bool can(String permission) => isOwner || permissions.contains(permission);
+  bool can(String permission) => !lockedModules.contains(permission) && (isOwner || permissions.contains(permission));
 
   /// The owner may change / delete anything; an employee only what they recorded themselves.
   bool mayChange(Object? recordedBy) => isOwner || (recordedBy != null && '$recordedBy' == userId);
@@ -196,6 +203,7 @@ class Me {
         avatarVersion: (j['avatarVersion'] as num?)?.toInt(),
         mustChangePassword: j['mustChangePassword'] as bool? ?? false,
         jobTitle: _str(j['jobTitle']),
+        lockedModules: ((j['lockedModules'] as List?) ?? const []).cast<String>(),
       );
 }
 
@@ -468,6 +476,10 @@ class Plan {
   final List<String> features;
   final int? maxEmployees;
   final int? maxCustomers;
+  final int? maxProducts;
+
+  /// Open paid modules; null = all of them.
+  final List<String>? modules;
   final bool recommended;
   final List<PeriodOption> options;
   final String primaryColor;
@@ -485,6 +497,8 @@ class Plan {
     this.features = const [],
     this.maxEmployees,
     this.maxCustomers,
+    this.maxProducts,
+    this.modules,
     this.recommended = false,
     this.options = const [],
     this.primaryColor = '#101C35',
@@ -519,6 +533,8 @@ class Plan {
         features: ((j['features'] as List?) ?? const []).cast<String>(),
         maxEmployees: (j['maxEmployees'] as num?)?.toInt(),
         maxCustomers: (j['maxCustomers'] as num?)?.toInt(),
+        maxProducts: (j['maxProducts'] as num?)?.toInt(),
+        modules: (j['modules'] as List?)?.cast<String>(),
         recommended: j['recommended'] as bool? ?? false,
         options: ((j['options'] as List?) ?? const [])
             .map((e) => PeriodOption.fromJson(e as Map<String, dynamic>))

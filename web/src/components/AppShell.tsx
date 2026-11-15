@@ -51,7 +51,7 @@ function Icon({ d, className }: { d: string; className?: string }) {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { me, can, isOwner, isSuperAdmin, signOut } = useAuth();
+  const { me, can, isLocked, isOwner, isSuperAdmin, signOut } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -67,7 +67,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const items = isSuperAdmin
     ? ADMIN_NAV
-    : STORE_NAV.filter((i) => (i.ownerOnly ? isOwner : i.permission ? can(i.permission) : i.anyOf ? i.anyOf.some(can) : true));
+    : STORE_NAV.filter((i) => (i.ownerOnly ? isOwner : i.permission ? can(i.permission) || (isOwner && isLocked(i.permission)) : i.anyOf ? i.anyOf.some(can) : true));
+  // a module the package does not include: the owner sees it with a lock that leads to the packages
+  const lockedHref = (i: NavItem) => (isOwner && i.permission && isLocked(i.permission) ? "/abunelik" : i.href);
 
   // an employee without "Hesabatlar" lands on the first section their job opens (e.g. Anbar for an anbardar)
   useEffect(() => {
@@ -103,7 +105,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={lockedHref(item)}
+                title={lockedHref(item) !== item.href ? "Bu bölmə paketinizə daxil deyil — paketi yüksəldin" : undefined}
                 className={cx(
                   "group flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all duration-200",
                   active ? "bg-white/10 text-gold-400 shadow-inner" : "text-white/75 hover:bg-white/5 hover:text-white",
@@ -112,6 +115,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <span className={cx("h-6 w-1 rounded-full transition-colors", active ? "bg-gold-500" : "bg-transparent group-hover:bg-white/20")} />
                 <Icon d={item.icon} className={active ? "text-gold-400" : ""} />
                 {item.label}
+                {lockedHref(item) !== item.href && (
+                  <svg viewBox="0 0 24 24" className="ml-auto h-4 w-4 text-gold-400/80" fill="none" stroke="currentColor" strokeWidth={2} aria-label="Paketdə yoxdur"><path d="M6 11h12v10H6V11Zm3 0V8a3 3 0 0 1 6 0v3" /></svg>
+                )}
               </Link>
             );
           })}

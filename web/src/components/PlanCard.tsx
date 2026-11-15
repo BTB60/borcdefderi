@@ -4,6 +4,8 @@ import type { CSSProperties, ReactNode } from "react";
 import { formatMoney } from "@/lib/format";
 import { contrastText, optionLabel, savingPercent } from "@/lib/plans";
 import type { PeriodCode, Plan } from "@/lib/types";
+import { PLAN_MODULE_LABEL } from "@/lib/format";
+import type { PlanModule } from "@/lib/types";
 
 /**
  * A subscription package card drawn with the package's own colours. Used on the store's subscription page
@@ -17,7 +19,7 @@ export function PlanCard({
   action,
   footer,
 }: {
-  plan: Pick<Plan, "name" | "description" | "features" | "options" | "recommended" | "primaryColor" | "secondaryColor" | "backgroundColor" | "textColor" | "buttonColor" | "maxEmployees" | "maxCustomers">;
+  plan: Pick<Plan, "name" | "description" | "features" | "options" | "recommended" | "primaryColor" | "secondaryColor" | "backgroundColor" | "textColor" | "buttonColor" | "maxEmployees" | "maxCustomers" | "maxProducts" | "modules">;
   period: PeriodCode | null;
   onPeriod?: (p: PeriodCode) => void;
   selected?: boolean;
@@ -89,7 +91,7 @@ export function PlanCard({
         <p className="mt-5 text-sm opacity-60">Qiymət əlavə edilməyib</p>
       )}
 
-      {(plan.features.length > 0 || plan.maxEmployees != null || plan.maxCustomers != null) && (
+      {(plan.features.length > 0 || plan.maxEmployees != null || plan.maxCustomers != null || plan.maxProducts != null || plan.modules != null) && (
         <ul className="mt-5 space-y-2 text-sm">
           {plan.features.map((f, i) => (
             <li key={i} className="flex gap-2">
@@ -103,6 +105,15 @@ export function PlanCard({
           {plan.maxCustomers != null && (
             <li className="flex gap-2 opacity-80"><span aria-hidden="true">•</span>{plan.maxCustomers} müştəriyə qədər</li>
           )}
+          {plan.maxProducts != null && (
+            <li className="flex gap-2 opacity-80"><span aria-hidden="true">•</span>{plan.maxProducts} məhsula qədər</li>
+          )}
+          {plan.modules != null && (Object.keys(PLAN_MODULE_LABEL) as PlanModule[]).map((m) => (
+            <li key={m} className={`flex gap-2 ${plan.modules!.includes(m) ? "" : "opacity-45 line-through"}`}>
+              <span aria-hidden="true" className="mt-0.5 font-bold" style={{ color: plan.modules!.includes(m) ? plan.secondaryColor : undefined }}>{plan.modules!.includes(m) ? "✓" : "✕"}</span>
+              <span>{PLAN_MODULE_LABEL[m]}</span>
+            </li>
+          ))}
         </ul>
       )}
 

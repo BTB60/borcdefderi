@@ -85,44 +85,48 @@ class MoreScreen extends StatelessWidget {
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReportsScreen(session: session))),
             ),
           ),
-        if (me.can('SALES'))
+        if (me.can('SALES') || me.lockedFor('SALES'))
           Card(
             child: ListTile(
               leading: const Icon(Icons.point_of_sale, color: navy),
               title: const Text('Satış'),
               subtitle: const Text('Yeni satış, çek, ləğv'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SalesScreen(session: session))),
+              trailing: me.lockedFor('SALES') ? const Icon(Icons.lock_outline, color: gold) : const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => me.lockedFor('SALES') ? SubscriptionScreen(session: session) : SalesScreen(session: session))),
             ),
           ),
-        if (me.can('INVENTORY') || me.can('SALES'))
+        if (me.can('INVENTORY') || me.can('SALES') || me.lockedFor('INVENTORY'))
           Card(
             child: ListTile(
               leading: const Icon(Icons.inventory_2_outlined, color: navy),
               title: const Text('Anbar'),
               subtitle: const Text('Məhsullar, qalıq, giriş / çıxış'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => InventoryScreen(session: session))),
+              trailing: me.lockedFor('INVENTORY') ? const Icon(Icons.lock_outline, color: gold) : const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => me.lockedFor('INVENTORY') ? SubscriptionScreen(session: session) : InventoryScreen(session: session))),
             ),
           ),
-        if (me.can('CASH'))
+        if (me.can('CASH') || me.lockedFor('CASH'))
           Card(
             child: ListTile(
               leading: const Icon(Icons.account_balance_wallet_outlined, color: navy),
               title: const Text('Kassa və bank'),
               subtitle: const Text('Balans, mədaxil, məxaric, köçürmə, gün sonu'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CashScreen(session: session))),
+              trailing: me.lockedFor('CASH') ? const Icon(Icons.lock_outline, color: gold) : const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => me.lockedFor('CASH') ? SubscriptionScreen(session: session) : CashScreen(session: session))),
             ),
           ),
-        if (me.can('EXPENSES'))
+        if (me.can('EXPENSES') || me.lockedFor('EXPENSES'))
           Card(
             child: ListTile(
               leading: const Icon(Icons.receipt_long_outlined, color: navy),
               title: const Text('Xərclər'),
               subtitle: const Text('Xərc, təkrarlanan xərc, büdcə'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ExpensesScreen(session: session))),
+              trailing: me.lockedFor('EXPENSES') ? const Icon(Icons.lock_outline, color: gold) : const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => me.lockedFor('EXPENSES') ? SubscriptionScreen(session: session) : ExpensesScreen(session: session))),
             ),
           ),
         if (me.isOwner)

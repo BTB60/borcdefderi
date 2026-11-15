@@ -60,19 +60,23 @@ public class TenantService {
         AuthenticatedUser principal = currentPrincipal();
         record Row(UUID memberId, UUID storeId, String storeName, String storeStatus, String role,
                    boolean memberActive, boolean userEnabled, String platformRole, String permissions,
-                   boolean mustChangePassword) {}
+                   boolean mustChangePassword, String planModules) {}
         Row row = jdbc.sql("""
                 SELECT m.id AS member_id, s.id AS store_id, s.name AS store_name, s.status AS store_status,
                        m.role, m.active AS member_active, u.enabled AS user_enabled, u.platform_role,
                        u.must_change_password,
                        COALESCE((SELECT string_agg(p.permission, ',') FROM member_permissions p
-                                 WHERE p.member_id = m.id), '') AS permissions
+                                 WHERE p.member_id = m.id), '') AS permissions,
+                       (SELECT pl.modules FROM subscriptions sub JOIN subscription_plans pl ON pl.id = sub.plan_id
+                        WHERE sub.store_id = s.id AND sub.status = 'ACTIVE' AND sub.end_date >= :today
+                        ORDER BY sub.end_date DESC LIMIT 1) AS plan_modules
                 FROM users u
                 LEFT JOIN store_members m ON m.user_id = u.id
                 LEFT JOIN stores s ON s.id = m.store_id
                 WHERE u.id = :userId
                 """)
                 .param("userId", principal.userId())
+                .param("today", today())
                 .query((rs, n) -> new Row(
                         rs.getObject("member_id", UUID.class),
                         rs.getObject("store_id", UUID.class),
@@ -83,7 +87,8 @@ public class TenantService {
                         rs.getBoolean("user_enabled"),
                         rs.getString("platform_role"),
                         rs.getString("permissions"),
-                        rs.getBoolean("must_change_password")))
+                        rs.getBoolean("must_change_password"),
+                        rs.getString("plan_modules")))
                 .optional()
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Hesab tapılmadı"));
 
@@ -108,7 +113,7 @@ public class TenantService {
             perms.addAll(Arrays.asList(row.permissions().split(",")));
         }
         return new CurrentMember(principal.userId(), row.memberId(), row.storeId(), row.storeName(),
-                row.role(), row.platformRole(), perms);
+                row.role(), row.platformRole(), perms, lockedModules(row.planModules()));
     }
 
     /** Member, plus an ACTIVE, non-expired subscription for the store. Used by all business modules. */
@@ -121,9 +126,12 @@ public class TenantService {
         return member;
     }
 
-    /** Business member that holds the given permission (owners hold all). */
+    /** Business member that holds the given permission (owners hold all) and whose package opens the module. */
     public CurrentMember requirePermission(String permission) {
         CurrentMember member = requireBusinessMember();
+        if (member.lockedModules().contains(permission)) {
+            throw ApiException.forbidden("PLAN_MODULE", "Bu bölmə paketinizə daxil deyil. Paketi yüksəldin");
+        }
         if (!member.has(permission)) {
             throw ApiException.forbidden("PERMISSION_DENIED", "Bu modul üçün icazəniz yoxdur");
         }
@@ -165,6 +173,33 @@ public class TenantService {
         if (!admin) {
             throw ApiException.forbidden("SUPER_ADMIN_ONLY", "Yalnız platforma administratoru bu əməliyyatı edə bilər");
         }
+    }
+
+    /** Modules a package may leave out; debts, payments and reports are in every package. */
+    public static final List<String> PLAN_MODULES = List.of("SALES", "INVENTORY", "CASH", "EXPENSES");
+
+    /** Paid modules missing from a package's module list (null list = everything open). */
+    public static Set<String> lockedModules(String planModules) {
+        if (planModules == null) {
+            return Set.of();
+        }
+        Set<String> open = planModules.isBlank() ? Set.of() : Set.of(planModules.split(","));
+        Set<String> locked = new HashSet<>();
+        for (String mod : PLAN_MODULES) {
+            if (!open.contains(mod)) {
+                locked.add(mod);
+            }
+        }
+        return locked;
+    }
+
+    /** Locked modules of a store's active package (for /auth/me). */
+    public Set<String> lockedModulesOf(UUID storeId) {
+        return lockedModules(jdbc.sql("""
+                SELECT pl.modules FROM subscriptions sub JOIN subscription_plans pl ON pl.id = sub.plan_id
+                WHERE sub.store_id = :s AND sub.status = 'ACTIVE' AND sub.end_date >= :today
+                ORDER BY sub.end_date DESC LIMIT 1
+                """).param("s", storeId).param("today", today()).query(String.class).optional().orElse(null));
     }
 
     public static List<String> allPermissions() {

@@ -22,5 +22,7 @@ public record MeResponse(
         /** True after login with a temporary password: the client must show "set a new password" first. */
         boolean mustChangePassword,
         /** Employee's job (CASHIER, STOREKEEPER, ACCOUNTANT, SELLER, OTHER) or null. */
-        String jobTitle
+        String jobTitle,
+        /** Paid modules the store's package does not include (SALES, INVENTORY, CASH, EXPENSES). */
+        List<String> lockedModules
 ) {}

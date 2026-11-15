@@ -222,7 +222,8 @@ class PlanCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(formatMoney(option.price), style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: fg)),
             Text(option.durationText, style: TextStyle(color: fg.withValues(alpha: 0.7), fontSize: 12)),
-            if (plan.features.isNotEmpty || plan.maxEmployees != null || plan.maxCustomers != null) const SizedBox(height: 8),
+            if (plan.features.isNotEmpty || plan.maxEmployees != null || plan.maxCustomers != null || plan.maxProducts != null || plan.modules != null)
+              const SizedBox(height: 8),
             for (final f in plan.features)
               Padding(
                 padding: const EdgeInsets.only(top: 3),
@@ -233,6 +234,19 @@ class PlanCard extends StatelessWidget {
               ),
             if (plan.maxEmployees != null) Text('•  ${plan.maxEmployees} işçiyə qədər', style: TextStyle(color: fg.withValues(alpha: 0.8))),
             if (plan.maxCustomers != null) Text('•  ${plan.maxCustomers} müştəriyə qədər', style: TextStyle(color: fg.withValues(alpha: 0.8))),
+            if (plan.maxProducts != null) Text('•  ${plan.maxProducts} məhsula qədər', style: TextStyle(color: fg.withValues(alpha: 0.8))),
+            if (plan.modules != null)
+              for (final m in planModuleLabels.entries)
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(
+                    '${plan.modules!.contains(m.key) ? '✓' : '✕'}  ${m.value}',
+                    style: TextStyle(
+                      color: plan.modules!.contains(m.key) ? fg : fg.withValues(alpha: 0.45),
+                      decoration: plan.modules!.contains(m.key) ? null : TextDecoration.lineThrough,
+                    ),
+                  ),
+                ),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,

@@ -42,7 +42,9 @@ public class AdminController {
                              @Min(0) Integer maxCustomers,
                              Boolean recommended,
                              String primaryColor, String secondaryColor, String backgroundColor,
-                             String textColor, String buttonColor) {
+                             String textColor, String buttonColor,
+                             @Min(0) Integer maxProducts,
+                             @Size(max = 10) List<String> modules) {
 
         boolean legacy() {
             return priceMonthly == null && priceQuarterly == null && priceSemiAnnual == null && priceYearly == null
@@ -52,7 +54,7 @@ public class AdminController {
         PlanInput toInput() {
             return new PlanInput(name, description, features, priceMonthly, priceQuarterly, priceSemiAnnual,
                     priceYearly, customDays, customPrice, maxEmployees, maxCustomers, active, recommended,
-                    primaryColor, secondaryColor, backgroundColor, textColor, buttonColor);
+                    primaryColor, secondaryColor, backgroundColor, textColor, buttonColor, maxProducts, modules);
         }
     }
 

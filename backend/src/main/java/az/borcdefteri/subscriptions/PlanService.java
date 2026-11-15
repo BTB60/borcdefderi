@@ -59,7 +59,9 @@ public class PlanService {
                            String description, List<String> features, Integer maxEmployees, Integer maxCustomers,
                            int sortOrder, boolean recommended, boolean archived, List<PeriodOption> options,
                            String primaryColor, String secondaryColor, String backgroundColor, String textColor,
-                           String buttonColor, boolean inUse) {
+                           String buttonColor, boolean inUse,
+                           /** null = unlimited */ Integer maxProducts,
+                           /** open paid modules; null = all of them */ List<String> modules) {
 
         public Optional<PeriodOption> option(Period period) {
             return options.stream().filter(o -> o.period().equals(period.name())).findFirst();
@@ -72,10 +74,10 @@ public class PlanService {
                             BigDecimal priceYearly, Integer customDays, BigDecimal customPrice,
                             Integer maxEmployees, Integer maxCustomers, Boolean active, Boolean recommended,
                             String primaryColor, String secondaryColor, String backgroundColor, String textColor,
-                            String buttonColor) {}
+                            String buttonColor, Integer maxProducts, List<String> modules) {}
 
     /** Limits of the store's current (active) package; null = unlimited. */
-    public record Limits(Integer maxEmployees, Integer maxCustomers) {}
+    public record Limits(Integer maxEmployees, Integer maxCustomers, Integer maxProducts) {}
 
     private static final Pattern HEX = Pattern.compile("^#[0-9A-Fa-f]{6}$");
 
@@ -122,13 +124,14 @@ public class PlanService {
 
     public Limits limitsFor(UUID storeId) {
         return jdbc.sql("""
-                SELECT p.max_employees, p.max_customers FROM subscriptions s
+                SELECT p.max_employees, p.max_customers, p.max_products FROM subscriptions s
                 JOIN subscription_plans p ON p.id = s.plan_id
                 WHERE s.store_id = :s AND s.status = 'ACTIVE' AND s.end_date >= :today
                 ORDER BY s.end_date DESC LIMIT 1
                 """).param("s", storeId).param("today", tenant.today())
-                .query((rs, n) -> new Limits((Integer) rs.getObject("max_employees"), (Integer) rs.getObject("max_customers")))
-                .optional().orElse(new Limits(null, null));
+                .query((rs, n) -> new Limits((Integer) rs.getObject("max_employees"), (Integer) rs.getObject("max_customers"),
+                        (Integer) rs.getObject("max_products")))
+                .optional().orElse(new Limits(null, null, null));
     }
 
     // ---------- write (SUPER_ADMIN) ----------
@@ -178,7 +181,7 @@ public class PlanService {
                 period == null ? durationMonths * 30 : null, period == null ? price : null,
                 current.maxEmployees(), current.maxCustomers(), active, current.recommended(),
                 current.primaryColor(), current.secondaryColor(), current.backgroundColor(), current.textColor(),
-                current.buttonColor());
+                current.buttonColor(), current.maxProducts(), current.modules());
         return update(id, in);
     }
 
@@ -225,7 +228,7 @@ public class PlanService {
                               BigDecimal quarterly, BigDecimal semiAnnual, BigDecimal yearly, Integer customDays,
                               BigDecimal customPrice, Integer maxEmployees, Integer maxCustomers, boolean active,
                               boolean recommended, String primary, String secondary, String background, String text,
-                              String button) {
+                              String button, Integer maxProducts, String modules) {
         String summary() {
             return name + ": 1ay=" + monthly + ", 3ay=" + quarterly + ", 6ay=" + semiAnnual + ", 12ay=" + yearly
                     + (customDays != null ? ", " + customDays + "gün=" + customPrice : "") + ", aktiv=" + active;
@@ -274,12 +277,25 @@ public class PlanService {
         }
         Integer maxEmployees = limit(in.maxEmployees(), "İşçi sayı");
         Integer maxCustomers = limit(in.maxCustomers(), "Müştəri sayı");
+        Integer maxProducts = limit(in.maxProducts(), "Məhsul sayı");
+        String modules = null;
+        if (in.modules() != null) {
+            java.util.TreeSet<String> set = new java.util.TreeSet<>();
+            for (String mod : in.modules()) {
+                if (mod == null || !TenantService.PLAN_MODULES.contains(mod)) {
+                    throw ApiException.badRequest("INVALID_MODULE", "Naməlum bölmə: " + mod);
+                }
+                set.add(mod);
+            }
+            // every module ticked = no restriction
+            modules = set.size() == TenantService.PLAN_MODULES.size() ? null : String.join(",", set);
+        }
         return new Normalized(name, description, features.isEmpty() ? null : String.join("\n", features),
                 monthly, quarterly, semi, yearly, customDays, customPrice, maxEmployees, maxCustomers, active,
                 Boolean.TRUE.equals(in.recommended()),
                 color(in.primaryColor(), "#101C35"), color(in.secondaryColor(), "#D6AD60"),
                 color(in.backgroundColor(), "#FFFFFF"), color(in.textColor(), "#101C35"),
-                color(in.buttonColor(), "#101C35"));
+                color(in.buttonColor(), "#101C35"), maxProducts, modules);
     }
 
     private void write(UUID id, Normalized n) {
@@ -299,6 +315,7 @@ public class PlanService {
                        price_monthly = :m1, price_quarterly = :m3, price_semi_annual = :m6, price_yearly = :m12,
                        custom_days = :customDays, custom_price = :customPrice,
                        max_employees = :maxEmployees, max_customers = :maxCustomers,
+                       max_products = :maxProducts, modules = :modules,
                        primary_color = :c1, secondary_color = :c2, background_color = :c3, text_color = :c4,
                        button_color = :c5, updated_at = now()
                 WHERE id = :id
@@ -309,6 +326,7 @@ public class PlanService {
                 .param("m1", n.monthly).param("m3", n.quarterly).param("m6", n.semiAnnual).param("m12", n.yearly)
                 .param("customDays", n.customDays).param("customPrice", n.customPrice)
                 .param("maxEmployees", n.maxEmployees).param("maxCustomers", n.maxCustomers)
+                .param("maxProducts", n.maxProducts).param("modules", n.modules)
                 .param("c1", n.primary).param("c2", n.secondary).param("c3", n.background).param("c4", n.text)
                 .param("c5", n.button).param("id", id)
                 .update();
@@ -367,7 +385,16 @@ public class PlanService {
                 (Integer) rs.getObject("max_employees"), (Integer) rs.getObject("max_customers"),
                 rs.getInt("sort_order"), rs.getBoolean("recommended"), rs.getBoolean("archived"), options,
                 rs.getString("primary_color"), rs.getString("secondary_color"), rs.getString("background_color"),
-                rs.getString("text_color"), rs.getString("button_color"), rs.getBoolean("in_use"));
+                rs.getString("text_color"), rs.getString("button_color"), rs.getBoolean("in_use"),
+                (Integer) rs.getObject("max_products"), modulesOf(rs.getString("modules")));
+    }
+
+    /** "SALES,INVENTORY" -> list; null (no restriction) stays null; "" = none of the paid modules. */
+    static List<String> modulesOf(String csv) {
+        if (csv == null) {
+            return null;
+        }
+        return csv.isBlank() ? List.of() : List.of(csv.split(","));
     }
 
     private static String blankToNull(String s) {

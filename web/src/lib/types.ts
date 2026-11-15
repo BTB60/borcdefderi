@@ -55,6 +55,8 @@ export interface Me {
   mustChangePassword?: boolean;
   /** Employee's job: CASHIER, STOREKEEPER, ACCOUNTANT, SELLER, OTHER (null for the owner). */
   jobTitle?: JobTitle | null;
+  /** Paid modules the store's package does not include. */
+  lockedModules?: PlanModule[];
 }
 
 export interface Profile {
@@ -305,6 +307,10 @@ export interface Plan {
   features: string[];
   maxEmployees: number | null;
   maxCustomers: number | null;
+  /** null = unlimited */
+  maxProducts?: number | null;
+  /** Open paid modules; null = all of them. */
+  modules?: PlanModule[] | null;
   sortOrder: number;
   recommended: boolean;
   archived: boolean;
@@ -349,6 +355,9 @@ export interface SubscriptionRecord {
   storePhone: string | null;
   reviewedByName: string | null;
 }
+
+/** Modules a package may leave out (debts, payments and reports are in every package). */
+export type PlanModule = "SALES" | "INVENTORY" | "CASH" | "EXPENSES";
 
 export type JobTitle = "CASHIER" | "STOREKEEPER" | "ACCOUNTANT" | "SELLER" | "OTHER";
 

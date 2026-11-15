@@ -14,6 +14,7 @@ import '../theme.dart';
 import 'barcode_scanner.dart';
 import 'common.dart';
 import 'label_print_sheet.dart';
+import 'purchase_screen.dart';
 import 'stock_count_screen.dart';
 
 double _n(Object? v) => (v as num?)?.toDouble() ?? 0;
@@ -315,6 +316,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
             },
             icon: const Icon(Icons.fact_check_outlined),
             label: const Text('Sayım'),
+          ),
+        if (_manage)
+          IconButton(
+            tooltip: 'Mal qəbulu',
+            icon: const Icon(Icons.local_shipping_outlined),
+            onPressed: () async {
+              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => PurchasesScreen(session: widget.session)));
+              if (mounted) _reload();
+            },
           ),
         IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
         if (_manage)

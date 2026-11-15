@@ -431,7 +431,7 @@ export interface CashAccount { id: string; name: string; kind: CashKind; isDefau
 
 export type MovementKind =
   | "OPENING" | "DEPOSIT" | "WITHDRAWAL" | "TRANSFER_IN" | "TRANSFER_OUT" | "DEBT_COLLECTION" | "SUPPLIER_PAYMENT"
-  | "EXPENSE" | "EXPENSE_REVERSAL" | "SALE" | "SALE_REFUND" | "COUNT_ADJUSTMENT" | "PAYMENT_REVERSAL";
+  | "EXPENSE" | "EXPENSE_REVERSAL" | "SALE" | "SALE_REFUND" | "COUNT_ADJUSTMENT" | "PAYMENT_REVERSAL" | "PURCHASE";
 
 export interface CashMovement {
   id: string; accountId: string; accountName: string; direction: "IN" | "OUT"; amount: number; kind: MovementKind;
@@ -527,3 +527,11 @@ export interface Pnl {
 }
 
 export interface MonthPoint { month: string; netSales: number; costOfGoods: number; expenses: number; netResult: number }
+
+/** Mal qəbulu: goods bought from a supplier in one document. */
+export interface Purchase {
+  id: string; number: string; companyId: string | null; companyName: string | null; supplierInvoice: string | null;
+  total: number; paid: number; unpaid: number; debtId: string | null; receivedOn: string; note: string | null;
+  createdByName: string; createdAt: string;
+  items: { id: string; productId: string | null; name: string; quantity: number; unitCost: number; lineTotal: number }[];
+}

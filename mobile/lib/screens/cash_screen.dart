@@ -23,6 +23,7 @@ const moveLabels = {
   'SALE': 'Satış',
   'SALE_REFUND': 'Satış qaytarıldı',
   'COUNT_ADJUSTMENT': 'Sayım fərqi',
+  'PURCHASE': 'Mal alışı',
 };
 
 /// Random v4 UUID for "the same request sent twice is recorded once".

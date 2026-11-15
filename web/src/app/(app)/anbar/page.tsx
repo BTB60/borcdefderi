@@ -69,6 +69,7 @@ export default function InventoryPage() {
           <Button variant="outline" onClick={() => exportAs("pdf")}>PDF</Button>
           <Button variant="outline" onClick={() => setImporting(true)}>Excel-dən import</Button>
           <Button variant="outline" onClick={() => setLabelsFor("all")}>Barkodları çap et</Button>
+          <Link href="/anbar/qebul" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Mal qəbulu</Link>
           <Link href="/anbar/sayim" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Sayım</Link>
           <Button variant="gold" onClick={() => setEditing("new")}>+ Məhsul əlavə et</Button>
         </div> : undefined} />

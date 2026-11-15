@@ -34,6 +34,8 @@ public class AdminStoreService {
             "inventory_movements",
             "stock_count_lines",
             "stock_counts",
+            "purchase_items",
+            "purchases",
             "sale_returns",
             "sale_items",
             "sales",

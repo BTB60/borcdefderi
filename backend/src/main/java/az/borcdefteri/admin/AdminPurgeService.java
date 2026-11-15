@@ -83,6 +83,7 @@ public class AdminPurgeService {
             rows += del("DELETE FROM stock_count_lines WHERE store_id = :s", storeId);
             rows += del("DELETE FROM inventory_movements WHERE store_id = :s", storeId);
             rows += del("DELETE FROM stock_counts WHERE store_id = :s", storeId);
+            rows += del("DELETE FROM purchases WHERE store_id = :s", storeId); // mal qəbulu (items cascade)
             jdbc.sql("UPDATE products SET stock_qty = 0, updated_at = now(), version = version + 1 WHERE store_id = :s")
                     .param("s", storeId).update();
         }

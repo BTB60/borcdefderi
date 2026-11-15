@@ -18,10 +18,13 @@ import java.util.UUID;
 public class EmployeeService {
 
     public record EmployeeView(UUID memberId, UUID userId, String email, String fullName, String phone,
-                               boolean active, List<String> permissions) {}
+                               boolean active, List<String> permissions, String jobTitle) {}
+
+    /** Vəzifə: Kassir, Anbardar, Mühasib, Satıcı, Digər. */
+    public static final Set<String> JOB_TITLES = Set.of("CASHIER", "STOREKEEPER", "ACCOUNTANT", "SELLER", "OTHER");
 
     private static final String SELECT_EMPLOYEES = """
-            SELECT m.id AS member_id, u.id AS user_id, u.email, u.full_name, u.phone, m.active,
+            SELECT m.id AS member_id, u.id AS user_id, u.email, u.full_name, u.phone, m.active, m.job_title,
                    COALESCE((SELECT string_agg(p.permission, ',' ORDER BY p.permission)
                              FROM member_permissions p WHERE p.member_id = m.id), '') AS permissions
             FROM store_members m JOIN users u ON u.id = m.user_id
@@ -48,8 +51,10 @@ public class EmployeeService {
     }
 
     @Transactional
-    public EmployeeView create(String email, String password, String fullName, String phone, List<String> permissions) {
+    public EmployeeView create(String email, String password, String fullName, String phone, List<String> permissions,
+                               String jobTitle) {
         CurrentMember owner = tenant.requireOwner();
+        String job = validateJobTitle(jobTitle);
         Integer maxEmployees = plans.limitsFor(owner.storeId()).maxEmployees();
         if (maxEmployees != null) {
             jdbc.sql("SELECT id FROM stores WHERE id = :s FOR UPDATE").param("s", owner.storeId()).query(UUID.class).single();
@@ -76,8 +81,8 @@ public class EmployeeService {
                 """).param("id", userId).param("email", normalized)
                 .param("hash", passwordEncoder.encode(password)).param("name", fullName.trim())
                 .param("phone", blankToNull(phone)).update();
-        jdbc.sql("INSERT INTO store_members (id, store_id, user_id, role, active) VALUES (:id, :s, :u, 'EMPLOYEE', TRUE)")
-                .param("id", memberId).param("s", owner.storeId()).param("u", userId).update();
+        jdbc.sql("INSERT INTO store_members (id, store_id, user_id, role, active, job_title) VALUES (:id, :s, :u, 'EMPLOYEE', TRUE, :job)")
+                .param("id", memberId).param("s", owner.storeId()).param("u", userId).param("job", job).update();
         insertPermissions(memberId, perms);
         audit.log(owner.storeId(), owner.userId(), "EMPLOYEE_CREATED", "EMPLOYEE", memberId.toString(),
                 normalized + " icazələr: " + perms);
@@ -85,12 +90,14 @@ public class EmployeeService {
     }
 
     @Transactional
-    public EmployeeView update(UUID memberId, List<String> permissions, boolean active) {
+    public EmployeeView update(UUID memberId, List<String> permissions, boolean active, String jobTitle) {
         CurrentMember owner = tenant.requireOwner();
-        find(owner, memberId); // store-scoped existence check (404 for other stores' members)
+        EmployeeView current = find(owner, memberId); // store-scoped existence check (404 for other stores' members)
         Set<String> perms = validatePermissions(permissions);
-        jdbc.sql("UPDATE store_members SET active = :active WHERE id = :id AND store_id = :s")
-                .param("active", active).param("id", memberId).param("s", owner.storeId()).update();
+        // null keeps the job as it is (older clients do not send it)
+        String job = jobTitle == null ? current.jobTitle() : validateJobTitle(jobTitle);
+        jdbc.sql("UPDATE store_members SET active = :active, job_title = :job WHERE id = :id AND store_id = :s")
+                .param("active", active).param("job", job).param("id", memberId).param("s", owner.storeId()).update();
         jdbc.sql("DELETE FROM member_permissions WHERE member_id = :id").param("id", memberId).update();
         insertPermissions(memberId, perms);
         audit.log(owner.storeId(), owner.userId(), "EMPLOYEE_UPDATED", "EMPLOYEE", memberId.toString(),
@@ -113,7 +120,8 @@ public class EmployeeService {
                         rs.getString("full_name"),
                         rs.getString("phone"),
                         rs.getBoolean("active"),
-                        splitPermissions(rs.getString("permissions"))))
+                        splitPermissions(rs.getString("permissions")),
+                        rs.getString("job_title")))
                 .list();
     }
 
@@ -122,6 +130,16 @@ public class EmployeeService {
             jdbc.sql("INSERT INTO member_permissions (member_id, permission) VALUES (:m, :p)")
                     .param("m", memberId).param("p", p).update();
         }
+    }
+
+    private static String validateJobTitle(String jobTitle) {
+        if (jobTitle == null || jobTitle.isBlank()) {
+            return null;
+        }
+        if (!JOB_TITLES.contains(jobTitle)) {
+            throw ApiException.badRequest("INVALID_JOB_TITLE", "Naməlum vəzifə: " + jobTitle);
+        }
+        return jobTitle;
     }
 
     static Set<String> validatePermissions(List<String> permissions) {

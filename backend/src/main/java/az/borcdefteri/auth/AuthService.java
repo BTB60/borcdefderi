@@ -136,7 +136,9 @@ public class AuthService {
                 base.phone(),
                 base.avatarAt() != null,
                 base.avatarAt() == null ? null : base.avatarAt().toInstant().toEpochMilli(),
-                base.mustChangePassword()
+                base.mustChangePassword(),
+                member == null ? null : jdbc.sql("SELECT job_title FROM store_members WHERE user_id = :u AND store_id = :s")
+                        .param("u", userId).param("s", member.storeId()).query(String.class).optional().orElse(null)
         );
     }
 

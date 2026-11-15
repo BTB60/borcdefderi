@@ -21,9 +21,10 @@ public class EmployeeController {
             @NotBlank @Size(min = 8, max = 72, message = "Şifrə ən azı 8 simvol olmalıdır") String password,
             @NotBlank @Size(max = 150) String fullName,
             @jakarta.validation.constraints.Pattern(regexp = "^[+0-9 ()-]{0,30}$", message = "Telefon nömrəsi düzgün deyil") String phone,
-            @NotNull List<String> permissions) {}
+            @NotNull List<String> permissions,
+            String jobTitle) {}
 
-    public record EmployeeUpdate(@NotNull List<String> permissions, boolean active) {}
+    public record EmployeeUpdate(@NotNull List<String> permissions, boolean active, String jobTitle) {}
 
     private final EmployeeService employees;
 
@@ -39,11 +40,11 @@ public class EmployeeController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public EmployeeService.EmployeeView create(@Valid @RequestBody EmployeeCreate req) {
-        return employees.create(req.email(), req.password(), req.fullName(), req.phone(), req.permissions());
+        return employees.create(req.email(), req.password(), req.fullName(), req.phone(), req.permissions(), req.jobTitle());
     }
 
     @PutMapping("/{memberId}")
     public EmployeeService.EmployeeView update(@PathVariable UUID memberId, @Valid @RequestBody EmployeeUpdate req) {
-        return employees.update(memberId, req.permissions(), req.active());
+        return employees.update(memberId, req.permissions(), req.active(), req.jobTitle());
     }
 }

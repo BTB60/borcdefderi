@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
+import { JOB_TITLE_LABEL } from "@/lib/format";
 import type { Notification, Permission } from "@/lib/types";
 import { cx } from "./ui";
 import { Countdown } from "./Countdown";
@@ -13,23 +14,24 @@ import { Avatar } from "./Avatar";
 
 const SETTINGS_ICON = "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.2-1.3L14.3 3h-4l-.4 2.5a7.6 7.6 0 0 0-2.2 1.3l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.6l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2.2 1.3l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.2-1.3l2.4 1 2-3.4-2-1.6c.1-.4.1-.9.1-1.3Z";
 
-type NavItem = { href: string; label: string; icon: string; permission?: Permission; ownerOnly?: boolean };
+type NavItem = { href: string; label: string; icon: string; permission?: Permission; anyOf?: Permission[]; ownerOnly?: boolean };
+const DEBT_PERMISSIONS: Permission[] = ["CUSTOMER_DEBTS", "COMPANY_RECEIVABLES", "COMPANY_PAYABLES"];
 
 const STORE_NAV: NavItem[] = [
-  { href: "/dashboard", label: "Panel", icon: "M3 13h8V3H3v10Zm10 8h8V11h-8v10ZM3 21h8v-6H3v6Zm10-18v6h8V3h-8Z" },
+  { href: "/dashboard", label: "Panel", icon: "M3 13h8V3H3v10Zm10 8h8V11h-8v10ZM3 21h8v-6H3v6Zm10-18v6h8V3h-8Z", permission: "REPORTS" },
   { href: "/borclar/musteriler", label: "Müştəri borcları", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0", permission: "CUSTOMER_DEBTS" },
   { href: "/borclar/debitorlar", label: "Şirkətin bizə borcu", icon: "M3 6h18v12H3V6Zm0 4h18M7 15h4", permission: "COMPANY_RECEIVABLES" },
   { href: "/borclar/kreditorlar", label: "Bizim şirkətə borcumuz", icon: "M4 4h16v16H4V4Zm4 4h8M8 12h8M8 16h5", permission: "COMPANY_PAYABLES" },
-  { href: "/odenisler", label: "Ödənişlər", icon: "M4 7h16v10H4V7Zm0 3h16" },
+  { href: "/odenisler", label: "Ödənişlər", icon: "M4 7h16v10H4V7Zm0 3h16", anyOf: DEBT_PERMISSIONS },
   { href: "/satis", label: "Satış", icon: "M3 4h2l2.4 11h11.2L21 8H6.2M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", permission: "SALES" },
   { href: "/anbar", label: "Anbar", icon: "M3 9l9-6 9 6v11H3V9Zm6 11v-6h6v6", permission: "INVENTORY" },
   { href: "/maliyye", label: "Gəlir və mənfəət", icon: "M4 19h16M6 16l4-5 3 3 5-7", permission: "REPORTS" },
   { href: "/kassa", label: "Kassa və bank", icon: "M3 7h18v12H3V7Zm0 4h18M7 3h10v4H7V3Z", permission: "CASH" },
   { href: "/xercler", label: "Xərclər", icon: "M12 3v18M17 7.5C17 5.6 14.8 4 12 4S7 5.6 7 7.5 9.2 11 12 11.5s5 2 5 4-2.2 3.5-5 3.5-5-1.6-5-3.5", permission: "EXPENSES" },
   { href: "/cib-pulu", label: "Cib pulu", icon: "M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1h1a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm13 5h3" },
-  { href: "/kontragentlar", label: "Müştəri və şirkətlər", icon: "M16 11a4 4 0 1 0-8 0M3 21a9 9 0 0 1 18 0" },
-  { href: "/hesabatlar", label: "Hesabatlar", icon: "M7 3h7l5 5v13H7V3Zm7 0v5h5M10 13h6M10 17h6" },
-  { href: "/abunelik", label: "Abunəlik", icon: "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z" },
+  { href: "/kontragentlar", label: "Müştəri və şirkətlər", icon: "M16 11a4 4 0 1 0-8 0M3 21a9 9 0 0 1 18 0", anyOf: DEBT_PERMISSIONS },
+  { href: "/hesabatlar", label: "Hesabatlar", icon: "M7 3h7l5 5v13H7V3Zm7 0v5h5M10 13h6M10 17h6", anyOf: ["REPORTS", ...DEBT_PERMISSIONS] },
+  { href: "/abunelik", label: "Abunəlik", icon: "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z", ownerOnly: true },
   { href: "/isciler", label: "İşçilər", icon: "M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 8a6 6 0 0 1 12 0", ownerOnly: true },
   { href: "/fealiyyet", label: "İşçi fəaliyyəti", icon: "M4 19h16M7 16V9m5 7V5m5 11v-4", ownerOnly: true },
   { href: "/profil", label: "Parametrlər", icon: SETTINGS_ICON },
@@ -65,10 +67,17 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const items = isSuperAdmin
     ? ADMIN_NAV
-    : STORE_NAV.filter((i) => (i.ownerOnly ? isOwner : i.permission ? can(i.permission) : true));
+    : STORE_NAV.filter((i) => (i.ownerOnly ? isOwner : i.permission ? can(i.permission) : i.anyOf ? i.anyOf.some(can) : true));
+
+  // an employee without "Hesabatlar" lands on the first section their job opens (e.g. Anbar for an anbardar)
+  useEffect(() => {
+    if (!me || isSuperAdmin || isOwner || can("REPORTS") || pathname !== "/dashboard") return;
+    const first = items.find((i) => i.href !== "/dashboard");
+    if (first) router.replace(first.href);
+  }, [me, isSuperAdmin, isOwner, can, pathname, items, router]);
 
   const subscription = me?.subscription;
-  const roleLabel = isSuperAdmin ? "Platforma administratoru" : isOwner ? "Mağaza sahibi" : "İşçi";
+  const roleLabel = isSuperAdmin ? "Platforma administratoru" : isOwner ? "Mağaza sahibi" : me?.jobTitle ? JOB_TITLE_LABEL[me.jobTitle] : "İşçi";
 
   return (
     <div className="min-h-screen bg-canvas">

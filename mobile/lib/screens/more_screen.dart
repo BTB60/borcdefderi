@@ -37,13 +37,14 @@ class MoreScreen extends StatelessWidget {
           child: ListTile(
             leading: UserAvatar(session: session, name: me.fullName, version: me.hasAvatar ? me.avatarVersion : null),
             title: Text(me.fullName, style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text('${me.email}\n${me.isOwner ? 'Mağaza sahibi' : me.isSuperAdmin ? 'Platforma administratoru' : 'İşçi'}'),
+            subtitle: Text('${me.email}\n${me.isOwner ? 'Mağaza sahibi' : me.isSuperAdmin ? 'Platforma administratoru' : jobTitleLabels[me.jobTitle] ?? 'İşçi'}'),
             isThreeLine: true,
             trailing: const Icon(Icons.settings_outlined),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProfileScreen(session: session))),
           ),
         ),
         const SizedBox(height: 12),
+        if (me.isOwner)
         Card(
           child: ListTile(
             leading: const Icon(Icons.workspace_premium_outlined, color: navy),
@@ -60,7 +61,7 @@ class MoreScreen extends StatelessWidget {
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SubscriptionScreen(session: session))),
           ),
         ),
-        if (sub != null && sub.renewalReminder)
+        if (me.isOwner && sub != null && sub.renewalReminder)
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: ErrorBanner('Abunəliyinizin müddəti ${sub.daysRemaining} gün sonra bitir. Abunəlik bölməsindən yeniləyin.'),

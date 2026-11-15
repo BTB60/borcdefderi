@@ -5,11 +5,29 @@ import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader
 import { TemporaryPasswordModal, type TemporaryPassword } from "@/components/PasswordReset";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { PERMISSION_LABEL } from "@/lib/format";
-import type { Employee, Permission } from "@/lib/types";
+import { JOB_TITLE_LABEL, JOB_TITLE_PERMISSIONS, PERMISSION_LABEL } from "@/lib/format";
+import type { Employee, JobTitle, Permission } from "@/lib/types";
 
 const ALL_PERMISSIONS = Object.keys(PERMISSION_LABEL) as Permission[];
 const EMPLOYEE_PERMISSIONS = ALL_PERMISSIONS;
+
+/** Job picker: choosing one fills in its usual permissions. */
+function JobPicker({ value, onPick }: { value: JobTitle | null; onPick: (j: JobTitle) => void }) {
+  return (
+    <fieldset>
+      <legend className="mb-2 text-sm font-medium text-slate-700">Vəzifə</legend>
+      <div className="flex flex-wrap gap-2">
+        {(Object.keys(JOB_TITLE_LABEL) as JobTitle[]).map((j) => (
+          <button key={j} type="button" onClick={() => onPick(j)}
+            className={`rounded-full border px-3 py-1.5 text-sm ${value === j ? "border-gold-500 bg-gold-500/10 font-semibold text-navy-800" : "border-slate-300 text-slate-600 hover:border-slate-400"}`}>
+            {JOB_TITLE_LABEL[j]}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-slate-500">Vəzifə seçəndə uyğun icazələr özü işarələnir. İşçi daxil olanda yalnız işarələnmiş bölmələri görür.</p>
+    </fieldset>
+  );
+}
 
 function PermissionChecks({ value, onChange, options }: { value: Permission[]; onChange: (v: Permission[]) => void; options: Permission[] }) {
   return (
@@ -68,7 +86,7 @@ export default function EmployeesPage() {
 
   async function toggleActive(e: Employee) {
     try {
-      await api(`/api/employees/${e.memberId}`, { method: "PUT", json: { permissions: e.permissions, active: !e.active } });
+      await api(`/api/employees/${e.memberId}`, { method: "PUT", json: { permissions: e.permissions, active: !e.active, jobTitle: e.jobTitle ?? null } });
       setNotice(e.active ? "İşçi deaktiv edildi" : "İşçi aktivləşdirildi");
       setReload((r) => r + 1);
     } catch (err) {
@@ -101,7 +119,7 @@ export default function EmployeesPage() {
             <tbody className="divide-y divide-slate-100">
               {items.map((e) => (
                 <tr key={e.memberId} className="transition-colors hover:bg-gold-500/5">
-                  <Td className="font-medium text-navy-800">{e.fullName}</Td>
+                  <Td className="font-medium text-navy-800">{e.fullName}<div className="text-xs font-normal text-slate-500">{e.jobTitle ? JOB_TITLE_LABEL[e.jobTitle] : "Vəzifə seçilməyib"}</div></Td>
                   <Td className="text-slate-500">{e.email}</Td>
                   <Td>
                     <div className="flex flex-wrap gap-1.5">
@@ -154,6 +172,8 @@ export default function EmployeesPage() {
 function CreateEmployeeModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({ fullName: "", email: "", password: "", phone: "" });
   const [perms, setPerms] = useState<Permission[]>(["CUSTOMER_DEBTS"]);
+  const [job, setJob] = useState<JobTitle | null>(null);
+  const pickJob = (j: JobTitle) => { setJob(j); if (j !== "OTHER") setPerms(JOB_TITLE_PERMISSIONS[j]); };
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -164,7 +184,7 @@ function CreateEmployeeModal({ onClose, onSaved }: { onClose: () => void; onSave
     setError(null);
     setErrors({});
     try {
-      await api("/api/employees", { method: "POST", json: { ...form, phone: form.phone || null, permissions: perms } });
+      await api("/api/employees", { method: "POST", json: { ...form, phone: form.phone || null, permissions: perms, jobTitle: job } });
       onSaved();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -191,6 +211,7 @@ function CreateEmployeeModal({ onClose, onSaved }: { onClose: () => void; onSave
           <Input type="password" required minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" />
         </Field>
         <Field label="Telefon"><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
+        <JobPicker value={job} onPick={pickJob} />
         <PermissionChecks value={perms} onChange={setPerms} options={EMPLOYEE_PERMISSIONS} />
         {perms.length === 0 && <p className="text-xs text-rose-600">Ən azı bir icazə seçin</p>}
       </form>
@@ -200,6 +221,8 @@ function CreateEmployeeModal({ onClose, onSaved }: { onClose: () => void; onSave
 
 function EditPermissionsModal({ employee, onClose, onSaved }: { employee: Employee; onClose: () => void; onSaved: () => void }) {
   const [perms, setPerms] = useState<Permission[]>(employee.permissions);
+  const [job, setJob] = useState<JobTitle | null>(employee.jobTitle ?? null);
+  const pickJob = (j: JobTitle) => { setJob(j); if (j !== "OTHER") setPerms(JOB_TITLE_PERMISSIONS[j]); };
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -207,7 +230,7 @@ function EditPermissionsModal({ employee, onClose, onSaved }: { employee: Employ
     e.preventDefault();
     setBusy(true);
     try {
-      await api(`/api/employees/${employee.memberId}`, { method: "PUT", json: { permissions: perms, active: employee.active } });
+      await api(`/api/employees/${employee.memberId}`, { method: "PUT", json: { permissions: perms, active: employee.active, jobTitle: job } });
       onSaved();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Yadda saxlanılmadı");
@@ -219,12 +242,13 @@ function EditPermissionsModal({ employee, onClose, onSaved }: { employee: Employ
   return (
     <Modal
       open
-      title={`İcazələr — ${employee.fullName}`}
+      title={`Vəzifə və icazələr — ${employee.fullName}`}
       onClose={onClose}
       footer={<><Button variant="ghost" onClick={onClose}>Ləğv et</Button><Button type="submit" form="perm-form" disabled={busy}>Yadda saxla</Button></>}
     >
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
-      <form id="perm-form" onSubmit={submit}>
+      <form id="perm-form" onSubmit={submit} className="space-y-4">
+        <JobPicker value={job} onPick={pickJob} />
         <PermissionChecks value={perms} onChange={setPerms} options={EMPLOYEE_PERMISSIONS} />
       </form>
     </Modal>

@@ -13,6 +13,31 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class EmployeePermissionTest extends IntegrationTestBase {
 
     @Test
+    void anEmployeeHasAJobTitleAndOnlyItsPermissions() throws Exception {
+        String owner = register("Vəzifə Mağazası");
+        activateSubscription(owner, "SEMI_ANNUAL");
+        String email = uniqueEmail("anbardar");
+        String memberId = body(post(owner, "/api/employees", Map.of("email", email, "password", EMPLOYEE_PASSWORD,
+                "fullName", "Anbardar Elçin", "permissions", perms("INVENTORY"), "jobTitle", "STOREKEEPER"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.jobTitle", is("STOREKEEPER"))))
+                .get("memberId").asText();
+        String keeper = login(email, EMPLOYEE_PASSWORD);
+        get(keeper, "/api/auth/me").andExpect(jsonPath("$.jobTitle", is("STOREKEEPER")))
+                .andExpect(jsonPath("$.permissions", contains("INVENTORY")));
+        get(keeper, "/api/products").andExpect(status().isOk());
+        get(keeper, "/api/debts?type=CUSTOMER_DEBT").andExpect(status().isForbidden());
+        get(keeper, "/api/sales").andExpect(status().isForbidden());
+
+        // without jobTitle the job stays; an unknown one is refused
+        put(owner, "/api/employees/" + memberId, Map.of("permissions", perms("INVENTORY", "SALES"), "active", true))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.jobTitle", is("STOREKEEPER")));
+        put(owner, "/api/employees/" + memberId, Map.of("permissions", perms("SALES"), "active", true, "jobTitle", "CASHIER"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.jobTitle", is("CASHIER")));
+        put(owner, "/api/employees/" + memberId, Map.of("permissions", perms("SALES"), "active", true, "jobTitle", "BOSS"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void employeeOnlySeesAndWritesPermittedDebtSection() throws Exception {
         String owner = register("İşçi Mağazası");
         activateSubscription(owner, "SEMI_ANNUAL");

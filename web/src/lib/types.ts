@@ -53,6 +53,8 @@ export interface Me {
   avatarVersion?: number | null;
   /** Logged in with a temporary password: a new password must be set first. */
   mustChangePassword?: boolean;
+  /** Employee's job: CASHIER, STOREKEEPER, ACCOUNTANT, SELLER, OTHER (null for the owner). */
+  jobTitle?: JobTitle | null;
 }
 
 export interface Profile {
@@ -348,7 +350,10 @@ export interface SubscriptionRecord {
   reviewedByName: string | null;
 }
 
+export type JobTitle = "CASHIER" | "STOREKEEPER" | "ACCOUNTANT" | "SELLER" | "OTHER";
+
 export interface Employee {
+  jobTitle?: JobTitle | null;
   memberId: string;
   userId: string;
   email: string;

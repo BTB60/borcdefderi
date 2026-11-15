@@ -151,6 +151,9 @@ class Me {
   /// Logged in with a temporary password: a new password must be set before using the app.
   final bool mustChangePassword;
 
+  /// Employee's job: CASHIER, STOREKEEPER, ACCOUNTANT, SELLER, OTHER (null for the owner).
+  final String? jobTitle;
+
   const Me({
     required this.userId,
     required this.email,
@@ -164,9 +167,13 @@ class Me {
     this.hasAvatar = false,
     this.avatarVersion,
     this.mustChangePassword = false,
+    this.jobTitle,
   });
 
   bool get isOwner => role == 'STORE_OWNER';
+
+  /// May see any debt section (customer debts, company receivables / payables).
+  bool get canAnyDebt => can('CUSTOMER_DEBTS') || can('COMPANY_RECEIVABLES') || can('COMPANY_PAYABLES');
   bool get isSuperAdmin => platformRole == 'SUPER_ADMIN';
   bool can(String permission) => isOwner || permissions.contains(permission);
 
@@ -188,6 +195,7 @@ class Me {
         hasAvatar: j['hasAvatar'] as bool? ?? false,
         avatarVersion: (j['avatarVersion'] as num?)?.toInt(),
         mustChangePassword: j['mustChangePassword'] as bool? ?? false,
+        jobTitle: _str(j['jobTitle']),
       );
 }
 

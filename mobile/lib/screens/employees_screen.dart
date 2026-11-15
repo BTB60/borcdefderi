@@ -15,6 +15,7 @@ class Employee {
   final String? phone;
   final bool active;
   final List<String> permissions;
+  final String? jobTitle;
 
   const Employee({
     required this.memberId,
@@ -23,6 +24,7 @@ class Employee {
     required this.phone,
     required this.active,
     required this.permissions,
+    this.jobTitle,
   });
 
   factory Employee.fromJson(Map<String, dynamic> j) => Employee(
@@ -32,6 +34,7 @@ class Employee {
         phone: j['phone'] as String?,
         active: j['active'] as bool? ?? true,
         permissions: ((j['permissions'] as List?) ?? const []).map((e) => e.toString()).toList(),
+        jobTitle: j['jobTitle'] as String?,
       );
 }
 
@@ -116,7 +119,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                       ],
                     ]),
                     subtitle: Text(
-                      '${e.email}\n${e.permissions.isEmpty ? 'İcazə yoxdur' : e.permissions.map((p) => permissionLabels[p] ?? p).join(', ')}',
+                      '${jobTitleLabels[e.jobTitle] ?? 'Vəzifə seçilməyib'} · ${e.email}\n${e.permissions.isEmpty ? 'İcazə yoxdur' : e.permissions.map((p) => permissionLabels[p] ?? p).join(', ')}',
                     ),
                     isThreeLine: true,
                     trailing: const Icon(Icons.chevron_right),
@@ -149,6 +152,17 @@ class _EmployeeFormState extends State<_EmployeeForm> {
   final _phone = TextEditingController();
   final _password = TextEditingController();
   late final Set<String> _perms = {...?widget.employee?.permissions};
+  late String? _job = widget.employee?.jobTitle;
+
+  /// Picking a job fills in its usual permissions; they can still be changed one by one below.
+  void _pickJob(String job) => setState(() {
+        _job = job;
+        if (job != 'OTHER') {
+          _perms
+            ..clear()
+            ..addAll(jobTitlePermissions[job]!);
+        }
+      });
   late bool _active = widget.employee?.active ?? true;
   bool _busy = false;
   bool _showPassword = false;
@@ -183,11 +197,13 @@ class _EmployeeFormState extends State<_EmployeeForm> {
           'password': _password.text,
           'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
           'permissions': perms,
+          'jobTitle': _job,
         });
       } else {
         await widget.session.api.put('/api/employees/${widget.employee!.memberId}', {
           'permissions': perms,
           'active': _active,
+          if (_job != null) 'jobTitle': _job,
         });
       }
       if (mounted) Navigator.of(context).pop(true);
@@ -315,6 +331,23 @@ class _EmployeeFormState extends State<_EmployeeForm> {
           ),
           const SizedBox(height: 16),
         ],
+        const Text('Vəzifə', style: TextStyle(fontWeight: FontWeight.w700, color: navy)),
+        const SizedBox(height: 6),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final j in jobTitleLabels.entries)
+            ChoiceChip(
+              label: Text(j.value),
+              selected: _job == j.key,
+              onSelected: (_) => _pickJob(j.key),
+            ),
+        ]),
+        Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 10),
+          child: Text(
+            'Vəzifə seçəndə uyğun icazələr özü işarələnir. İşçi daxil olanda yalnız işarələnmiş bölmələri görür.',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+        ),
         const Text('İcazələr', style: TextStyle(fontWeight: FontWeight.w700, color: navy)),
         for (final entry in permissionLabels.entries)
           CheckboxListTile(

@@ -40,6 +40,24 @@ const permissionLabels = {
   'SALES': 'Satış',
 };
 
+/// Employee's job (vəzifə).
+const jobTitleLabels = {
+  'CASHIER': 'Kassir',
+  'STOREKEEPER': 'Anbardar',
+  'ACCOUNTANT': 'Mühasib',
+  'SELLER': 'Satıcı',
+  'OTHER': 'Digər',
+};
+
+/// Permissions a job starts with; the owner can still tick / untick each one.
+const jobTitlePermissions = {
+  'CASHIER': ['SALES', 'CASH', 'CUSTOMER_DEBTS'],
+  'STOREKEEPER': ['INVENTORY'],
+  'ACCOUNTANT': ['REPORTS', 'CASH', 'EXPENSES', 'CUSTOMER_DEBTS', 'COMPANY_RECEIVABLES', 'COMPANY_PAYABLES'],
+  'SELLER': ['SALES', 'CUSTOMER_DEBTS'],
+  'OTHER': <String>[],
+};
+
 /// Maps a server error code to a friendly message when the server text is not enough.
 String friendlyError(String code, String fallback) {
   switch (code) {

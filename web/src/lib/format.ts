@@ -86,3 +86,21 @@ export const ERROR_HINTS: Record<string, string> = {
   SUBSCRIPTION_REQUIRED: "Aktiv abunəlik tələb olunur",
   PERMISSION_DENIED: "Bu modul üçün icazəniz yoxdur",
 };
+
+/** Employee's job (vəzifə). */
+export const JOB_TITLE_LABEL: Record<import("./types").JobTitle, string> = {
+  CASHIER: "Kassir",
+  STOREKEEPER: "Anbardar",
+  ACCOUNTANT: "Mühasib",
+  SELLER: "Satıcı",
+  OTHER: "Digər",
+};
+
+/** Permissions a job starts with; the owner can still change each one. */
+export const JOB_TITLE_PERMISSIONS: Record<import("./types").JobTitle, import("./types").Permission[]> = {
+  CASHIER: ["SALES", "CASH", "CUSTOMER_DEBTS"],
+  STOREKEEPER: ["INVENTORY"],
+  ACCOUNTANT: ["REPORTS", "CASH", "EXPENSES", "CUSTOMER_DEBTS", "COMPANY_RECEIVABLES", "COMPANY_PAYABLES"],
+  SELLER: ["SALES", "CUSTOMER_DEBTS"],
+  OTHER: [],
+};

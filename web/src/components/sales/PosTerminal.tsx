@@ -59,6 +59,33 @@ function Thumb({ product, className }: { product: Product; className?: string })
   );
 }
 
+/** Sends the 80 mm receipt PDF straight to the printer dialog (hidden frame); falls back to opening it. */
+async function printReceipt(saleId: string) {
+  try {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const res = await fetch(`${API_URL}/api/sales/${saleId}/receipt`, { headers });
+    if (!res.ok) throw new Error(String(res.status));
+    const url = URL.createObjectURL(await res.blob());
+    const frame = document.createElement("iframe");
+    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+    frame.src = url;
+    frame.onload = () => setTimeout(() => {
+      try { frame.contentWindow?.focus(); frame.contentWindow?.print(); } catch { void openProtected(`/api/sales/${saleId}/receipt`); }
+      // the print dialog keeps focus in the frame: give it back so Space starts the next sale
+      window.focus();
+      document.querySelector<HTMLElement>("[data-pos-next]")?.focus();
+    }, 300);
+    document.body.appendChild(frame);
+    setTimeout(() => { frame.remove(); URL.revokeObjectURL(url); }, 120_000);
+  } catch {
+    void openProtected(`/api/sales/${saleId}/receipt`).catch(() => undefined);
+  }
+}
+
+const AUTO_PRINT_KEY = "pos_auto_print";
+
 function Kbd({ children }: { children: ReactNode }) {
   return <kbd className="rounded border border-slate-300 bg-white px-1.5 py-0.5 font-sans text-[10px] font-semibold text-slate-500 shadow-sm">{children}</kbd>;
 }
@@ -90,6 +117,15 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
   const [flash, setFlash] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ sale: Sale; change: number } | null>(null);
+  const [payOpen, setPayOpen] = useState(false);
+  const [autoPrint, setAutoPrint] = useState(true);
+  useEffect(() => {
+    try { setAutoPrint(window.localStorage.getItem(AUTO_PRINT_KEY) !== "false"); } catch { /* storage blocked */ }
+  }, []);
+  const toggleAutoPrint = (v: boolean) => {
+    setAutoPrint(v);
+    try { window.localStorage.setItem(AUTO_PRINT_KEY, String(v)); } catch { /* storage blocked */ }
+  };
   const searchRef = useRef<HTMLInputElement>(null);
 
   const loadProducts = useCallback(() => {
@@ -200,6 +236,8 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
         },
       });
       setDone({ sale: s, change });
+      setPayOpen(false);
+      if (autoPrint) void printReceipt(s.id);
       reset();
       loadProducts();
       onSold?.();
@@ -213,10 +251,23 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
   // keyboard: F2 search, F9 sell, Esc clears search
   const submitRef = useRef(submit);
   submitRef.current = submit;
+  const payRef = useRef({ payOpen, hasCart: cart.length > 0, done: !!done });
+  payRef.current = { payOpen, hasCart: cart.length > 0, done: !!done };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const st = payRef.current;
+      if (st.done && (e.key === " " || e.key === "Enter") && !(e.target instanceof HTMLButtonElement)) {
+        e.preventDefault();
+        setDone(null);
+        setTimeout(() => searchRef.current?.focus(), 0);
+        return;
+      }
       if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); }
-      else if (e.key === "F9") { e.preventDefault(); void submitRef.current(); }
+      else if (e.key === "F9") {
+        e.preventDefault();
+        if (st.payOpen) void submitRef.current();
+        else if (st.hasCart && !st.done) { setError(null); setPayOpen(true); }
+      }
       else if (e.key === "Escape" && document.activeElement === searchRef.current) setSearch("");
     };
     window.addEventListener("keydown", onKey);
@@ -483,19 +534,97 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
             <button type="button" onClick={() => setShowNote(true)} className="text-xs font-medium text-slate-500 hover:text-navy-800">+ Qeyd əlavə et</button>
           )}
 
-          <button type="button" disabled={!canSell} onClick={submit}
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+            <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={autoPrint} onChange={(e) => toggleAutoPrint(e.target.checked)} />
+            Satışdan sonra çeki printerdən çıxar
+          </label>
+          <button type="button" disabled={cart.length === 0 || busy} onClick={() => { setError(null); setPayOpen(true); }}
             className="flex w-full items-center justify-between rounded-2xl bg-gold-500 px-5 py-4 text-navy-900 shadow-sm transition hover:bg-gold-600 hover:text-white active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50">
-            <span className="text-base font-semibold">{busy ? "Saxlanılır…" : "Satışı tamamla"}</span>
+            <span className="text-base font-semibold">{busy ? "Saxlanılır…" : "Ödəniş"}</span>
             <span className="flex items-center gap-2"><span className="font-serif text-lg font-semibold tabular-nums">{formatMoney(total)}</span><Kbd>F9</Kbd></span>
           </button>
         </div>
       </aside>
 
+      {payOpen && (
+        <Modal open title="Ödəniş" onClose={() => { setPayOpen(false); searchRef.current?.focus(); }}
+          footer={<>
+            <Button variant="ghost" onClick={() => setPayOpen(false)}>Geri <Kbd>Esc</Kbd></Button>
+            <Button variant="gold" disabled={!canSell} onClick={() => void submit()}>
+              {busy ? "Saxlanılır…" : autoPrint ? "Sat və çeki çap et" : "Satışı tamamla"} <Kbd>Boşluq</Kbd>
+            </Button>
+          </>}>
+          <div
+            tabIndex={-1}
+            className="outline-none"
+            onKeyDown={(e) => {
+              if (e.key === " " || e.key === "Enter") {
+                const t = e.target as HTMLElement;
+                if (t.tagName === "BUTTON" && e.key === "Enter") return;
+                e.preventDefault();
+                void submit();
+              }
+            }}>
+            <div className="mb-4 flex items-end justify-between rounded-2xl bg-navy-800 px-5 py-4 text-white">
+              <span className="text-sm text-white/70">Yekun{customer ? ` · ${customer.name}` : ""}</span>
+              <span className="font-serif text-4xl font-semibold tabular-nums text-gold-400">{formatMoney(total)}</span>
+            </div>
+            <div className="mb-4 grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1">
+              {([["cash", "Nağd"], ["card", "Kart"], ["mixed", "Qarışıq"], ["credit", "Borca"]] as const).map(([k, label]) => (
+                <button key={k} type="button" tabIndex={-1} onClick={() => { setMode(k); setCash(""); setCard(""); setGiven(""); }}
+                  className={cx("rounded-lg py-2 text-sm font-medium", mode === k ? "bg-gold-500 text-navy-900 shadow" : "text-slate-600")}>{label}</button>
+              ))}
+            </div>
+            {mode === "cash" && (
+              <>
+                <label htmlFor="pay-given" className="mb-1 block text-sm font-medium text-slate-700">Müştəri verdi (₼)</label>
+                <input id="pay-given" autoFocus value={given} inputMode="decimal" placeholder={total.toFixed(2)}
+                  onChange={(e) => setGiven(e.target.value.replace(/[^\d.,]/g, ""))}
+                  className="w-full rounded-2xl border-2 border-gold-500 px-4 py-3 text-right font-serif text-3xl font-semibold tabular-nums text-navy-800 outline-none shadow-glow" />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {quickCash(total).map((v) => (
+                    <button key={v} type="button" tabIndex={-1} onClick={() => setGiven(v.toFixed(2))}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold tabular-nums text-slate-700 hover:border-gold-500">
+                      {v === r2(total) ? "Dəqiq" : formatMoney(v)}
+                    </button>
+                  ))}
+                </div>
+                <div className={cx("mt-4 flex items-center justify-between rounded-2xl px-5 py-3 ring-1", change > 0 ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-slate-50 text-slate-500 ring-slate-200")}>
+                  <span className="text-sm font-medium">Qaytarılacaq pul</span>
+                  <span className="font-serif text-3xl font-semibold tabular-nums">{formatMoney(change)}</span>
+                </div>
+                {num(given) > 0 && num(given) < total && <p className="mt-2 text-sm text-amber-700">Çatmayan {formatMoney(r2(total - num(given)))} borca yazılacaq{customer ? "" : " — müştəri seçilməlidir"}.</p>}
+              </>
+            )}
+            {mode === "card" && <p className="rounded-xl bg-sky-50 px-4 py-3 text-sky-800">Kartla <b>{formatMoney(total)}</b> ödənilir.</p>}
+            {(mode === "mixed" || mode === "credit") && (
+              <div className={cx("grid gap-3", mode === "mixed" ? "grid-cols-2" : "grid-cols-1")}>
+                <label className="text-sm text-slate-600">{mode === "credit" ? "İlkin ödəniş, nağd" : "Nağd (₼)"}
+                  <input autoFocus value={cash} inputMode="decimal" placeholder="0" onChange={(e) => setCash(e.target.value.replace(/[^\d.,]/g, ""))}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-right text-xl font-semibold tabular-nums outline-none focus:border-gold-500" />
+                </label>
+                {mode === "mixed" && (
+                  <label className="text-sm text-slate-600">Kart (₼)
+                    <input value={card} inputMode="decimal" placeholder="0" onChange={(e) => setCard(e.target.value.replace(/[^\d.,]/g, ""))}
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-right text-xl font-semibold tabular-nums outline-none focus:border-gold-500" />
+                  </label>
+                )}
+                {credit > 0.004 && <p className={cx("text-sm", customer ? "text-amber-700" : "text-rose-700")}>{formatMoney(credit)} borca{customer ? ` — ${customer.name}` : " — əvvəlcə çekdə müştəri seçin"}</p>}
+              </div>
+            )}
+            {over && <p className="mt-3 text-sm text-rose-700">Ödəniş yekundan çoxdur.</p>}
+            {stockProblem && <p className="mt-3 text-sm text-rose-700">“{stockProblem.product.name}” anbarda kifayət deyil.</p>}
+            {error && <div className="mt-3"><Alert>{error}</Alert></div>}
+            <p className="mt-4 text-center text-xs text-slate-400">Boşluq və ya Enter — satışı tamamla{autoPrint ? " və çeki çap et" : ""} · Esc — geri</p>
+          </div>
+        </Modal>
+      )}
+
       {done && (
         <Modal open title="Satış tamamlandı" onClose={() => { setDone(null); searchRef.current?.focus(); }}
           footer={<>
-            <Button variant="outline" onClick={() => openProtected(`/api/sales/${done.sale.id}/receipt`).catch(() => undefined)}>Çeki çap et (PDF)</Button>
-            <Button variant="gold" autoFocus onClick={() => { setDone(null); setTimeout(() => searchRef.current?.focus(), 0); }}>Yeni satış</Button>
+            <Button variant="outline" onClick={() => void printReceipt(done.sale.id)}>{autoPrint ? "Çeki yenidən çap et" : "Çeki çap et"}</Button>
+            <Button variant="gold" autoFocus data-pos-next onClick={() => { setDone(null); setTimeout(() => searchRef.current?.focus(), 0); }}>Yeni satış <Kbd>Boşluq</Kbd></Button>
           </>}>
           <div className="text-center">
             <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">

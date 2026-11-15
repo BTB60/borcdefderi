@@ -260,15 +260,47 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
     return !entries.skip(i + 1).any((x) => x['type'] == 'REVERSAL' && x['paymentId'] == e['paymentId']);
   }
 
-  /// Owner: cancel a "Borc artırıldı" entry recorded by mistake; the debt goes back to what it was before it.
-  Future<void> _cancelIncrease(Map<String, dynamic> e) async {
-    final amount = (e['amount'] as num).toDouble();
+  /// Removes an already cancelled entry (and its cancellation) from the history; the balance does not change.
+  Future<void> _hideEntry(Map<String, dynamic> e) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Borc artımını ləğv et?'),
-        content: Text('${formatMoney(amount)} artım ləğv ediləcək, borc bu məbləğ qədər azalacaq. '
-            'Əməliyyat tarixçədə “ləğv edilib” kimi qalır.'),
+        title: const Text('Tarixçədən silinsin?'),
+        content: const Text('Bu ləğv edilmiş əməliyyat və onun ləğvi tarixçədən silinəcək. Qalıq dəyişmir.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Xeyr')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await widget.session.api.post('/api/debts/${_debt.id}/history/${e['id']}/hide', <String, dynamic>{});
+      if (!mounted) return;
+      setState(() => _history = _loadHistory());
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tarixçədən silindi')));
+    } catch (err) {
+      if (mounted) showError(context, err);
+    }
+  }
+
+  /// Owner: cancel a "Borc artırıldı" entry recorded by mistake; the debt goes back to what it was before it.
+  Future<void> _cancelIncrease(Map<String, dynamic> e) async {
+    final amount = (e['amount'] as num).toDouble();
+    final created = e['type'] == 'DEBT_CREATED';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(created ? 'Borc silinsin?' : 'Borc artımını ləğv et?'),
+        content: Text(created
+            ? 'Bu borc ləğv olunacaq və cəmlərdən çıxacaq. Tarixçədə “ləğv edilib” kimi qalır. '
+                'Borca ödəniş edilibsə, əvvəlcə ödənişləri silin.'
+            : '${formatMoney(amount)} artım ləğv ediləcək, borc bu məbləğ qədər azalacaq. '
+                'Əməliyyat tarixçədə “ləğv edilib” kimi qalır.'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Bağla')),
           FilledButton(
@@ -283,6 +315,11 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
     try {
       final res = await widget.session.api.post('/api/debts/${_debt.id}/history/${e['id']}/cancel', <String, dynamic>{});
       if (!mounted) return;
+      if (created) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Borc silindi')));
+        Navigator.of(context).pop(true);
+        return;
+      }
       setState(() {
         _debt = Debt.fromJson(res as Map<String, dynamic>);
         _changed = true;
@@ -611,16 +648,18 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
   Widget _historyTile(List<Map<String, dynamic>> entries, int i, Map<String, dynamic> e, bool owner) {
     final VoidCallback? ownerAction = !owner
         ? null
-        : e['type'] == 'DEBT_INCREASED' && e['cancelled'] != true
+        : (e['type'] == 'DEBT_INCREASED' || e['type'] == 'DEBT_CREATED') && e['cancelled'] != true
             ? () => _cancelIncrease(e)
             : e['paymentId'] != null && e['type'] != 'REVERSAL' && _isLivePayment(entries, i)
                 ? () => _paymentTapped(e['paymentId'] as String, (e['amount'] as num).toDouble())
                 : null;
-    final increase = owner && e['type'] == 'DEBT_INCREASED' && e['cancelled'] != true;
+    final increase = owner && (e['type'] == 'DEBT_INCREASED' || e['type'] == 'DEBT_CREATED') && e['cancelled'] != true;
     final payment = owner && e['paymentId'] != null && e['type'] != 'REVERSAL' && _isLivePayment(entries, i);
     return SwipeActions(
       actions: [
         if (increase) SwipeAction.delete(() => _cancelIncrease(e)),
+        if (widget.session.me!.mayChange(e['actorId']) && (e['cancelled'] == true || e['reversesEntryId'] != null))
+          SwipeAction.delete(() => _hideEntry(e)),
         if (!increase && payment) ...[
           SwipeAction.edit(() => _paymentTapped(e['paymentId'] as String, (e['amount'] as num).toDouble(), 'edit')),
           SwipeAction.delete(() => _paymentTapped(e['paymentId'] as String, (e['amount'] as num).toDouble(), 'cancel')),

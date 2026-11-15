@@ -30,7 +30,8 @@ public class PartyCardService {
      */
     public record HistoryEntry(UUID id, UUID debtId, DebtType debtType, String type, BigDecimal amount,
                                BigDecimal balanceAfter, UUID paymentId, String paymentMethod, LocalDate entryDate,
-                               String receiptNumber, String note, String actorName, OffsetDateTime createdAt) {}
+                               String receiptNumber, String note, String actorName, OffsetDateTime createdAt,
+                               UUID actorId, UUID reversesEntryId, boolean cancelled, boolean debtCancelled) {}
 
     public record Note(UUID id, String body, String authorName, OffsetDateTime createdAt) {}
 
@@ -72,26 +73,31 @@ public class PartyCardService {
         }
         String column = customer ? "customer_id" : "company_id";
         record Row(UUID id, UUID debtId, DebtType debtType, String type, BigDecimal amount, UUID paymentId,
-                   String method, LocalDate entryDate, String receipt, String note, String actor, OffsetDateTime at) {}
+                   String method, LocalDate entryDate, String receipt, String note, String actor, OffsetDateTime at,
+                   UUID actorId, UUID reverses, boolean cancelled, boolean debtCancelled) {}
         List<Row> rows = jdbc.sql("""
                 SELECT t.id, t.debt_id, d.debt_type, t.transaction_type, t.amount, t.payment_id, p.payment_method,
                        COALESCE(t.entry_date, CASE WHEN t.transaction_type = 'DEBT_CREATED' THEN d.debt_date END,
                                 (p.paid_at AT TIME ZONE 'Asia/Baku')::date, (t.created_at AT TIME ZONE 'Asia/Baku')::date) AS entry_date,
                        t.receipt_number,
                        COALESCE(t.note, CASE WHEN t.transaction_type = 'DEBT_CREATED' THEN d.description END, p.description) AS note,
-                       u.full_name AS actor, t.created_at
+                       u.full_name AS actor, t.created_at, t.actor_id, t.reverses_entry_id,
+                       EXISTS (SELECT 1 FROM financial_transactions r WHERE r.reverses_entry_id = t.id) AS cancelled,
+                       d.cancelled_at IS NOT NULL AS debt_cancelled
                 FROM financial_transactions t
                 JOIN debts d ON d.id = t.debt_id AND d.store_id = t.store_id
                 JOIN users u ON u.id = t.actor_id
                 LEFT JOIN payments p ON p.id = t.payment_id
-                WHERE t.store_id = :s AND d.""" + column + " = :p AND d.debt_type IN (:types) ORDER BY t.created_at, t.id")
+                WHERE t.store_id = :s AND NOT EXISTS (SELECT 1 FROM ledger_hidden h WHERE h.entry_id = t.id)
+                  AND d.""" + column + " = :p AND d.debt_type IN (:types) ORDER BY t.created_at, t.id")
                 .param("s", storeId).param("p", partyId).param("types", types)
                 .query((rs, n) -> new Row(rs.getObject("id", UUID.class), rs.getObject("debt_id", UUID.class),
                         DebtType.valueOf(rs.getString("debt_type")), rs.getString("transaction_type"),
                         Money.of(rs.getBigDecimal("amount")), rs.getObject("payment_id", UUID.class),
                         rs.getString("payment_method"), rs.getObject("entry_date", LocalDate.class),
                         rs.getString("receipt_number"), rs.getString("note"), rs.getString("actor"),
-                        rs.getObject("created_at", OffsetDateTime.class)))
+                        rs.getObject("created_at", OffsetDateTime.class), rs.getObject("actor_id", UUID.class),
+                        rs.getObject("reverses_entry_id", UUID.class), rs.getBoolean("cancelled"), rs.getBoolean("debt_cancelled")))
                 .list();
         Map<DebtType, BigDecimal> running = new HashMap<>();
         List<HistoryEntry> out = new ArrayList<>(rows.size());
@@ -100,7 +106,8 @@ public class PartyCardService {
             BigDecimal bal = Money.of(running.getOrDefault(r.debtType(), Money.zero()).add(signed));
             running.put(r.debtType(), bal);
             out.add(new HistoryEntry(r.id(), r.debtId(), r.debtType(), r.type(), r.amount(), bal, r.paymentId(),
-                    r.method(), r.entryDate(), r.receipt(), r.note(), r.actor(), r.at()));
+                    r.method(), r.entryDate(), r.receipt(), r.note(), r.actor(), r.at(), r.actorId(), r.reverses(),
+                    r.cancelled(), r.debtCancelled()));
         }
         return out;
     }

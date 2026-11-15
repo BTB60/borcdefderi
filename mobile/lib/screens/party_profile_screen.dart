@@ -337,34 +337,139 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
   Widget _historyTab(_Profile p) {
     if (p.history.isEmpty) return const EmptyState(title: 'Əməliyyat yoxdur');
     final list = p.history.reversed.toList();
+    final me = widget.session.me!;
+    final livePayments = {for (final pay in p.payments) if (!pay.isVoided) pay.id: pay};
+    final voidedPayments = {for (final pay in p.payments) if (pay.isVoided) pay.id};
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-      itemCount: list.length,
+      itemCount: list.length + 1,
       itemBuilder: (_, i) {
-        final e = list[i];
-        final pay = (e['type'] as String).startsWith('PAYMENT');
-        final amount = ((e['amount'] as num).toDouble()).abs();
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: CircleAvatar(
-            backgroundColor: pay ? Colors.green.shade50 : Colors.red.shade50,
-            child: Icon(pay ? Icons.south_west : Icons.north_east, color: pay ? Colors.green.shade700 : Colors.red.shade700, size: 18),
+        if (i == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text('Əməliyyatı silmək və ya redaktə etmək üçün sətri sola sürüşdürün.',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+          );
+        }
+        final e = list[i - 1];
+        final type = e['type'] as String;
+        final pay = type.startsWith('PAYMENT');
+        final signed = (e['amount'] as num).toDouble();
+        final minus = pay || signed < 0;
+        final cancelled = e['cancelled'] == true;
+        final debtEntry = (type == 'DEBT_CREATED' || type == 'DEBT_INCREASED') &&
+            !cancelled &&
+            e['debtCancelled'] != true &&
+            me.mayChange(e['actorId']);
+        final payment = pay ? livePayments[e['paymentId']] : null;
+        final paymentEditable = payment != null && me.mayChange(payment.recordedBy);
+        // already cancelled: may be removed from the history (with what cancelled it)
+        final removable = me.mayChange(e['actorId']) &&
+            (cancelled ||
+                e['reversesEntryId'] != null ||
+                e['debtCancelled'] == true ||
+                (e['paymentId'] != null && voidedPayments.contains(e['paymentId'])));
+        final label = e['reversesEntryId'] != null
+            ? ((e['note'] as String? ?? '').startsWith('Borc ləğv') ? 'Borc ləğv edildi' : 'Borc artımı ləğv edildi')
+            : _entryLabels[type] ?? type;
+        return SwipeActions(
+          actions: [
+            if (debtEntry) SwipeAction.delete(() => _cancelEntry(e)),
+            if (removable) SwipeAction.delete(() => _hideEntry(e)),
+            if (paymentEditable) ...[
+              SwipeAction.edit(() => _paymentActions(payment, 'edit')),
+              SwipeAction.delete(() => _paymentActions(payment, 'cancel')),
+            ],
+          ],
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(
+              backgroundColor: pay ? Colors.green.shade50 : Colors.red.shade50,
+              child: Icon(pay ? Icons.south_west : Icons.north_east, color: pay ? Colors.green.shade700 : Colors.red.shade700, size: 18),
+            ),
+            title: Text(
+              cancelled ? '$label (ləğv edilib)' : label,
+              style: TextStyle(fontWeight: FontWeight.w600, color: cancelled ? Colors.grey.shade600 : null),
+            ),
+            subtitle: Text([
+              if (e['entryDate'] != null) formatDate(DateTime.parse(e['entryDate'] as String)),
+              if (e['receiptNumber'] != null) 'Çek: ${e['receiptNumber']}',
+              if (e['note'] != null) '${e['note']}',
+              '${e['actorName']}',
+            ].join(' · ')),
+            trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('${minus ? '−' : '+'}${formatMoney(signed.abs())}',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: pay ? Colors.green.shade700 : Colors.red.shade700,
+                      decoration: cancelled ? TextDecoration.lineThrough : null)),
+              Text('qalıq ${formatMoney((e['balanceAfter'] as num).toDouble())}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+            ]),
           ),
-          title: Text(_entryLabels[e['type']] ?? '${e['type']}', style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: Text([
-            if (e['entryDate'] != null) formatDate(DateTime.parse(e['entryDate'] as String)),
-            if (e['receiptNumber'] != null) 'Çek: ${e['receiptNumber']}',
-            if (e['note'] != null) '${e['note']}',
-            '${e['actorName']}',
-          ].join(' · ')),
-          trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('${pay ? '−' : '+'}${formatMoney(amount)}',
-                style: TextStyle(fontWeight: FontWeight.w800, color: pay ? Colors.green.shade700 : Colors.red.shade700)),
-            Text('qalıq ${formatMoney((e['balanceAfter'] as num).toDouble())}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-          ]),
         );
       },
     );
+  }
+
+  /// Removes an already cancelled operation (and the row that cancelled it) from the history.
+  Future<void> _hideEntry(Map<String, dynamic> e) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tarixçədən silinsin?'),
+        content: const Text('Bu ləğv edilmiş əməliyyat və onun ləğvi tarixçədən silinəcək. Qalıq dəyişmir.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Xeyr')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await widget.session.api.post('/api/debts/${e['debtId']}/history/${e['id']}/hide', <String, dynamic>{});
+      if (!mounted) return;
+      _snack('Tarixçədən silindi');
+      _reload();
+    } catch (err) {
+      if (mounted) showError(context, err);
+    }
+  }
+
+  /// Cancels a "Borc yazıldı" (the whole debt) or "Borc artırıldı" entry; the server restores the balance.
+  Future<void> _cancelEntry(Map<String, dynamic> e) async {
+    final created = e['type'] == 'DEBT_CREATED';
+    final amount = formatMoney(((e['amount'] as num).toDouble()).abs());
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(created ? 'Borc silinsin?' : 'Borc artımı silinsin?'),
+        content: Text(created
+            ? 'Bu borc ($amount) ləğv olunacaq və cəmlərdən çıxacaq. Tarixçədə “ləğv edilib” kimi qalır. '
+                'Borca ödəniş edilibsə, əvvəlcə ödənişləri silin.'
+            : 'Borc $amount azalacaq. Tarixçədə “ləğv edilib” kimi qalır.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Xeyr')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await widget.session.api.post('/api/debts/${e['debtId']}/history/${e['id']}/cancel', <String, dynamic>{});
+      if (!mounted) return;
+      _snack(created ? 'Borc silindi' : 'Borc artımı silindi');
+      _reload();
+    } catch (err) {
+      if (mounted) showError(context, err);
+    }
   }
 
   Widget _debtsTab(_Profile p) {

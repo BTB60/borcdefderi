@@ -219,9 +219,71 @@ class PaymentEditCancelTest extends IntegrationTestBase {
         assertEquals(-100.0, last.get("amount").asDouble());
         assertEquals(entry.toString(), last.get("reversesEntryId").asText());
 
-        // only increases; the creation entry is not cancellable this way
+        // cancelling the creation entry cancels the whole debt: it leaves the lists and the totals
         String created = history.get(0).get("id").asText();
-        post(owner, "/api/debts/" + debt + "/history/" + created + "/cancel", Map.of()).andExpect(status().isBadRequest());
+        post(owner, "/api/debts/" + debt + "/history/" + created + "/cancel", Map.of("reason", "səhv"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.amount", is(0.0)));
+        get(owner, "/api/dashboard").andExpect(jsonPath("$.summary.companyPayables", is(0.0)));
+        get(owner, "/api/debts?type=COMPANY_PAYABLE").andExpect(jsonPath("$.total", is(0)));
+        post(owner, "/api/debts/" + debt + "/history/" + created + "/cancel", Map.of()).andExpect(status().isConflict());
+        post(owner, "/api/debts/" + debt + "/increase", Map.of("amount", "5.00", "version", 99)).andExpect(status().isConflict());
+    }
+
+    @Test
+    void aDebtWithPaymentsCannotBeCancelledUntilThePaymentsAre() throws Exception {
+        String owner = register("Borc Ləğv");
+        activateSubscription(owner, "MONTHLY");
+        UUID customer = createCustomer(owner, "Ləğv Müştəri", "+994501119903");
+        UUID debt = debtIdOf(owner, "CUSTOMER_DEBT", customer, "50.00");
+        String created = body(get(owner, "/api/debts/" + debt + "/history")).get(0).get("id").asText();
+        String paid = body(pay(owner, debt, "10.00", "CASH").andExpect(status().isCreated())).get("id").asText();
+        post(owner, "/api/debts/" + debt + "/history/" + created + "/cancel", Map.of()).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error", is("DEBT_HAS_PAYMENTS")));
+        post(owner, "/api/payments/" + paid + "/cancel", Map.of()).andExpect(status().isOk());
+        post(owner, "/api/debts/" + debt + "/history/" + created + "/cancel", Map.of()).andExpect(status().isOk());
+        get(owner, "/api/dashboard").andExpect(jsonPath("$.summary.customerDebts", is(0.0)));
+        // the card's history keeps both rows; the creation is marked cancelled
+        JsonNode card = body(get(owner, "/api/customers/" + customer + "/profile"));
+        boolean marked = false;
+        for (JsonNode e : body(get(owner, "/api/customers/" + customer + "/history"))) {
+            if (e.get("id").asText().equals(created)) marked = e.get("cancelled").asBoolean() && e.get("debtCancelled").asBoolean();
+        }
+        assertEquals(true, marked);
+        assertEquals(0, card.get("debts").size());
+
+        // a cancelled operation can be removed from the history; the whole cancelled debt goes with it
+        int before = body(get(owner, "/api/customers/" + customer + "/history")).size();
+        post(owner, "/api/debts/" + debt + "/history/" + created + "/hide", Map.of()).andExpect(status().isOk());
+        assertEquals(0, body(get(owner, "/api/customers/" + customer + "/history")).size());
+        assertEquals(true, before > 0);
+    }
+
+    @Test
+    void onlyCancelledOperationsCanBeRemovedFromTheHistory() throws Exception {
+        String owner = register("Tarixçə Sil");
+        activateSubscription(owner, "MONTHLY");
+        UUID customer = createCustomer(owner, "Tarixçə Müştəri", "+994501119904");
+        UUID debt = debtIdOf(owner, "CUSTOMER_DEBT", customer, "80.00");
+        String created = body(get(owner, "/api/debts/" + debt + "/history")).get(0).get("id").asText();
+        post(owner, "/api/debts/" + debt + "/history/" + created + "/hide", Map.of()).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error", is("NOT_CANCELLED")));
+
+        String paid = body(pay(owner, debt, "30.00", "CASH").andExpect(status().isCreated())).get("id").asText();
+        UUID inc = increase(owner, debt, "5.00");
+        post(owner, "/api/payments/" + paid + "/cancel", Map.of()).andExpect(status().isOk());
+        post(owner, "/api/debts/" + debt + "/history/" + inc + "/cancel", Map.of()).andExpect(status().isOk());
+        assertEquals(5, body(get(owner, "/api/debts/" + debt + "/history")).size());
+
+        String payEntry = null;
+        for (JsonNode e : body(get(owner, "/api/debts/" + debt + "/history"))) {
+            if (paid.equals(e.path("paymentId").asText()) && e.get("type").asText().startsWith("PAYMENT")) payEntry = e.get("id").asText();
+        }
+        post(owner, "/api/debts/" + debt + "/history/" + payEntry + "/hide", Map.of()).andExpect(status().isOk());
+        post(owner, "/api/debts/" + debt + "/history/" + inc + "/hide", Map.of()).andExpect(status().isOk());
+        JsonNode left = body(get(owner, "/api/debts/" + debt + "/history"));
+        assertEquals(1, left.size());
+        assertEquals("DEBT_CREATED", left.get(0).get("type").asText());
+        get(owner, "/api/debts/" + debt).andExpect(jsonPath("$.remainingAmount", is(80.0)));
     }
 
     @Test

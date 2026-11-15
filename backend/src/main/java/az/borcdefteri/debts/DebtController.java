@@ -63,6 +63,12 @@ public class DebtController {
         return debts.cancelIncrease(id, entryId, req == null ? null : req.reason());
     }
 
+    /** Removes an already cancelled operation (and what cancelled it) from the history view. */
+    @PostMapping("/{id}/history/{entryId}/hide")
+    public void hideEntry(@PathVariable UUID id, @PathVariable UUID entryId) {
+        debts.hideEntry(id, entryId);
+    }
+
     /** "Borc artır": add more to an existing debt (kept as its own history entry). */
     @PostMapping("/{id}/increase")
     public DebtView increase(@PathVariable UUID id, @Valid @RequestBody DebtIncreaseRequest req) {

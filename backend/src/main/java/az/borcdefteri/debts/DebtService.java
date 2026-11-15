@@ -106,6 +106,7 @@ public class DebtService {
                        EXISTS (SELECT 1 FROM financial_transactions r WHERE r.reverses_entry_id = t.id) AS cancelled
                 FROM financial_transactions t JOIN users u ON u.id = t.actor_id
                 WHERE t.debt_id = :debtId AND t.store_id = :storeId
+                  AND NOT EXISTS (SELECT 1 FROM ledger_hidden h WHERE h.entry_id = t.id)
                 ORDER BY t.created_at, t.id
                 """).param("debtId", id).param("storeId", m.storeId())
                 .query((rs, n) -> new LedgerEntry(
@@ -268,6 +269,7 @@ public class DebtService {
     public DebtView cancelIncrease(UUID debtId, UUID entryId, String reason) {
         CurrentMember m = tenant.requireBusinessMember();
         DebtView current = lockAndLoad(m, debtId);
+        requireAccess(m, current.debtType());
         record Entry(String type, BigDecimal amount, boolean cancelled, UUID actor) {}
         Entry e = jdbc.sql("""
                 SELECT t.transaction_type, t.amount, t.actor_id,
@@ -281,9 +283,15 @@ public class DebtService {
         if (!m.isOwner() && !m.userId().equals(e.actor())) {
             throw ApiException.forbidden("NOT_YOUR_OPERATION", "Yalnız özünüzün yazdığı əməliyyatı ləğv edə bilərsiniz");
         }
+        if ("DEBT_CREATED".equals(e.type())) {
+            if (e.cancelled()) {
+                throw ApiException.conflict("ALREADY_CANCELLED", "Bu əməliyyat artıq ləğv edilib");
+            }
+            return cancelDebtLocked(m, current, entryId, reason);
+        }
         if (!"DEBT_INCREASED".equals(e.type())) {
             throw ApiException.badRequest("NOT_CANCELLABLE",
-                    "Yalnız “Borc artırıldı” əməliyyatı ləğv edilə bilər (ödənişi ödənişlər bölməsində ləğv edin)");
+                    "Yalnız borc yazılışı və “Borc artırıldı” ləğv edilə bilər (ödənişi ödənişlər bölməsində ləğv edin)");
         }
         if (e.cancelled()) {
             throw ApiException.conflict("ALREADY_CANCELLED", "Bu əməliyyat artıq ləğv edilib");
@@ -311,6 +319,91 @@ public class DebtService {
                 current.partyName() + ": " + current.amount() + " -> " + newAmount + " AZN (-" + x + ")"
                         + (why == null ? "" : ", səbəb: " + why));
         return load(m, debtId);
+    }
+
+    /**
+     * Removes an already cancelled operation from the history view, together with what cancelled it so the
+     * running balance still adds up: a cancelled increase and its reversal, a voided payment and its reversal rows,
+     * or every row of a cancelled debt. Live operations cannot be hidden. Owner: anything; employee: their own.
+     */
+    public void hideEntry(UUID debtId, UUID entryId) {
+        CurrentMember m = tenant.requireBusinessMember();
+        boolean debtCancelled = lockCancelled(m, debtId);
+        requireAccess(m, load(m, debtId).debtType());
+        record E(UUID id, String type, UUID payment, UUID reverses, UUID actor) {}
+        java.util.function.Function<UUID, E> fetch = id -> jdbc.sql(
+                        "SELECT id, transaction_type, payment_id, reverses_entry_id, actor_id FROM financial_transactions "
+                                + "WHERE id = :id AND debt_id = :d AND store_id = :s")
+                .param("id", id).param("d", debtId).param("s", m.storeId())
+                .query((rs, n) -> new E(rs.getObject("id", UUID.class), rs.getString("transaction_type"),
+                        rs.getObject("payment_id", UUID.class), rs.getObject("reverses_entry_id", UUID.class),
+                        rs.getObject("actor_id", UUID.class)))
+                .optional().orElseThrow(() -> ApiException.notFound("Əməliyyat tapılmadı"));
+        E e = fetch.apply(entryId);
+        if (e.reverses() != null) {
+            e = fetch.apply(e.reverses());
+        }
+        if (!m.isOwner() && !m.userId().equals(e.actor())) {
+            throw ApiException.forbidden("NOT_YOUR_OPERATION", "Yalnız özünüzün yazdığı əməliyyatı silə bilərsiniz");
+        }
+        String where;
+        UUID x = null;
+        if (debtCancelled) {
+            where = "debt_id = :d AND store_id = :s";
+        } else if (e.payment() != null) {
+            boolean voided = jdbc.sql("SELECT voided_at IS NOT NULL FROM payments WHERE id = :p AND store_id = :s")
+                    .param("p", e.payment()).param("s", m.storeId()).query(Boolean.class).optional().orElse(false);
+            if (!voided) {
+                throw ApiException.conflict("NOT_CANCELLED", "Yalnız ləğv edilmiş əməliyyat tarixçədən silinə bilər");
+            }
+            where = "payment_id = :x AND debt_id = :d AND store_id = :s";
+            x = e.payment();
+        } else {
+            boolean reversed = jdbc.sql("SELECT EXISTS (SELECT 1 FROM financial_transactions WHERE reverses_entry_id = :x)")
+                    .param("x", e.id()).query(Boolean.class).single();
+            if (!reversed) {
+                throw ApiException.conflict("NOT_CANCELLED", "Yalnız ləğv edilmiş əməliyyat tarixçədən silinə bilər");
+            }
+            where = "(id = :x OR reverses_entry_id = :x) AND debt_id = :d AND store_id = :s";
+            x = e.id();
+        }
+        var stmt = jdbc.sql("INSERT INTO ledger_hidden (entry_id, store_id, hidden_by) SELECT id, store_id, :by "
+                        + "FROM financial_transactions WHERE " + where + " ON CONFLICT DO NOTHING")
+                .param("d", debtId).param("s", m.storeId()).param("by", m.userId());
+        if (x != null) {
+            stmt = stmt.param("x", x);
+        }
+        int n = stmt.update();
+        audit.log(m.storeId(), m.userId(), "HISTORY_ENTRY_HIDDEN", "DEBT", debtId.toString(), n + " sətir tarixçədən silindi");
+    }
+
+    /**
+     * Cancels a whole debt recorded by mistake: only when nothing is paid on it and it is not a credit sale's debt.
+     * Amount and remaining drop to 0, the creation entry is reversed, the debt disappears from lists and totals.
+     */
+    private DebtView cancelDebtLocked(CurrentMember m, DebtView current, UUID createdEntryId, String reason) {
+        if (current.paidAmount().signum() > 0) {
+            throw ApiException.conflict("DEBT_HAS_PAYMENTS",
+                    "Bu borca ödəniş edilib (" + current.paidAmount() + " AZN). Əvvəlcə ödənişləri ləğv edin");
+        }
+        boolean fromSale = jdbc.sql("SELECT EXISTS (SELECT 1 FROM sales WHERE debt_id = :d AND store_id = :s AND status = 'COMPLETED')")
+                .param("d", current.id()).param("s", m.storeId()).query(Boolean.class).single();
+        if (fromSale) {
+            throw ApiException.conflict("DEBT_FROM_SALE", "Bu borc satışdan yaranıb — satışı ləğv edin");
+        }
+        BigDecimal x = current.amount();
+        jdbc.sql("""
+                UPDATE debts SET amount = 0, remaining_amount = 0, status = 'PAID', cancelled_at = now(),
+                       updated_at = now(), version = version + 1
+                WHERE id = :id AND store_id = :storeId
+                """).param("id", current.id()).param("storeId", m.storeId()).update();
+        String why = blankToNull(reason);
+        String note = "Borc ləğv edildi" + (why == null ? "" : ": " + why);
+        ledger.append(m.storeId(), current.id(), null, "DEBT_ADJUSTED", x.negate(), Money.zero(), m.userId(),
+                tenant.today(), null, note.length() > 500 ? note.substring(0, 500) : note, createdEntryId);
+        audit.log(m.storeId(), m.userId(), "DEBT_CANCELLED", "DEBT", current.id().toString(),
+                current.partyName() + ": " + x + " AZN ləğv edildi" + (why == null ? "" : ", səbəb: " + why));
+        return load(m, current.id());
     }
 
     /**
@@ -375,7 +468,7 @@ public class DebtService {
             return List.of();
         }
         return jdbc.sql(SELECT + " WHERE d.store_id = :storeId AND d." + (customer ? "customer_id" : "company_id")
-                        + " = :partyId AND d.debt_type IN (:types) ORDER BY d.debt_date DESC, d.created_at DESC LIMIT 1000")
+                        + " = :partyId AND d.debt_type IN (:types) AND d.cancelled_at IS NULL ORDER BY d.debt_date DESC, d.created_at DESC LIMIT 1000")
                 .param("storeId", m.storeId()).param("partyId", partyId).param("types", types)
                 .query((rs, n) -> map(rs)).list();
     }
@@ -384,12 +477,17 @@ public class DebtService {
 
     /** Locks the debt row for the duration of the transaction (used by payments and edits). */
     public DebtView lockAndLoad(CurrentMember m, UUID id) {
-        boolean exists = jdbc.sql("SELECT id FROM debts WHERE id = :id AND store_id = :s FOR UPDATE")
-                .param("id", id).param("s", m.storeId()).query(UUID.class).optional().isPresent();
-        if (!exists) {
-            throw ApiException.notFound("Borc qeydi tapılmadı");
+        if (lockCancelled(m, id)) {
+            throw ApiException.conflict("DEBT_CANCELLED", "Bu borc ləğv edilib");
         }
         return load(m, id);
+    }
+
+    /** Locks the debt row; true when it was cancelled. */
+    private boolean lockCancelled(CurrentMember m, UUID id) {
+        return jdbc.sql("SELECT cancelled_at IS NOT NULL FROM debts WHERE id = :id AND store_id = :s FOR UPDATE")
+                .param("id", id).param("s", m.storeId()).query(Boolean.class).optional()
+                .orElseThrow(() -> ApiException.notFound("Borc qeydi tapılmadı"));
     }
 
     public DebtView load(CurrentMember m, UUID id) {
@@ -416,6 +514,7 @@ public class DebtService {
         Filter f = new Filter();
         f.clause("d.store_id = :storeId", "storeId", m.storeId());
         f.clause("d.debt_type = :debtType", "debtType", type.name());
+        f.clause("d.cancelled_at IS NULL", null, null);
         if (status != null && !status.isBlank()) {
             switch (status.toUpperCase(java.util.Locale.ROOT)) {
                 case "OPEN" -> f.clause("d.status = 'OPEN'", null, null);

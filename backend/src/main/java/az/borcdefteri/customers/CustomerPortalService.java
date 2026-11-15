@@ -164,7 +164,7 @@ public class CustomerPortalService {
         LocalDate today = LocalDate.now(clock.withZone(java.time.ZoneId.of("Asia/Baku")));
         List<PortalDebt> debts = jdbc.sql("""
                 SELECT debt_date, due_date, amount, paid_amount, remaining_amount, status FROM debts
-                WHERE store_id = :s AND customer_id = :c AND debt_type = 'CUSTOMER_DEBT' ORDER BY debt_date DESC, created_at DESC
+                WHERE store_id = :s AND customer_id = :c AND debt_type = 'CUSTOMER_DEBT' AND cancelled_at IS NULL ORDER BY debt_date DESC, created_at DESC
                 """).param("s", r.storeId()).param("c", r.customerId())
                 .query((rs, n) -> {
                     LocalDate due = rs.getObject("due_date", LocalDate.class);

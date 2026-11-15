@@ -362,10 +362,26 @@ export function HistoryModal({ debt, onClose, onChanged }: { debt: Debt; onClose
   const [error, setError] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
 
+  async function hideEntry(e: LedgerEntry) {
+    const ok = await confirm("Bu ləğv edilmiş əməliyyat və onun ləğvi tarixçədən silinəcək. Qalıq dəyişmir.",
+      { title: "Tarixçədən sil", confirmLabel: "Sil", danger: true });
+    if (!ok) return;
+    try {
+      await api(`/api/debts/${debt.id}/history/${e.id}/hide`, { method: "POST", json: {} });
+      setEntries(null);
+      setReload((n) => n + 1);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Silinmədi");
+    }
+  }
+
   async function cancelIncrease(e: LedgerEntry) {
+    const created = e.type === "DEBT_CREATED";
     const ok = await confirm(
-      `${formatMoney(e.amount)} borc artımı ləğv edilsin? Borc bu məbləğ qədər azalacaq (artımdan əvvəlki vəziyyətə qayıdacaq). Əməliyyat tarixçədə “ləğv edildi” kimi qalır.`,
-      { title: "Borc artımını ləğv et", confirmLabel: "Ləğv et", danger: true },
+      created
+        ? "Bu borc ləğv olunacaq və cəmlərdən çıxacaq. Tarixçədə “ləğv edildi” kimi qalır. Borca ödəniş edilibsə, əvvəlcə ödənişləri ləğv edin."
+        : `${formatMoney(e.amount)} borc artımı ləğv edilsin? Borc bu məbləğ qədər azalacaq (artımdan əvvəlki vəziyyətə qayıdacaq). Əməliyyat tarixçədə “ləğv edildi” kimi qalır.`,
+      { title: created ? "Borcu sil" : "Borc artımını ləğv et", confirmLabel: created ? "Sil" : "Ləğv et", danger: true },
     );
     if (!ok) return;
     try {
@@ -446,9 +462,14 @@ export function HistoryModal({ debt, onClose, onChanged }: { debt: Debt; onClose
                 <span className={`font-semibold tabular-nums ${e.type.startsWith("PAYMENT") ? "text-emerald-700" : "text-rose-700"}`}>{e.type === "DEBT_INCREASED" ? "+" : ""}{formatMoney(e.amount)}</span>
                 <span className="ml-2 text-xs text-slate-500">qalıq: {formatMoney(e.balanceAfter)}</span>
               </p>
-              {mayChange(e.actorId) && e.type === "DEBT_INCREASED" && !e.cancelled && (
+              {mayChange(e.actorId) && (e.cancelled || e.reversesEntryId) && (
+                <button className="mt-1 mr-3 text-xs font-medium text-slate-500 hover:text-rose-600" onClick={() => void hideEntry(e)}>
+                  Tarixçədən sil
+                </button>
+              )}
+              {mayChange(e.actorId) && (e.type === "DEBT_INCREASED" || e.type === "DEBT_CREATED") && !e.cancelled && (
                 <button className="mt-1 text-xs font-medium text-rose-600 hover:text-rose-500" onClick={() => void cancelIncrease(e)}>
-                  Ləğv et
+                  {e.type === "DEBT_CREATED" ? "Borcu sil" : "Ləğv et"}
                 </button>
               )}
               {e.paymentId && e.type !== "REVERSAL" && (

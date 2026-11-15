@@ -3,8 +3,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Alert, Button, Modal, cx } from "@/components/ui";
 import { API_URL, ApiError, api, getToken, openProtected } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { desktop, isNetworkError, receiptHtml } from "@/lib/desktop";
 import { formatMoney } from "@/lib/format";
 import type { Party, Product, Sale } from "@/lib/types";
+
+const PRODUCTS_CACHE = "pos_cache_products";
+const CUSTOMERS_CACHE = "pos_cache_customers";
+
+/** Remembers the last good list so the desktop till keeps working without internet. */
+function cached<T>(key: string, fresh?: T): T | null {
+  try {
+    if (fresh !== undefined) {
+      window.localStorage.setItem(key, JSON.stringify(fresh));
+      return fresh;
+    }
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return fresh ?? null;
+  }
+}
 
 type Line = { product: Product; quantity: string; price: string; discount: string };
 type PayMode = "cash" | "card" | "mixed" | "credit";
@@ -121,7 +140,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ sale: Sale; change: number } | null>(null);
+  const [done, setDone] = useState<{ sale: Sale; change: number; offline?: boolean } | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [autoPrint, setAutoPrint] = useState(true);
   useEffect(() => {
@@ -133,13 +152,40 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
   };
   const searchRef = useRef<HTMLInputElement>(null);
 
+  const { me } = useAuth();
+  const app = desktop();
+  const [pending, setPending] = useState(0);
+  const [printers, setPrinters] = useState<{ name: string; isDefault: boolean }[]>([]);
+  const [printer, setPrinterState] = useState<string | null>(null);
+  useEffect(() => {
+    if (!app) return;
+    app.pending().then((p) => setPending(p.count)).catch(() => undefined);
+    app.getPrinters().then(setPrinters).catch(() => undefined);
+    app.getPrinter().then(setPrinterState).catch(() => undefined);
+    return app.onPendingChange(setPending);
+  }, [app]);
+
   const loadProducts = useCallback(() => {
-    api<Product[]>("/api/products?active=true").then(setProducts).catch(() => setProducts([]));
+    api<Product[]>("/api/products?active=true")
+      .then((l) => setProducts(cached(PRODUCTS_CACHE, l)))
+      .catch(() => setProducts(cached<Product[]>(PRODUCTS_CACHE) ?? []));
   }, []);
   useEffect(() => {
     loadProducts();
-    api<Party[]>("/api/customers").then(setCustomers).catch(() => setCustomers([]));
+    api<Party[]>("/api/customers")
+      .then((l) => setCustomers(cached(CUSTOMERS_CACHE, l) ?? []))
+      .catch(() => setCustomers(cached<Party[]>(CUSTOMERS_CACHE) ?? []));
   }, [loadProducts]);
+
+  /** Desktop app: silent print on the chosen printer; browser: the PDF receipt with the print dialog. */
+  const printSale = useCallback((sale: Sale, change = 0, offline = false) => {
+    const d = desktop();
+    if (d) {
+      void d.printHtml(receiptHtml(sale, { name: me?.storeName ?? null }, { change, offline }));
+      return;
+    }
+    if (!offline) void printReceipt(sale.id);
+  }, [me?.storeName]);
 
   const categories = useMemo(() => {
     const m = new Map<string, string>();
@@ -235,10 +281,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
     if (!canSell) return;
     setBusy(true);
     setError(null);
-    try {
-      const s = await api<Sale>("/api/sales", {
-        method: "POST",
-        json: {
+    const payload = {
           items: lines.map((l) => ({ productId: l.product.id, quantity: l.quantity, unitPrice: l.price, discount: l.discount || null })),
           customerId: customer?.id ?? null,
           discount: discountAmount > 0 ? discountAmount.toFixed(2) : null,
@@ -248,12 +291,42 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
           paidCard: paidCard.toFixed(2),
           note: note || null,
           clientRequestId: requestId,
-        },
-      });
+    };
+    try {
+      let s: Sale;
+      try {
+        s = await api<Sale>("/api/sales", { method: "POST", json: payload });
+      } catch (e) {
+        const d = desktop();
+        const token = getToken();
+        if (!d || !token || !isNetworkError(e)) throw e;
+        // no internet: the desktop app keeps the sale and sends it later (same request id = recorded once)
+        await d.queueSale({ apiUrl: API_URL, token, payload, total });
+        s = {
+          id: requestId, number: "Oflayn", customerId: customer?.id ?? null, customerName: customer?.name ?? null, customerCode: null,
+          status: "COMPLETED", subtotal, discount: r2(discountAmount + bonusAmount), total, paidCash, paidCard, creditAmount: credit,
+          returnedAmount: 0, costTotal: 0, debtId: null, soldOn: "", note: note || null, createdByName: me?.fullName ?? "",
+          createdAt: new Date().toISOString(), returns: [], createdBy: null, priceLevel: level,
+          items: lines.map((l) => ({ id: l.product.id, productId: l.product.id, name: l.product.name, quantity: num(l.quantity),
+            unitPrice: num(l.price), discount: num(l.discount), lineTotal: l.total, unitCost: 0, returnedQty: 0 })),
+        };
+        // the stock on this computer goes down too, so the next offline sale sees it
+        const left = (cached<Product[]>(PRODUCTS_CACHE) ?? []).map((p) => {
+          const l = lines.find((x) => x.product.id === p.id);
+          return l ? { ...p, stockQty: p.stockQty - num(l.quantity) } : p;
+        });
+        cached(PRODUCTS_CACHE, left);
+        setDone({ sale: s, change, offline: true });
+        setPayOpen(false);
+        if (autoPrint) printSale(s, change, true);
+        reset();
+        setProducts(left);
+        return;
+      }
       setDone({ sale: s, change });
       api<Party[]>("/api/customers").then(setCustomers).catch(() => undefined); // fresh bonus balances
       setPayOpen(false);
-      if (autoPrint) void printReceipt(s.id);
+      if (autoPrint) printSale(s, change);
       reset();
       loadProducts();
       onSold?.();
@@ -592,6 +665,22 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
             <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={autoPrint} onChange={(e) => toggleAutoPrint(e.target.checked)} />
             Satışdan sonra çeki printerdən çıxar
           </label>
+          {app && (
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              Printer
+              <select value={printer ?? ""} onChange={(e) => { const v = e.target.value || null; setPrinterState(v); void app.setPrinter(v); }}
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs outline-none focus:border-gold-500">
+                <option value="">Windows-un əsas printeri</option>
+                {printers.map((p) => <option key={p.name} value={p.name}>{p.name}{p.isDefault ? " (əsas)" : ""}</option>)}
+              </select>
+            </label>
+          )}
+          {app && pending > 0 && (
+            <button type="button" onClick={() => void app.syncNow()}
+              className="w-full rounded-xl bg-amber-50 px-3 py-2 text-left text-xs font-medium text-amber-800 ring-1 ring-amber-200 hover:bg-amber-100">
+              {pending} satış hələ serverə göndərilməyib — internet gələndə özü gedəcək. İndi göndər
+            </button>
+          )}
           <button type="button" disabled={cart.length === 0 || busy} onClick={() => { setError(null); setPayOpen(true); }}
             className="flex w-full items-center justify-between rounded-2xl bg-gold-500 px-5 py-4 text-navy-900 shadow-sm transition hover:bg-gold-600 hover:text-white active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50">
             <span className="text-base font-semibold">{busy ? "Saxlanılır…" : "Ödəniş"}</span>
@@ -677,7 +766,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
       {done && (
         <Modal open title="Satış tamamlandı" onClose={() => { setDone(null); searchRef.current?.focus(); }}
           footer={<>
-            <Button variant="outline" onClick={() => void printReceipt(done.sale.id)}>{autoPrint ? "Çeki yenidən çap et" : "Çeki çap et"}</Button>
+            <Button variant="outline" onClick={() => printSale(done.sale, done.change, done.offline)}>{autoPrint ? "Çeki yenidən çap et" : "Çeki çap et"}</Button>
             <Button variant="gold" autoFocus data-pos-next onClick={() => { setDone(null); setTimeout(() => searchRef.current?.focus(), 0); }}>Yeni satış <Kbd>Boşluq</Kbd></Button>
           </>}>
           <div className="text-center">
@@ -685,6 +774,11 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
               <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth={2.5} aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
             </div>
             <p className="text-sm text-slate-500">{done.sale.number}{done.sale.customerName ? ` · ${done.sale.customerName}` : ""}</p>
+            {done.offline && (
+              <p className="mx-auto mt-2 max-w-xs rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
+                İnternet yoxdur: satış bu kompüterdə saxlanıldı, internet gələndə özü göndəriləcək.
+              </p>
+            )}
             <p className="mt-1 font-serif text-3xl font-semibold tabular-nums text-navy-800">{formatMoney(done.sale.total)}</p>
             <div className="mx-auto mt-4 max-w-xs space-y-1 text-sm">
               {done.sale.paidCash > 0 && <div className="flex justify-between"><span className="text-slate-500">Nağd</span><span className="tabular-nums">{formatMoney(done.sale.paidCash)}</span></div>}

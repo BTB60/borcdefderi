@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8">
+  <title>HesabPro Kassa</title>
+  <style>
+    body { margin: 0; height: 100vh; display: flex; align-items: center; justify-content: center; background: #0f1b33;
+           color: #fff; font: 16px "Segoe UI", Arial, sans-serif; text-align: center }
+    h1 { font-size: 26px; margin: 0 0 8px } p { color: rgba(255,255,255,.7); max-width: 460px; line-height: 1.5 }
+    button { margin-top: 18px; background: #d6ad60; color: #0f1b33; border: 0; border-radius: 12px; padding: 12px 22px;
+             font-weight: 600; font-size: 15px; cursor: pointer }
+  </style>
+</head>
+<body>
+  <div>
+    <h1>İnternet yoxdur</h1>
+    <p>Kassanı ilk dəfə açmaq üçün internet lazımdır. Bir dəfə açılandan sonra internet kəsiləndə də satış davam edir.</p>
+    <button onclick="location.href = new URLSearchParams(location.search).get('to') || 'about:blank'">Yenidən cəhd et</button>
+  </div>
+</body>
+</html>

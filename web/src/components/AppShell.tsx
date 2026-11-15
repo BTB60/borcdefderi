@@ -88,8 +88,33 @@ export function AppShell({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me, isSuperAdmin, can, pathname, items, router]);
 
+  // HesabPro Kassa (Windows app): only the till, full screen, no menu
+  const kiosk = typeof window !== "undefined" && !!window.hesabDesktop;
+  useEffect(() => {
+    if (kiosk && pathname !== "/satis") router.replace("/satis");
+  }, [kiosk, pathname, router]);
+
   const subscription = me?.subscription;
   const roleLabel = isSuperAdmin ? "Platforma administratoru" : isOwner ? "Mağaza sahibi" : me?.jobTitle ? JOB_TITLE_LABEL[me.jobTitle] : "İşçi";
+
+  if (kiosk) {
+    return (
+      <div className="min-h-screen bg-canvas">
+        <header className="flex items-center justify-between gap-3 bg-navy-800 px-5 py-2.5 text-white">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1"><Image src="/logo-mark.png" alt="" width={48} height={48} className="h-full w-full object-contain" /></div>
+            <p className="font-serif text-base font-semibold">HesabPro Kassa</p>
+            <span className="text-xs text-white/50">{me?.storeName}</span>
+          </div>
+          <div className="flex items-center gap-4 text-sm">
+            <span className="text-white/70">{me?.fullName} · {roleLabel}</span>
+            <button onClick={signOut} className="rounded-lg border border-white/20 px-3 py-1 text-xs text-white/80 hover:border-gold-500 hover:text-gold-400">Çıxış</button>
+          </div>
+        </header>
+        <main className="p-4">{pathname === "/satis" ? children : null}</main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-canvas">

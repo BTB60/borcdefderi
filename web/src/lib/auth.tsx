@@ -4,6 +4,17 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api, getToken, setToken } from "./api";
 import type { AuthResponse, Me, Permission } from "./types";
 
+// the desktop till remembers who is signed in, so it opens (and sells) without internet too
+const ME_CACHE = "hp_me_cache";
+const isDesktop = () => typeof window !== "undefined" && !!window.hesabDesktop;
+function rememberMe(me: Me | null) {
+  if (!isDesktop()) return;
+  try {
+    if (me) window.localStorage.setItem(ME_CACHE, JSON.stringify(me));
+    else window.localStorage.removeItem(ME_CACHE);
+  } catch { /* storage blocked */ }
+}
+
 interface AuthContextValue {
   me: Me | null;
   loading: boolean;
@@ -31,8 +42,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      setMe(await api<Me>("/api/auth/me"));
-    } catch {
+      const fresh = await api<Me>("/api/auth/me");
+      rememberMe(fresh);
+      setMe(fresh);
+    } catch (e) {
+      if (isDesktop() && e instanceof TypeError) {
+        try {
+          const raw = window.localStorage.getItem(ME_CACHE);
+          if (raw) return setMe(JSON.parse(raw) as Me);
+        } catch { /* storage blocked */ }
+      }
       setMe(null);
     }
   }, []);
@@ -43,11 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback((response: AuthResponse) => {
     setToken(response.token);
+    rememberMe(response.me);
     setMe(response.me);
   }, []);
 
   const signOut = useCallback(() => {
     setToken(null);
+    rememberMe(null);
     setMe(null);
     window.location.href = "/login";
   }, []);

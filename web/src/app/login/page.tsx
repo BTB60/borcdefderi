@@ -25,7 +25,8 @@ export default function LoginPage() {
     try {
       const res = await api<AuthResponse>("/api/auth/login", { method: "POST", json: { email, password } });
       signIn(res);
-      router.replace(res.me.platformRole === "SUPER_ADMIN" ? "/admin" : "/dashboard");
+      // the desktop till (HesabPro Kassa) opens straight on the sales screen
+      router.replace(window.hesabDesktop ? "/satis" : res.me.platformRole === "SUPER_ADMIN" ? "/admin" : "/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Serverlə əlaqə qurula bilmədi");
     } finally {

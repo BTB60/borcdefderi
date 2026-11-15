@@ -1,0 +1,53 @@
+name: Desktop Kassa
+
+# Builds the "HesabPro Kassa" Windows installer and publishes it as the "desktop-latest" pre-release.
+# Installed apps find new versions there by themselves (latest.yml).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop-kassa.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-kassa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      # every build gets a higher version, so installed tills update themselves
+      - run: npm pkg set version=1.0.${{ github.run_number }}
+      - run: npx electron-builder --win nsis --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HesabPro-Kassa
+          path: |
+            desktop/dist/HesabPro-Kassa-Setup.exe
+            desktop/dist/latest.yml
+      - name: Publish to the desktop-latest pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-latest
+          name: HesabPro Kassa (Windows, son versiya)
+          prerelease: true
+          files: |
+            desktop/dist/HesabPro-Kassa-Setup.exe
+            desktop/dist/HesabPro-Kassa-Setup.exe.blockmap
+            desktop/dist/latest.yml
+          body: "Avtomatik yığılıb: ${{ github.ref_name }} @ ${{ github.sha }}"

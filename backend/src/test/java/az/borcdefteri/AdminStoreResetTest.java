@@ -124,4 +124,82 @@ class AdminStoreResetTest extends IntegrationTestBase {
         get(owner, "/api/customers").andExpect(status().isPaymentRequired());
         post(admin, "/api/admin/stores/" + id + "/cancel-subscription", Map.of()).andExpect(status().isConflict());
     }
+
+    private double stockOf(String owner, String name) throws Exception {
+        for (JsonNode p : body(get(owner, "/api/products"))) {
+            if (name.equals(p.get("name").asText())) return p.get("stockQty").asDouble();
+        }
+        throw new AssertionError("no product " + name);
+    }
+
+    @Test
+    void theAdminWipesOnlyTheChosenParts() throws Exception {
+        String owner = register("Seçmə Silmə");
+        activateSubscription(owner, "MONTHLY");
+        fill(owner);
+        String id = storeId(owner);
+        String admin = adminToken();
+        assertEquals(8.0, stockOf(owner, "Çay"));
+
+        // only stock: products stay with 0, sales and debts stay
+        post(admin, "/api/admin/stores/" + id + "/purge", Map.of("parts", List.of("STOCK"), "confirmName", "Seçmə Silmə"))
+                .andExpect(status().isOk());
+        assertEquals(0.0, stockOf(owner, "Çay"));
+        get(owner, "/api/sales").andExpect(jsonPath("$.total", is(1)));
+        get(owner, "/api/customers").andExpect(jsonPath("$", hasSize(1)));
+
+        // sales: gone with the credit debt they made; the plain customer debt stays
+        post(admin, "/api/admin/stores/" + id + "/purge", Map.of("parts", List.of("SALES"), "confirmName", "Seçmə Silmə"))
+                .andExpect(status().isOk());
+        get(owner, "/api/sales").andExpect(jsonPath("$.total", is(0)));
+        get(owner, "/api/debts?type=CUSTOMER_DEBT").andExpect(jsonPath("$.total", is(1)));
+
+        // name must match, parts must be known
+        post(admin, "/api/admin/stores/" + id + "/purge", Map.of("parts", List.of("SALES"), "confirmName", "x"))
+                .andExpect(status().isBadRequest());
+        post(admin, "/api/admin/stores/" + id + "/purge", Map.of("parts", List.of("NOPE"), "confirmName", "Seçmə Silmə"))
+                .andExpect(status().isBadRequest());
+        // customers pull in debts
+        post(admin, "/api/admin/stores/" + id + "/purge", Map.of("parts", List.of("CUSTOMERS"), "confirmName", "Seçmə Silmə"))
+                .andExpect(status().isOk());
+        get(owner, "/api/customers").andExpect(jsonPath("$", hasSize(0)));
+        get(owner, "/api/debts?type=CUSTOMER_DEBT").andExpect(jsonPath("$.total", is(0)));
+        get(owner, "/api/products").andExpect(jsonPath("$", hasSize(1)));
+    }
+
+    @Test
+    void theAdminFindsAndDeletesOneOperation() throws Exception {
+        String owner = register("Tək Əməliyyat");
+        activateSubscription(owner, "MONTHLY");
+        fill(owner);
+        String id = storeId(owner);
+        String admin = adminToken();
+
+        String saleNo = body(get(owner, "/api/sales")).get("items").get(0).get("number").asText();
+        JsonNode found = body(get(admin, "/api/admin/stores/" + id + "/operations?q=" + saleNo));
+        assertEquals("SALE", found.get(0).get("type").asText());
+        delete(admin, "/api/admin/stores/" + id + "/operations/SALE/" + found.get(0).get("id").asText());
+        get(owner, "/api/sales").andExpect(jsonPath("$.total", is(0)));
+        assertEquals(10.0, stockOf(owner, "Çay"));
+
+        // a payment: the debt is recomputed (100 debt, 30 cancelled + 10 card live -> paid 10)
+        JsonNode all = body(get(admin, "/api/admin/stores/" + id + "/operations?q=10.00"));
+        String pay = null;
+        for (JsonNode o : all) if ("PAYMENT".equals(o.get("type").asText()) && o.get("amount").asDouble() == 10.0) pay = o.get("id").asText();
+        delete(admin, "/api/admin/stores/" + id + "/operations/PAYMENT/" + pay);
+        JsonNode debts = body(get(owner, "/api/debts?type=CUSTOMER_DEBT")).get("items");
+        assertEquals(100.0, debts.get(0).get("remainingAmount").asDouble());
+
+        // a store owner may not use it
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .get("/api/admin/stores/" + id + "/operations").header("Authorization", "Bearer " + owner))
+                .andExpect(status().isForbidden());
+        get(admin, "/api/admin/audit-logs?storeId=" + id + "&limit=50")
+                .andExpect(jsonPath("$[?(@.action == 'OPERATION_DELETED')]", hasSize(2)));
+    }
+
+    private void delete(String token, String url) throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(url)
+                .header("Authorization", "Bearer " + token)).andExpect(status().isOk());
+    }
 }

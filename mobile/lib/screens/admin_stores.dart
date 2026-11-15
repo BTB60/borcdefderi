@@ -11,6 +11,20 @@ double _num(Object? v) => (v as num?)?.toDouble() ?? 0;
 int _int(Object? v) => (v as num?)?.toInt() ?? 0;
 DateTime? _date(Object? v) => v == null ? null : DateTime.tryParse('$v');
 
+/// Parts of a store's data the admin can wipe one by one (the server pulls in what they depend on).
+const _purgeParts = [
+  ('STOCK', 'Anbar qalığı və hərəkətləri', 'məhsullar qalır, qalıq 0 olur'),
+  ('PRODUCTS', 'Məhsullar və kateqoriyalar', 'anbar və satışlar da silinir'),
+  ('SALES', 'Satışlar və qaytarmalar', 'mal anbara qayıdır, satış borcları çıxılır'),
+  ('DEBTS', 'Borclar və ödənişlər', ''),
+  ('CASH', 'Kassa əməliyyatları', 'hesablar qalır, balans 0 olur'),
+  ('EXPENSES', 'Xərclər və büdcə', ''),
+  ('CUSTOMERS', 'Müştərilər və şirkətlər', 'borclar və satışlar da silinir'),
+  ('POCKET', 'Cib pulu', ''),
+];
+
+const _opTypes = {'SALE': 'Satış', 'DEBT': 'Borc', 'PAYMENT': 'Ödəniş'};
+
 const _months = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'İyn', 'İyl', 'Avq', 'Sen', 'Okt', 'Noy', 'Dek'];
 
 // ============================================================ overview
@@ -402,6 +416,91 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
   List<Map<String, dynamic>>? _log;
   late Map<String, dynamic> _store = widget.store;
   bool _busy = false;
+  final Set<String> _parts = {};
+  final _opQuery = TextEditingController();
+  List<Map<String, dynamic>>? _ops;
+
+  @override
+  void dispose() {
+    _opQuery.dispose();
+    super.dispose();
+  }
+
+  Future<void> _searchOps() async {
+    setState(() => _ops = null);
+    try {
+      final q = _opQuery.text.trim();
+      final list = (await widget.session.api.get('/api/admin/stores/$_id/operations', query: q.isEmpty ? null : {'q': q}) as List)
+          .cast<Map<String, dynamic>>();
+      if (mounted) setState(() => _ops = list);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _ops = []);
+        showError(context, e);
+      }
+    }
+  }
+
+  Future<void> _deleteOp(Map<String, dynamic> o) async {
+    final type = '${o['type']}';
+    final what = '${_opTypes[type]}${o['number'] != null ? ' ${o['number']}' : ''} · ${o['party'] ?? '—'} · ${formatMoney(_num(o['amount']))}';
+    final note = type == 'SALE'
+        ? 'Mal anbara qayıdır, satışın pulu kassadan, nisyə hissəsi müştərinin borcundan çıxılır.'
+        : type == 'DEBT'
+            ? 'Borc bütün ödənişləri və tarixçəsi ilə silinir.'
+            : 'Ödəniş və onun kassa yazılışı silinir, borc yenidən hesablanır.';
+    if (!await _confirm('Əməliyyatı sil', '$what\n\n$note\n\nGeri qaytarılmır.', 'Sil')) return;
+    await _run(() => widget.session.api.delete('/api/admin/stores/$_id/operations/$type/${o['id']}'), 'Əməliyyat silindi');
+    _searchOps();
+  }
+
+  /// Asks for the store name, then wipes [parts] (or everything when null).
+  Future<void> _wipe(List<String>? parts) async {
+    final name = '${_store['name']}';
+    final typed = TextEditingController();
+    final what = parts == null
+        ? 'bütün məlumatları (müştərilər, borclar, ödənişlər, satışlar, məhsullar, anbar, kassa, xərclər, cib pulu)'
+        : _purgeParts.where((p) => parts.contains(p.$1)).map((p) => p.$2).join(', ');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
+        final match = typed.text.trim().toLowerCase() == name.trim().toLowerCase();
+        return AlertDialog(
+          title: Text(parts == null ? 'Hamısını sil' : 'Seçilənləri sil', style: TextStyle(color: Colors.red.shade800)),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('“$name” mağazasında silinəcək: $what.'),
+              const SizedBox(height: 8),
+              Text('Geri qaytarılmır.', style: TextStyle(color: Colors.red.shade800, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              Text('Təsdiq üçün mağazanın adını yazın: $name', style: const TextStyle(fontSize: 13)),
+              const SizedBox(height: 6),
+              TextField(controller: typed, onChanged: (_) => set(() {}), decoration: InputDecoration(hintText: name)),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ləğv et')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+              onPressed: match ? () => Navigator.pop(ctx, true) : null,
+              child: const Text('Sil'),
+            ),
+          ],
+        );
+      }),
+    );
+    final confirmName = typed.text;
+    typed.dispose();
+    if (ok != true) return;
+    if (parts == null) {
+      await _run(() => widget.session.api.post('/api/admin/stores/$_id/reset-data', {'confirmName': confirmName}),
+          '“$name” mağazasının məlumatları sıfırlandı');
+    } else {
+      await _run(() => widget.session.api.post('/api/admin/stores/$_id/purge', {'parts': parts, 'confirmName': confirmName}),
+          'Seçilən məlumatlar silindi');
+      if (mounted) setState(_parts.clear);
+    }
+  }
 
   String get _id => '${widget.store['id']}';
 
@@ -562,46 +661,6 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
         suspend ? 'Mağaza dayandırıldı' : 'Mağaza bərpa edildi');
   }
 
-  Future<void> _reset() async {
-    final name = '${_store['name']}';
-    final typed = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
-        final match = typed.text.trim().toLowerCase() == name.trim().toLowerCase();
-        return AlertDialog(
-          title: Text('Məlumatları sıfırla', style: TextStyle(color: Colors.red.shade800)),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('“$name” mağazasının bütün məlumatları silinəcək: müştərilər, şirkətlər, borclar, ödənişlər, satışlar, '
-                  'məhsullar, anbar, kassa əməliyyatları, xərclər, cib pulu.'),
-              const SizedBox(height: 8),
-              Text('Bu əməliyyat geri qaytarılmır.', style: TextStyle(color: Colors.red.shade800, fontWeight: FontWeight.w700)),
-              Text('Hesab, işçilər və abunəlik qalır.', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-              const SizedBox(height: 12),
-              Text('Təsdiq üçün mağazanın adını yazın: $name', style: const TextStyle(fontSize: 13)),
-              const SizedBox(height: 6),
-              TextField(controller: typed, onChanged: (_) => set(() {}), decoration: InputDecoration(hintText: name)),
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ləğv et')),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-              onPressed: match ? () => Navigator.pop(ctx, true) : null,
-              child: const Text('Hamısını sil'),
-            ),
-          ],
-        );
-      }),
-    );
-    final confirmName = typed.text;
-    typed.dispose();
-    if (ok != true) return;
-    await _run(() => widget.session.api.post('/api/admin/stores/$_id/reset-data', {'confirmName': confirmName}),
-        '“$name” mağazasının məlumatları sıfırlandı');
-  }
-
   Future<void> _open(Uri uri) async {
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tətbiq açıla bilmədi')));
@@ -614,13 +673,14 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
     final status = card?['status'] ?? _store['status'];
     final active = _store['activePlan'] != null;
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           title: Text('${_store['name']}'),
           bottom: const TabBar(isScrollable: true, tabs: [
             Tab(text: 'Ümumi'),
             Tab(text: 'Abunəlik'),
+            Tab(text: 'Əməliyyatlar'),
             Tab(text: 'Fəaliyyət'),
             Tab(text: 'Təhlükəli zona'),
           ]),
@@ -668,6 +728,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                 : TabBarView(children: [
                     _infoTab(card),
                     _subsTab(active),
+                    _opsTab(),
                     _logTab(),
                     _dangerTab(status == 'ACTIVE'),
                   ]),
@@ -793,6 +854,64 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
     );
   }
 
+  Widget _opsTab() {
+    if (_ops == null && !_busy) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _ops == null) _searchOps();
+      });
+    }
+    final ops = _ops;
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+        child: TextField(
+          controller: _opQuery,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_) => _searchOps(),
+          decoration: InputDecoration(
+            hintText: 'Satış nömrəsi, çek nömrəsi, müştəri, məbləğ',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: IconButton(icon: const Icon(Icons.arrow_forward), onPressed: _searchOps),
+          ),
+        ),
+      ),
+      Expanded(
+        child: ops == null
+            ? const Center(child: CircularProgressIndicator())
+            : ops.isEmpty
+                ? ListView(children: const [EmptyState(title: 'Əməliyyat tapılmadı')])
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                    itemCount: ops.length,
+                    itemBuilder: (_, i) {
+                      final o = ops[i];
+                      final type = '${o['type']}';
+                      final color = type == 'SALE' ? navy : type == 'DEBT' ? Colors.red.shade700 : Colors.green.shade700;
+                      return Card(
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: color.withValues(alpha: 0.12),
+                            child: Icon(type == 'SALE' ? Icons.point_of_sale : type == 'DEBT' ? Icons.receipt_long : Icons.payments, color: color, size: 20),
+                          ),
+                          title: Text('${o['number'] ?? _opTypes[type]}${o['party'] != null ? ' · ${o['party']}' : ''}',
+                              maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: Text('${o['label']} · ${formatDateTime(_date(o['at'])!)}'),
+                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Text(formatMoney(_num(o['amount'])), style: const TextStyle(fontWeight: FontWeight.w800)),
+                            IconButton(
+                              tooltip: 'Sil',
+                              icon: Icon(Icons.delete_outline, color: Colors.red.shade400),
+                              onPressed: _busy ? null : () => _deleteOp(o),
+                            ),
+                          ]),
+                        ),
+                      );
+                    },
+                  ),
+      ),
+    ]);
+  }
+
   Widget _logTab() {
     final log = _log ?? const [];
     const labels = {
@@ -858,7 +977,30 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Məlumatları sıfırla', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.red.shade800)),
+            Text('Məlumatları sil', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.red.shade800)),
+            const SizedBox(height: 6),
+            const Text('Yalnız seçilənlər:', style: TextStyle(fontWeight: FontWeight.w700)),
+            for (final p in _purgeParts)
+              CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                activeColor: Colors.red.shade700,
+                value: _parts.contains(p.$1),
+                onChanged: (v) => setState(() => v == true ? _parts.add(p.$1) : _parts.remove(p.$1)),
+                title: Text(p.$2),
+                subtitle: p.$3.isEmpty ? null : Text(p.$3, style: const TextStyle(fontSize: 11)),
+              ),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade800, side: BorderSide(color: Colors.red.shade300)),
+                onPressed: _busy || _parts.isEmpty ? null : () => _wipe(_parts.toList()),
+                icon: const Icon(Icons.delete_sweep_outlined),
+                label: Text('Seçilənləri sil${_parts.isEmpty ? '' : ' (${_parts.length})'}'),
+              ),
+            ),
+            const Divider(height: 24),
             const SizedBox(height: 6),
             const Text('Müştərilər, şirkətlər, borclar, ödənişlər, satışlar, məhsullar, anbar, kassa əməliyyatları, xərclər və cib pulu '
                 'tamamilə silinir. Hesab, işçilər, abunəlik və audit jurnalı qalır — mağaza təmiz başlayır. Geri qaytarılmır.'),
@@ -867,7 +1009,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
               width: double.infinity,
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-                onPressed: _busy ? null : _reset,
+                onPressed: _busy ? null : () => _wipe(null),
                 icon: const Icon(Icons.delete_forever_outlined),
                 label: const Text('Bütün məlumatları sil'),
               ),

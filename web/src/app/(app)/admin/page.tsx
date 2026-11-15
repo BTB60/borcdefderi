@@ -109,6 +109,7 @@ const ACTION_LABEL: Record<string, string> = {
   PAYMENT_SETTINGS_UPDATED: "Ödəniş ayarları dəyişdirildi",
   SUBSCRIPTION_CANCELLED: "Abunəlik dayandırıldı",
   STORE_DATA_RESET: "Mağazanın məlumatları sıfırlandı",
+  OPERATION_DELETED: "Admin əməliyyatı sildi",
   DEBT_CANCELLED: "Borc silindi",
   DEBT_INCREASE_CANCELLED: "Borc artımı ləğv edildi",
   HISTORY_ENTRY_HIDDEN: "Tarixçədən silindi",

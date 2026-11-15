@@ -17,7 +17,27 @@ type StoreCard = {
   employees: { fullName: string; email: string; active: boolean; jobTitle: JobTitle | null }[];
 };
 
-type Section = "info" | "subscription" | "activity" | "danger";
+type Section = "info" | "subscription" | "operations" | "activity" | "danger";
+
+type Operation = { type: "SALE" | "DEBT" | "PAYMENT"; id: string; number: string | null; party: string | null; amount: number; at: string; label: string };
+
+/** Parts of a store's data the admin can wipe one by one (some pull in others, the server handles that). */
+const PURGE_PARTS: { key: string; label: string; note?: string }[] = [
+  { key: "STOCK", label: "Anbar qalığı və hərəkətləri", note: "məhsullar qalır, qalıq 0 olur" },
+  { key: "PRODUCTS", label: "Məhsullar və kateqoriyalar", note: "anbar və satışlar da silinir" },
+  { key: "SALES", label: "Satışlar və qaytarmalar", note: "mal anbara qayıdır, satış borcları çıxılır" },
+  { key: "DEBTS", label: "Borclar və ödənişlər" },
+  { key: "CASH", label: "Kassa əməliyyatları", note: "hesablar qalır, balans 0 olur" },
+  { key: "EXPENSES", label: "Xərclər, büdcə, təkrarlanan xərclər" },
+  { key: "CUSTOMERS", label: "Müştərilər və şirkətlər", note: "borclar və satışlar da silinir" },
+  { key: "POCKET", label: "Cib pulu" },
+];
+
+const OP_TYPE: Record<Operation["type"], { label: string; tone: "navy" | "rose" | "emerald" }> = {
+  SALE: { label: "Satış", tone: "navy" },
+  DEBT: { label: "Borc", tone: "rose" },
+  PAYMENT: { label: "Ödəniş", tone: "emerald" },
+};
 
 const STATUS: Record<SubscriptionRecord["status"], { label: string; tone: "emerald" | "slate" | "amber" | "rose" }> = {
   ACTIVE: { label: "Aktiv", tone: "emerald" },
@@ -56,6 +76,18 @@ export function StoreDrawer({ store, onClose, onActivate, onExtend, onChanged, a
   const [busy, setBusy] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
   const [resetName, setResetName] = useState("");
+  const [parts, setParts] = useState<string[]>([]);
+  const [opQuery, setOpQuery] = useState("");
+  const [ops, setOps] = useState<Operation[] | null>(null);
+  const searchOps = useCallback((q: string) => {
+    setOps(null);
+    api<Operation[]>(`/api/admin/stores/${store.id}/operations${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`)
+      .then(setOps).catch((e) => { setOps([]); setError(e instanceof ApiError ? e.message : "Axtarış alınmadı"); });
+  }, [store.id]);
+  useEffect(() => {
+    if (section === "operations" && !ops) searchOps(opQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section]);
   const now = useNow(1000);
 
   const load = useCallback(() => {
@@ -113,12 +145,46 @@ export function StoreDrawer({ store, onClose, onActivate, onExtend, onChanged, a
     }, `“${store.name}” mağazasının məlumatları sıfırlandı`);
   }
 
+  async function deleteOperation(o: Operation) {
+    const what = `${OP_TYPE[o.type].label}${o.number ? ` ${o.number}` : ""} · ${o.party ?? "—"} · ${formatMoney(o.amount)}`;
+    const ok = await confirm(
+      <>
+        <b>{what}</b> həmişəlik silinsin?
+        <span className="mt-2 block text-xs text-slate-500">
+          {o.type === "SALE" ? "Mal anbara qayıdır, satışın pulu kassadan, nisyə hissəsi müştərinin borcundan çıxılır." :
+            o.type === "DEBT" ? "Borc bütün ödənişləri və tarixçəsi ilə birlikdə silinir." :
+              "Ödəniş və onun kassa yazılışı silinir, borc yenidən hesablanır."}
+        </span>
+        <span className="mt-1 block font-semibold text-rose-700">Geri qaytarılmır.</span>
+      </>,
+      { title: "Əməliyyatı sil", confirmLabel: "Sil", danger: true },
+    );
+    if (!ok) return;
+    await run(() => api(`/api/admin/stores/${store.id}/operations/${o.type}/${o.id}`, { method: "DELETE" }), "Əməliyyat silindi");
+    searchOps(opQuery);
+  }
+
+  async function purgeParts() {
+    const names = PURGE_PARTS.filter((p) => parts.includes(p.key)).map((p) => p.label).join(", ");
+    const ok = await confirm(
+      <>“{store.name}” mağazasında bunlar silinəcək: <b>{names}</b>.<span className="mt-2 block font-semibold text-rose-700">Geri qaytarılmır.</span></>,
+      { title: "Seçilənləri sil", confirmLabel: "Sil", danger: true },
+    );
+    if (!ok) return;
+    await run(async () => {
+      await api(`/api/admin/stores/${store.id}/purge`, { method: "POST", json: { parts, confirmName: resetName } });
+      setParts([]);
+      setResetName("");
+    }, "Seçilən məlumatlar silindi");
+  }
+
   const phone = card?.ownerPhone || card?.phone || store.ownerPhone || store.phone;
   const wa = waLink(phone, `Salam${card?.ownerName ? ", " + card.ownerName : ""}! HesabPro dəstək xidmətindən yazırıq.`);
   const status = card?.status ?? store.status;
   const SECTIONS: { key: Section; label: string }[] = [
     { key: "info", label: "Ümumi" },
     { key: "subscription", label: `Abunəlik${subs ? ` (${subs.length})` : ""}` },
+    { key: "operations", label: "Əməliyyatlar" },
     { key: "activity", label: "Fəaliyyət" },
     { key: "danger", label: "Təhlükəli zona" },
   ];
@@ -237,6 +303,32 @@ export function StoreDrawer({ store, onClose, onActivate, onExtend, onChanged, a
         </div>
       ))}
 
+      {section === "operations" && (
+        <div className="space-y-4">
+          <form onSubmit={(e) => { e.preventDefault(); searchOps(opQuery); }} className="flex gap-2">
+            <input value={opQuery} onChange={(e) => setOpQuery(e.target.value)} placeholder="Satış nömrəsi (S-000123), çek nömrəsi, müştəri adı və ya məbləğ"
+              className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-gold-500" />
+            <Button type="submit" variant="outline">Axtar</Button>
+          </form>
+          <p className="text-xs text-slate-500">Boş axtarış son satışları, borcları və ödənişləri göstərir. Silinən əməliyyat audit jurnalına yazılır.</p>
+          {!ops ? <Spinner /> : ops.length === 0 ? <EmptyState title="Əməliyyat tapılmadı" /> : (
+            <ul className="max-h-[50vh] divide-y divide-slate-100 overflow-y-auto rounded-2xl ring-1 ring-slate-200">
+              {ops.map((o) => (
+                <li key={`${o.type}-${o.id}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                  <Badge tone={OP_TYPE[o.type].tone}>{OP_TYPE[o.type].label}</Badge>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-navy-800">{o.number ?? o.label}{o.party ? ` · ${o.party}` : ""}</p>
+                    <p className="text-xs text-slate-500">{formatDateTime(o.at)} · {o.label}</p>
+                  </div>
+                  <span className="font-serif font-semibold tabular-nums text-navy-800">{formatMoney(o.amount)}</span>
+                  <Button variant="ghost" className="px-2.5 py-1.5 text-rose-600" disabled={busy} onClick={() => deleteOperation(o)}>Sil</Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {section === "activity" && (!log ? <Spinner /> : log.length === 0 ? <EmptyState title="Qeyd yoxdur" /> : (
         <ol className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
           {log.map((a) => (
@@ -262,7 +354,7 @@ export function StoreDrawer({ store, onClose, onActivate, onExtend, onChanged, a
             <Button variant={status === "ACTIVE" ? "danger" : "outline"} disabled={busy} onClick={toggleStore}>{status === "ACTIVE" ? "Dayandır" : "Bərpa et"}</Button>
           </div>
           <div className="rounded-2xl border-2 border-rose-200 bg-rose-50/50 p-4">
-            <p className="font-semibold text-rose-700">Məlumatları sıfırla</p>
+            <p className="font-semibold text-rose-700">Məlumatları sil</p>
             <p className="mt-1 text-sm text-slate-600">
               Müştərilər, şirkətlər, borclar, ödənişlər, satışlar, məhsullar, anbar, kassa əməliyyatları, xərclər və cib pulu <b>tamamilə silinir</b>.
               Hesab, işçilər, abunəlik və audit jurnalı qalır — mağaza təmiz başlayır. <b>Geri qaytarılmır.</b>
@@ -272,9 +364,29 @@ export function StoreDrawer({ store, onClose, onActivate, onExtend, onChanged, a
               <input value={resetName} onChange={(e) => setResetName(e.target.value)} placeholder={store.name}
                 className="mt-1 w-full rounded-xl border border-rose-300 bg-white px-3 py-2 text-sm outline-none focus:border-rose-500" />
             </label>
-            <Button variant="danger" className="mt-3" disabled={busy || resetName.trim().toLowerCase() !== store.name.trim().toLowerCase()} onClick={resetData}>
-              {busy ? "Silinir…" : "Bütün məlumatları sil"}
-            </Button>
+            <div className="mt-4 rounded-xl bg-white p-3 ring-1 ring-rose-200">
+              <p className="mb-2 text-sm font-semibold text-navy-800">Yalnız seçilənləri sil</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {PURGE_PARTS.map((p) => {
+                  const on = parts.includes(p.key);
+                  return (
+                    <label key={p.key} className={cx("flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm", on ? "border-rose-400 bg-rose-50" : "border-slate-200")}>
+                      <input type="checkbox" className="mt-0.5 h-4 w-4 accent-rose-600" checked={on}
+                        onChange={() => setParts(on ? parts.filter((x) => x !== p.key) : [...parts, p.key])} />
+                      <span>{p.label}{p.note && <span className="block text-xs text-slate-500">{p.note}</span>}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="danger" disabled={busy || parts.length === 0 || resetName.trim().toLowerCase() !== store.name.trim().toLowerCase()} onClick={purgeParts}>
+                Seçilənləri sil{parts.length ? ` (${parts.length})` : ""}
+              </Button>
+              <Button variant="outline" className="border-rose-300 text-rose-700" disabled={busy || resetName.trim().toLowerCase() !== store.name.trim().toLowerCase()} onClick={resetData}>
+                {busy ? "Silinir…" : "Bütün məlumatları sil"}
+              </Button>
+            </div>
           </div>
         </div>
       )}

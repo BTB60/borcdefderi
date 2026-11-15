@@ -72,13 +72,18 @@ public class AdminController {
 
     public record ResetDataRequest(@NotBlank @Size(max = 200) String confirmName) {}
 
+    public record PurgeRequest(@NotNull @Size(min = 1, max = 10) List<String> parts, @NotBlank @Size(max = 200) String confirmName) {}
+
     private final AdminService admin;
     private final AdminStoreService storesAdmin;
+    private final AdminPurgeService purge;
     private final SubscriptionService subscriptions;
     private final PlanService plans;
 
-    public AdminController(AdminService admin, AdminStoreService storesAdmin, SubscriptionService subscriptions, PlanService plans) {
+    public AdminController(AdminService admin, AdminStoreService storesAdmin, AdminPurgeService purge,
+                           SubscriptionService subscriptions, PlanService plans) {
         this.admin = admin;
+        this.purge = purge;
         this.storesAdmin = storesAdmin;
         this.subscriptions = subscriptions;
         this.plans = plans;
@@ -110,6 +115,23 @@ public class AdminController {
     @PostMapping("/stores/{id}/reset-data")
     public Map<String, Object> resetData(@PathVariable UUID id, @Valid @RequestBody ResetDataRequest req) {
         return storesAdmin.resetData(id, req.confirmName());
+    }
+
+    /** Wipes only the chosen parts (STOCK, PRODUCTS, SALES, DEBTS, CASH, EXPENSES, CUSTOMERS, POCKET). */
+    @PostMapping("/stores/{id}/purge")
+    public Map<String, Object> purge(@PathVariable UUID id, @Valid @RequestBody PurgeRequest req) {
+        return purge.purge(id, req.parts(), req.confirmName());
+    }
+
+    /** Sales, debts and payments of a store matching a sale number, receipt number, party name or amount. */
+    @GetMapping("/stores/{id}/operations")
+    public List<Map<String, Object>> operations(@PathVariable UUID id, @RequestParam(required = false) String q) {
+        return purge.findOperations(id, q);
+    }
+
+    @DeleteMapping("/stores/{id}/operations/{type}/{opId}")
+    public Map<String, Object> deleteOperation(@PathVariable UUID id, @PathVariable String type, @PathVariable UUID opId) {
+        return purge.deleteOperation(id, type, opId);
     }
 
     @PostMapping("/stores/{id}/suspend")

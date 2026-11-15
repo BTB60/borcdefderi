@@ -68,12 +68,18 @@ public class AdminController {
 
     public record RemindRequest(@NotNull @Pattern(regexp = "WHATSAPP|PHONE|EMAIL") String channel) {}
 
+    public record CancelSubscriptionRequest(@Size(max = 500) String reason) {}
+
+    public record ResetDataRequest(@NotBlank @Size(max = 200) String confirmName) {}
+
     private final AdminService admin;
+    private final AdminStoreService storesAdmin;
     private final SubscriptionService subscriptions;
     private final PlanService plans;
 
-    public AdminController(AdminService admin, SubscriptionService subscriptions, PlanService plans) {
+    public AdminController(AdminService admin, AdminStoreService storesAdmin, SubscriptionService subscriptions, PlanService plans) {
         this.admin = admin;
+        this.storesAdmin = storesAdmin;
         this.subscriptions = subscriptions;
         this.plans = plans;
     }
@@ -81,6 +87,29 @@ public class AdminController {
     @GetMapping("/stores")
     public List<Map<String, Object>> stores(@RequestParam(required = false) String q) {
         return admin.stores(q);
+    }
+
+    /** Platform dashboard: store counts, revenue, sign-ups and package mix. */
+    @GetMapping("/overview")
+    public Map<String, Object> overview() {
+        return storesAdmin.overview();
+    }
+
+    /** One store's card: owner, usage numbers, employees. */
+    @GetMapping("/stores/{id}")
+    public Map<String, Object> store(@PathVariable UUID id) {
+        return storesAdmin.store(id);
+    }
+
+    @PostMapping("/stores/{id}/cancel-subscription")
+    public Map<String, Object> cancelSubscription(@PathVariable UUID id, @Valid @RequestBody(required = false) CancelSubscriptionRequest req) {
+        return storesAdmin.cancelSubscription(id, req == null ? null : req.reason());
+    }
+
+    /** Wipes the store's business data; the account, employees and subscription stay. */
+    @PostMapping("/stores/{id}/reset-data")
+    public Map<String, Object> resetData(@PathVariable UUID id, @Valid @RequestBody ResetDataRequest req) {
+        return storesAdmin.resetData(id, req.confirmName());
     }
 
     @PostMapping("/stores/{id}/suspend")

@@ -9,14 +9,16 @@ import { PlansTab } from "@/components/admin/PlansTab";
 import { PaymentSettingsTab } from "@/components/admin/PaymentSettingsTab";
 import { PaymentRequestsTab } from "@/components/admin/PaymentRequestsTab";
 import { ExpiringTab } from "@/components/admin/ExpiringTab";
+import { OverviewTab } from "@/components/admin/OverviewTab";
+import { StoreDrawer } from "@/components/admin/StoreDrawer";
 import { optionLabel } from "@/lib/plans";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { AdminRevenue, AdminStore, AuditEntry, Plan } from "@/lib/types";
 
-type Tab = "stores" | "expiring" | "subscriptions" | "plans" | "revenue" | "users" | "audit" | "settings";
-
+type Tab = "overview" | "stores" | "expiring" | "subscriptions" | "plans" | "revenue" | "users" | "audit" | "settings";
 
 const TABS: { key: Tab; label: string }[] = [
+  { key: "overview", label: "İcmal" },
   { key: "stores", label: "Mağazalar" },
   { key: "expiring", label: "Bitən abunəliklər" },
   { key: "subscriptions", label: "Ödəniş sorğuları" },
@@ -28,29 +30,38 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<Tab>("stores");
+  const [tab, setTab] = useState<Tab>("overview");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pending, setPending] = useState(0);
+  useEffect(() => {
+    api<unknown[]>("/api/admin/subscriptions?status=PENDING").then((l) => setPending(l.length)).catch(() => setPending(0));
+  }, [tab, notice]);
+  const go = (t: Tab) => { setError(null); setNotice(null); setTab(t); };
 
   return (
     <>
-      <PageHeader title="Platforma idarəetməsi" subtitle="Mağazalar, abunəliklər, ödəniş təsdiqləri və gəlir" />
+      <PageHeader title="Platforma idarəetməsi" subtitle="Mağazalar, abunəliklər, ödəniş təsdiqləri, paketlər və gəlir — hamısı bir yerdə" />
       <div className="mb-6 flex gap-1 overflow-x-auto rounded-2xl bg-white p-1.5 shadow-card ring-1 ring-slate-200/70" role="tablist">
         {TABS.map((t) => (
           <button
             key={t.key}
             role="tab"
             aria-selected={tab === t.key}
-            onClick={() => setTab(t.key)}
-            className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-all ${tab === t.key ? "bg-navy-800 text-white shadow" : "text-slate-600 hover:bg-slate-100 hover:text-navy-800"}`}
+            onClick={() => go(t.key)}
+            className={`inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-all ${tab === t.key ? "bg-navy-800 text-white shadow" : "text-slate-600 hover:bg-slate-100 hover:text-navy-800"}`}
           >
             {t.label}
+            {t.key === "subscriptions" && pending > 0 && (
+              <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{pending}</span>
+            )}
           </button>
         ))}
       </div>
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
 
+      {tab === "overview" && <OverviewTab onError={setError} go={go} />}
       {tab === "stores" && <StoresTab onError={setError} onNotice={setNotice} />}
       {tab === "expiring" && <ExpiringStoresTab onError={setError} onNotice={setNotice} />}
       {tab === "subscriptions" && <PaymentRequestsTab onError={setError} onNotice={setNotice} />}
@@ -96,6 +107,16 @@ const ACTION_LABEL: Record<string, string> = {
   PLAN_UPDATED: "Paket dəyişdirildi",
   CONTACT_UPDATED: "Əlaqə məlumatı dəyişdirildi",
   PAYMENT_SETTINGS_UPDATED: "Ödəniş ayarları dəyişdirildi",
+  SUBSCRIPTION_CANCELLED: "Abunəlik dayandırıldı",
+  STORE_DATA_RESET: "Mağazanın məlumatları sıfırlandı",
+  DEBT_CANCELLED: "Borc silindi",
+  DEBT_INCREASE_CANCELLED: "Borc artımı ləğv edildi",
+  HISTORY_ENTRY_HIDDEN: "Tarixçədən silindi",
+  PAYMENT_CANCELLED: "Ödəniş ləğv edildi",
+  PAYMENT_EDITED: "Ödəniş düzəldildi",
+  SALE_CREATED: "Satış",
+  SALE_CANCELLED: "Satış ləğv edildi",
+  PRODUCT_CREATED: "Məhsul əlavə edildi",
 };
 
 const NEW_DAYS = 7;
@@ -162,8 +183,9 @@ function StoresTab({ onError, onNotice }: TabProps) {
   const [extending, setExtending] = useState<AdminStore | null>(null);
   const [activating, setActivating] = useState<AdminStore | null>(null);
   const [historyOf, setHistoryOf] = useState<AdminStore | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
-  const [filter, setFilter] = useState<StoreFilter>("attention");
+  const [filter, setFilter] = useState<StoreFilter>("all");
   const [reload, setReload] = useState(0);
   const now = useNow(1000);
 
@@ -256,7 +278,7 @@ function StoresTab({ onError, onNotice }: TabProps) {
               {visible.map((s) => {
                 const red = isRed(s);
                 return (
-                  <tr key={s.id} className={red ? "bg-rose-50 transition-colors hover:bg-rose-100/70" : "transition-colors hover:bg-gold-500/5"}>
+                  <tr key={s.id} onClick={() => setOpenId(s.id)} className={`cursor-pointer ${red ? "bg-rose-50 transition-colors hover:bg-rose-100/70" : "transition-colors hover:bg-gold-500/5"}`}>
                     <Td>
                       <div className={`font-medium ${red ? "text-rose-700" : "text-navy-800"}`}>{s.name}</div>
                       <div className="text-xs text-slate-400">{formatDate(s.createdAt)}</div>
@@ -278,13 +300,9 @@ function StoresTab({ onError, onNotice }: TabProps) {
                     </Td>
                     <Td><Badge tone={s.status === "ACTIVE" ? "emerald" : "rose"}>{s.status === "ACTIVE" ? "Aktiv" : "Dayandırılıb"}</Badge></Td>
                     <Td className="text-right">
-                      <div className="flex justify-end gap-1">
+                      <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                         <Button variant="gold" onClick={() => setActivating(s)}>{s.activePlan ? "Yenilə" : "Aktiv et"}</Button>
-                        <Button variant="ghost" onClick={() => setHistoryOf(s)}>Tarixçə</Button>
-                        <Button variant="ghost" onClick={() => setExtending(s)} disabled={!s.activePlan}>Uzat</Button>
-                        <Button variant={s.status === "ACTIVE" ? "danger" : "outline"} onClick={() => toggle(s)}>
-                          {s.status === "ACTIVE" ? "Dayandır" : "Bərpa et"}
-                        </Button>
+                        <Button variant="outline" onClick={() => setOpenId(s.id)}>Aç</Button>
                       </div>
                     </Td>
                   </tr>
@@ -296,6 +314,16 @@ function StoresTab({ onError, onNotice }: TabProps) {
       </Card>
       {confirmDialog}
       {historyOf && <StoreHistoryModal store={historyOf} onClose={() => setHistoryOf(null)} />}
+      {openId && all.find((x) => x.id === openId) && (
+        <StoreDrawer
+          store={all.find((x) => x.id === openId)!}
+          onClose={() => setOpenId(null)}
+          onActivate={setActivating}
+          onExtend={setExtending}
+          onChanged={(m) => { onNotice?.(m); setReload((r) => r + 1); }}
+          actionLabels={ACTION_LABEL}
+        />
+      )}
       {activating && (
         <ActivateModal
           store={activating}

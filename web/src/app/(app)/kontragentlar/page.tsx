@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { Alert, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Spinner, Table, Td, Th } from "@/components/ui";
 import { AccountModal } from "@/components/debts/AccountModals";
 import { ApiError, api, download } from "@/lib/api";
+import { PartyImportModal } from "@/components/PartyImportModal";
 import { useAuth } from "@/lib/auth";
 import { formatMoney } from "@/lib/format";
 import type { Party } from "@/lib/types";
@@ -38,6 +39,7 @@ function PartiesList() {
   const [editing, setEditing] = useState<Party | "new" | null>(() => (search.get("yeni") ? "new" : null));
   const [account, setAccount] = useState<{ mode: "charge" | "pay"; party: Party } | null>(null);
   const [reload, setReload] = useState(0);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     setItems(null);
@@ -57,6 +59,7 @@ function PartiesList() {
         actions={
           <>
             <Button variant="outline" onClick={() => download(`/api/reports/${tab}/export`, `${tab}.xlsx`).catch((e) => setError(e instanceof ApiError ? e.message : "Excel hazırlanmadı"))}>Excel</Button>
+            <Button variant="outline" onClick={() => setImporting(true)}>Excel-dən import</Button>
             <Button variant="gold" onClick={() => setEditing("new")}>+ {label} əlavə et</Button>
           </>
         }
@@ -127,6 +130,13 @@ function PartiesList() {
             setReload((r) => r + 1);
           }}
         />
+      )}
+      {importing && (
+        <PartyImportModal tab={tab} onClose={() => setImporting(false)} onDone={(msg) => {
+          setImporting(false);
+          setNotice(msg);
+          setReload((r) => r + 1);
+        }} />
       )}
       {editing && (
         <PartyModal

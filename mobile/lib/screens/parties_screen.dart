@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../format.dart';
 import '../models/models.dart';
@@ -61,11 +64,90 @@ class _PartiesScreenState extends State<PartiesScreen> {
     if (saved != null) _reload();
   }
 
+  static const _xlsx = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+  String get _kind => widget.isCustomer ? 'customers' : 'companies';
+
+  Future<void> _share(String path, String name) async {
+    try {
+      final bytes = await widget.session.api.getBytes(path);
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile.fromData(Uint8List.fromList(bytes), mimeType: _xlsx, name: name)],
+        fileNameOverrides: [name],
+      ));
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  /// Excel import (e.g. from another program): pick a file, send it, show what was added or the wrong rows.
+  Future<void> _import() async {
+    final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['xlsx', 'xls']);
+    if (picked.isEmpty || !mounted) return;
+    final file = picked.first;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Import edilir…')));
+    try {
+      final bytes = await file.readAsBytes();
+      final r = await widget.session.api.upload('/api/$_kind/import', 'file', bytes, file.name, _xlsx) as Map<String, dynamic>;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      final errors = (r['errors'] as List).cast<Map<String, dynamic>>();
+      final ok = r['applied'] == true;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: Icon(ok ? Icons.check_circle_outline : Icons.error_outline,
+              color: ok ? Colors.green.shade700 : Colors.red.shade700, size: 40),
+          title: Text(ok ? 'Import tamamlandı' : 'Faylda səhv var'),
+          content: ok
+              ? Text('${r['created']} yeni ${widget.isCustomer ? 'müştəri' : 'şirkət'}\n'
+                  '${r['withBalance']} nəfərə başlanğıc borc\n${r['skipped']} artıq var idi (keçildi)',
+                  textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, height: 1.5))
+              : SizedBox(
+                  width: double.maxFinite,
+                  child: ListView(shrinkWrap: true, children: [
+                    const Text('Heç nə saxlanmadı. Düzəldib yenidən yükləyin.'),
+                    const SizedBox(height: 8),
+                    for (final e in errors)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Text('${e['row'] == 0 ? 'Fayl' : 'Sətir ${e['row']}'}: ${e['message']}',
+                            style: TextStyle(color: Colors.red.shade800)),
+                      ),
+                  ]),
+                ),
+          actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Oldu'))],
+        ),
+      );
+      if (ok) _reload();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        showError(context, e);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final noun = widget.isCustomer ? 'müştəri' : 'şirkət';
     return Scaffold(
-      appBar: AppBar(title: Text(widget.isCustomer ? 'Müştərilər' : 'Şirkətlər')),
+      appBar: AppBar(title: Text(widget.isCustomer ? 'Müştərilər' : 'Şirkətlər'), actions: [
+        PopupMenuButton<String>(
+          tooltip: 'Excel',
+          icon: const Icon(Icons.table_view_outlined),
+          onSelected: (v) => v == 'import'
+              ? _import()
+              : v == 'template'
+                  ? _share('/api/$_kind/import-template', '${widget.isCustomer ? 'musteri' : 'sirket'}-import-sablonu.xlsx')
+                  : _share('/api/reports/$_kind/export', '$_kind.xlsx'),
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'import', child: ListTile(leading: Icon(Icons.upload_file), title: Text('Excel-dən import'))),
+            PopupMenuItem(value: 'template', child: ListTile(leading: Icon(Icons.description_outlined), title: Text('Boş import şablonu'))),
+            PopupMenuItem(value: 'export', child: ListTile(leading: Icon(Icons.download), title: Text('Excel-ə export'))),
+          ],
+        ),
+      ]),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _open(),
         icon: const Icon(Icons.add),

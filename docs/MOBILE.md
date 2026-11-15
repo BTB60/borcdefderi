@@ -48,6 +48,15 @@ flutter build apk --release --dart-define=API_URL=https://borcdefderi.onrender.c
 
 OneDrive qovluğunda Gradle bəzən `not a regular file` xətası verir — onda `mobile/build` qovluğunu silib yenidən yığın.
 
+### İmza açarı (APK yeniləməsi üçün vacib)
+
+GitHub Actions APK-nı repo secrets-dəki sabit açarla imzalayır: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`.
+Hər versiya eyni açarla imzalandığı üçün yeni APK köhnənin üstünə quraşdırılır və istifadəçi hesabdan çıxmır.
+Secrets yoxdursa, build müvəqqəti debug açarla gedir və xəbərdarlıq yazılır; belə APK köhnəsinin üstünə quraşdırılmır.
+Açar faylı repoda deyil (`*.jks`, `key.properties` gitignore-dadır), sahibkarın kompüterində saxlanır; itirilməməlidir.
+
+Platforma admini telefonda: İcmal, Mağazalar (mağaza kartı: abunəliyi aktiv et / uzat / dayandır, mağazanı dayandır, məlumatları sıfırla), Sorğular, Bitənlər (`admin_stores.dart`, `admin_screens.dart`).
+
 ## iOS build (macOS)
 
 Tələblər: macOS + Xcode, CocoaPods, Flutter; quraşdırma/TestFlight üçün Apple Developer hesabı ($99/il).

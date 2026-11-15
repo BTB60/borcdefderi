@@ -8,12 +8,13 @@ import '../format.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import '../whatsapp.dart';
+import 'admin_stores.dart';
 import 'common.dart';
 import 'inventory_screen.dart' show showProductImage;
 import 'profile_screen.dart';
 
-/// Platform admin (SUPER_ADMIN) on the phone: payment requests and expiring subscriptions.
-/// The rest of the admin panel (packages, revenue, users, audit) stays on the web.
+/// Platform admin (SUPER_ADMIN) on the phone: overview, stores (card, subscription, danger zone),
+/// payment requests and expiring subscriptions. Packages, users and audit stay on the web.
 class AdminHome extends StatefulWidget {
   const AdminHome({super.key, required this.session});
 
@@ -29,6 +30,8 @@ class _AdminHomeState extends State<AdminHome> {
   @override
   Widget build(BuildContext context) {
     final pages = [
+      AdminOverviewScreen(session: widget.session, onOpenTab: (i) => setState(() => _tab = i)),
+      AdminStoresScreen(session: widget.session),
       PaymentRequestsScreen(session: widget.session),
       ExpiringSubscriptionsScreen(session: widget.session),
       _AdminAccount(session: widget.session),
@@ -39,6 +42,8 @@ class _AdminHomeState extends State<AdminHome> {
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: const [
+          NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'İcmal'),
+          NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront), label: 'Mağazalar'),
           NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Sorğular'),
           NavigationDestination(icon: Icon(Icons.timer_outlined), selectedIcon: Icon(Icons.timer), label: 'Bitənlər'),
           NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Hesab'),

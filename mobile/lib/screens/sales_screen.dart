@@ -76,6 +76,20 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
+  /// Return some or all goods of a sale: stock comes back, the sale's unpaid debt drops first, the rest is refunded.
+  Future<void> _return(Map<String, dynamic> s) async {
+    final msg = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (_) => _ReturnSheet(session: widget.session, saleId: '${s['id']}'),
+    );
+    if (msg == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    _reload();
+  }
+
   Future<void> _cancel(Map<String, dynamic> s) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -121,6 +135,13 @@ class _SalesScreenState extends State<SalesScreen> {
                     clipBehavior: Clip.antiAlias,
                     child: SwipeActions(
                       actions: [
+                        if (s['status'] == 'COMPLETED' && _n(s['returnedAmount']) < _n(s['total']))
+                          SwipeAction(
+                            icon: Icons.assignment_return_outlined,
+                            label: 'Qaytar',
+                            color: const Color(0xFFEA580C),
+                            onTap: () => _return(s),
+                          ),
                         if (s['status'] == 'COMPLETED' && widget.session.me!.mayChange(s['createdBy']))
                           SwipeAction.delete(() => _cancel(s), label: 'Ləğv et'),
                       ],
@@ -152,7 +173,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     ),
                   ),
                 if (items.isNotEmpty)
-                  Text('Çeki paylaşmaq üçün toxunun, ləğv etmək üçün sola sürüşdürün və ya 🗑 basın. Qismən qaytarma veb paneldədir.',
+                  Text('Çeki paylaşmaq üçün toxunun. Mal qaytarmaq və ya satışı ləğv etmək üçün sətri sola sürüşdürün.',
                       style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
               ]),
             );
@@ -585,6 +606,169 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
           ),
         ),
         if (_error != null) ...[const SizedBox(height: 12), ErrorBanner(_error!)],
+      ]),
+    );
+  }
+}
+
+/// Return sheet: how many of each line come back (up to what is not returned yet), an optional reason.
+class _ReturnSheet extends StatefulWidget {
+  const _ReturnSheet({required this.session, required this.saleId});
+
+  final Session session;
+  final String saleId;
+
+  @override
+  State<_ReturnSheet> createState() => _ReturnSheetState();
+}
+
+class _ReturnSheetState extends State<_ReturnSheet> {
+  Map<String, dynamic>? _sale;
+  final Map<String, double> _qty = {};
+  final _reason = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final sale = await widget.session.api.get('/api/sales/${widget.saleId}') as Map<String, dynamic>;
+      if (mounted) setState(() => _sale = sale);
+    } catch (e) {
+      if (mounted) setState(() => _error = errorMessage(e));
+    }
+  }
+
+  List<Map<String, dynamic>> get _items => ((_sale?['items'] as List?) ?? const []).cast<Map<String, dynamic>>();
+
+  static double _left(Map<String, dynamic> i) => _n(i['quantity']) - _n(i['returnedQty']);
+
+  /// Price actually charged per unit (line discount included).
+  static double _unit(Map<String, dynamic> i) => _n(i['quantity']) == 0 ? 0 : _n(i['lineTotal']) / _n(i['quantity']);
+
+  static String _q(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(3);
+
+  double get _total => _items.fold(0, (a, i) => a + (_qty['${i['id']}'] ?? 0) * _unit(i));
+
+  void _set(Map<String, dynamic> i, double v) => setState(() => _qty['${i['id']}'] = v.clamp(0, _left(i)).toDouble());
+
+  Future<void> _save() async {
+    final items = [
+      for (final i in _items)
+        if ((_qty['${i['id']}'] ?? 0) > 0) {'saleItemId': i['id'], 'quantity': _qty['${i['id']}']},
+    ];
+    if (items.isEmpty) {
+      setState(() => _error = 'Qaytarılan malın sayını seçin');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final res = await widget.session.api.post('/api/sales/${widget.saleId}/returns',
+          {'items': items, 'reason': _reason.text.trim().isEmpty ? null : _reason.text.trim()}) as Map<String, dynamic>;
+      final returns = ((res['returns'] as List?) ?? const []).cast<Map<String, dynamic>>();
+      final last = returns.isEmpty ? null : returns.last;
+      final parts = [
+        'Qaytarıldı: ${formatMoney(last == null ? _total : _n(last['amount']))}',
+        if (_n(last?['debtReduced']) > 0) 'borc azaldı ${formatMoney(_n(last?['debtReduced']))}',
+        if (_n(last?['refunded']) > 0) 'müştəriyə pul qaytarın: ${formatMoney(_n(last?['refunded']))}',
+      ];
+      if (mounted) Navigator.of(context).pop(parts.join(' · '));
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = errorMessage(e);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sale = _sale;
+    if (sale == null) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: _error != null ? ErrorBanner(_error!) : const Center(child: CircularProgressIndicator()),
+      );
+    }
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
+      child: ListView(shrinkWrap: true, children: [
+        Text('Mal qaytarma · ${sale['number']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: navy)),
+        if (sale['customerName'] != null) Text('${sale['customerName']}', style: TextStyle(color: Colors.grey.shade600)),
+        const SizedBox(height: 12),
+        for (final i in _items)
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+              child: Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('${i['name']}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text(
+                      'Satılıb ${_q(_n(i['quantity']))} × ${formatMoney(_unit(i))}'
+                      '${_n(i['returnedQty']) > 0 ? ' · qaytarılıb ${_q(_n(i['returnedQty']))}' : ''}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                  ]),
+                ),
+                if (_left(i) <= 0)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Text('Qaytarılıb', style: TextStyle(color: Colors.grey.shade600)),
+                  )
+                else ...[
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: (_qty['${i['id']}'] ?? 0) > 0 ? () => _set(i, (_qty['${i['id']}'] ?? 0) - 1) : null,
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+                  SizedBox(
+                    width: 40,
+                    child: Text(_q(_qty['${i['id']}'] ?? 0),
+                        textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: (_qty['${i['id']}'] ?? 0) < _left(i) ? () => _set(i, (_qty['${i['id']}'] ?? 0) + 1) : null,
+                    icon: const Icon(Icons.add_circle_outline),
+                  ),
+                  TextButton(onPressed: () => _set(i, _left(i)), child: const Text('Hamısı')),
+                ],
+              ]),
+            ),
+          ),
+        const SizedBox(height: 4),
+        TextField(controller: _reason, maxLength: 500, decoration: const InputDecoration(labelText: 'Səbəb (istəyə bağlı)')),
+        Text('Mal anbara qayıdır. Satışın ödənilməmiş borcu əvvəlcə azalır, qalanı müştəriyə pul kimi qaytarılır.',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+        if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: ErrorBanner(_error!)),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 52,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFEA580C)),
+            onPressed: _busy || _total <= 0 ? null : _save,
+            icon: const Icon(Icons.assignment_return_outlined),
+            label: Text(_busy ? 'Saxlanılır…' : 'Qaytar · ${formatMoney(_total)}', style: const TextStyle(fontSize: 16)),
+          ),
+        ),
       ]),
     );
   }

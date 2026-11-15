@@ -27,6 +27,9 @@ class EmployeePermissionTest extends IntegrationTestBase {
         get(keeper, "/api/products").andExpect(status().isOk());
         get(keeper, "/api/debts?type=CUSTOMER_DEBT").andExpect(status().isForbidden());
         get(keeper, "/api/sales").andExpect(status().isForbidden());
+        // Cib pulu is the owner's own money: a cashier / storekeeper never sees it, even with REPORTS
+        get(keeper, "/api/pocket").andExpect(status().isForbidden()).andExpect(jsonPath("$.error", is("OWNER_ONLY")));
+        get(owner, "/api/pocket").andExpect(status().isOk());
 
         // without jobTitle the job stays; an unknown one is refused
         put(owner, "/api/employees/" + memberId, Map.of("permissions", perms("INVENTORY", "SALES"), "active", true))

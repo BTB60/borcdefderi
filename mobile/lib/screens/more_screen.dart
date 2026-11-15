@@ -67,7 +67,7 @@ class MoreScreen extends StatelessWidget {
             padding: const EdgeInsets.only(top: 12),
             child: ErrorBanner('Abunəliyinizin müddəti ${sub.daysRemaining} gün sonra bitir. Abunəlik bölməsindən yeniləyin.'),
           ),
-        if (!me.lockedModules.contains('POCKET') || me.lockedFor('POCKET'))
+        if (me.isOwner && (!me.lockedModules.contains('POCKET') || me.lockedFor('POCKET')))
           Card(
             child: ListTile(
               leading: const Icon(Icons.account_balance_wallet, color: navy),

@@ -46,14 +46,14 @@ class PocketMoneyTest extends IntegrationTestBase {
         // Separate from expenses: nothing was written there.
         get(owner, "/api/expenses").andExpect(status().isOk()).andExpect(jsonPath("$.total", is(0)));
 
-        // An employee of the same store has an empty pocket and cannot delete the owner's entry.
+        // Cib pulu is the owner's own: an employee (e.g. a cashier) can neither see nor delete it.
         String email = uniqueEmail("cib");
         post(owner, "/api/employees", Map.of("email", email, "password", EMPLOYEE_PASSWORD, "fullName", "Cib İşçi",
                 "permissions", perms("SALES"))).andExpect(status().isCreated());
         String employee = login(email, EMPLOYEE_PASSWORD);
-        get(employee, "/api/pocket").andExpect(jsonPath("$.closingBalance", is(0.0))).andExpect(jsonPath("$.entries", hasSize(0)));
+        get(employee, "/api/pocket").andExpect(status().isForbidden()).andExpect(jsonPath("$.error", is("OWNER_ONLY")));
         mvc.perform(delete("/api/pocket/" + taxi.get("id").asText()).header("Authorization", "Bearer " + employee))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isForbidden());
 
         mvc.perform(delete("/api/pocket/" + taxi.get("id").asText()).header("Authorization", "Bearer " + owner))
                 .andExpect(status().isNoContent());

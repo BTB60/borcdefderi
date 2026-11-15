@@ -52,14 +52,23 @@ public class PocketService {
         this.tenant = tenant;
     }
 
-    public Day day(LocalDate date) {
+    /** Cib pulu is the owner's own money: employees (cashiers etc.) never see or change it. */
+    private CurrentMember requirePocket() {
         CurrentMember m = tenant.requireModule("POCKET");
+        if (!m.isOwner()) {
+            throw az.borcdefteri.common.ApiException.forbidden("OWNER_ONLY", "Cib pulu yalnız mağaza sahibinə görünür");
+        }
+        return m;
+    }
+
+    public Day day(LocalDate date) {
+        CurrentMember m = requirePocket();
         return dayOf(m, date != null ? date : tenant.today());
     }
 
     /** The last {@code days} days up to today that have entries, newest first, with each day's closing balance. */
     public List<DaySummary> history(int days) {
-        CurrentMember m = tenant.requireModule("POCKET");
+        CurrentMember m = requirePocket();
         int n = Math.min(Math.max(days, 1), 92);
         LocalDate today = tenant.today();
         LocalDate first = today.minusDays(n - 1L);
@@ -87,7 +96,7 @@ public class PocketService {
 
     @Transactional
     public Entry add(EntryRequest req) {
-        CurrentMember m = tenant.requireModule("POCKET");
+        CurrentMember m = requirePocket();
         LocalDate today = tenant.today();
         LocalDate d = req.date() != null ? req.date() : today;
         if (d.isAfter(today)) throw ApiException.badRequest("INVALID_DATE", "Gələcək tarixə yazmaq olmaz");
@@ -113,7 +122,7 @@ public class PocketService {
     }
 
     public void delete(UUID id) {
-        CurrentMember m = tenant.requireModule("POCKET");
+        CurrentMember m = requirePocket();
         int n = jdbc.sql("DELETE FROM pocket_entries WHERE id = :id AND store_id = :s AND user_id = :u")
                 .param("id", id).param("s", m.storeId()).param("u", m.userId()).update();
         if (n == 0) throw ApiException.notFound("Qeyd tapılmadı");

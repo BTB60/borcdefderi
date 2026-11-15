@@ -75,7 +75,7 @@ export default function DashboardPage() {
     <>
       <PageHeader title="Panel" subtitle="Bütün rəqəmlər birbaşa veritabanından hesablanır" />
 
-      <PocketCard />
+      {isOwner && <PocketCard />}
       <FinanceCards />
       <MoneyCards />
 

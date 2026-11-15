@@ -84,7 +84,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 _QuickActions(session: widget.session),
-                PocketCard(key: _pocket, session: widget.session),
+                // Cib pulu is the owner's own money: employees don't see it
+                if (widget.session.me?.isOwner ?? false) PocketCard(key: _pocket, session: widget.session),
                 FinanceCards(key: _cards, session: widget.session),
                 const SizedBox(height: 22),
                 const Text('Alınan ödənişlər', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),

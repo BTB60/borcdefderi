@@ -53,7 +53,7 @@ export default function LoginPage() {
             <li className="flex items-center gap-3"><span className="h-1.5 w-1.5 rounded-full bg-gold-500" />İşçilər üçün ayrı icazələr</li>
             <li className="flex items-center gap-3"><span className="h-1.5 w-1.5 rounded-full bg-gold-500" />PDF və Excel hesabatları</li>
           </ul>
-          <p className="mt-10 text-xs font-semibold uppercase tracking-wider text-white/50">Tətbiqlər</p>
+          <p className="mt-10 text-xs font-semibold uppercase tracking-wider text-white/50">Mobil tətbiq</p>
           <StoreBadges className="mt-3" />
         </div>
         <p className="relative text-xs text-white/40">© {new Date().getFullYear()} HesabPro</p>

@@ -40,12 +40,18 @@ const permissionLabels = {
   'SALES': 'Satış',
 };
 
-/// Paid modules a package may include (debts, payments and reports are in every package).
+/// Sections a package may include (every menu section except the subscription page), in menu order.
 const planModuleLabels = {
+  'CUSTOMER_DEBTS': 'Müştəri borcları',
+  'COMPANY_RECEIVABLES': 'Şirkətin bizə borcu',
+  'COMPANY_PAYABLES': 'Bizim şirkətə borcumuz',
+  'REPORTS': 'Panel, gəlir və mənfəət, hesabatlar',
   'SALES': 'Satış və kassa',
   'INVENTORY': 'Anbar, sayım, barkod',
   'CASH': 'Kassa və bank',
   'EXPENSES': 'Xərclər və büdcə',
+  'POCKET': 'Cib pulu',
+  'EMPLOYEES': 'İşçilər',
 };
 
 /// Employee's job (vəzifə).

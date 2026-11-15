@@ -46,14 +46,21 @@ public class EmployeeService {
         this.audit = audit;
     }
 
+    /** Owner, and the package includes employee accounts. */
+    private CurrentMember requireEmployeesModule() {
+        CurrentMember owner = tenant.requireOwner();
+        TenantService.requireModule(owner, "EMPLOYEES");
+        return owner;
+    }
+
     public List<EmployeeView> list() {
-        return list(tenant.requireOwner());
+        return list(requireEmployeesModule());
     }
 
     @Transactional
     public EmployeeView create(String email, String password, String fullName, String phone, List<String> permissions,
                                String jobTitle) {
-        CurrentMember owner = tenant.requireOwner();
+        CurrentMember owner = requireEmployeesModule();
         String job = validateJobTitle(jobTitle);
         Integer maxEmployees = plans.limitsFor(owner.storeId()).maxEmployees();
         if (maxEmployees != null) {
@@ -91,7 +98,7 @@ public class EmployeeService {
 
     @Transactional
     public EmployeeView update(UUID memberId, List<String> permissions, boolean active, String jobTitle) {
-        CurrentMember owner = tenant.requireOwner();
+        CurrentMember owner = requireEmployeesModule();
         EmployeeView current = find(owner, memberId); // store-scoped existence check (404 for other stores' members)
         Set<String> perms = validatePermissions(permissions);
         // null keeps the job as it is (older clients do not send it)

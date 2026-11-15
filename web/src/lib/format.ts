@@ -105,10 +105,16 @@ export const JOB_TITLE_PERMISSIONS: Record<import("./types").JobTitle, import(".
   OTHER: [],
 };
 
-/** Paid modules a package can include; names as on the package card. */
+/** Sections a package can include, in menu order; names as on the package card. */
 export const PLAN_MODULE_LABEL: Record<import("./types").PlanModule, string> = {
+  CUSTOMER_DEBTS: "Müştəri borcları",
+  COMPANY_RECEIVABLES: "Şirkətin bizə borcu",
+  COMPANY_PAYABLES: "Bizim şirkətə borcumuz",
+  REPORTS: "Panel, gəlir və mənfəət, hesabatlar",
   SALES: "Satış və kassa terminalı",
   INVENTORY: "Anbar, sayım, barkod",
   CASH: "Kassa və bank",
   EXPENSES: "Xərclər və büdcə",
+  POCKET: "Cib pulu",
+  EMPLOYEES: "İşçilər və işçi fəaliyyəti",
 };

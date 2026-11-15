@@ -112,8 +112,12 @@ public class TenantService {
         if (row.permissions() != null && !row.permissions().isBlank()) {
             perms.addAll(Arrays.asList(row.permissions().split(",")));
         }
+        Set<String> locked = lockedModules(row.planModules());
+        if (EMPLOYEE.equals(row.role()) && locked.contains("EMPLOYEES")) {
+            throw ApiException.forbidden("PLAN_MODULE", "Mağazanın paketində işçi hesabları yoxdur. Mağaza sahibinə müraciət edin");
+        }
         return new CurrentMember(principal.userId(), row.memberId(), row.storeId(), row.storeName(),
-                row.role(), row.platformRole(), perms, lockedModules(row.planModules()));
+                row.role(), row.platformRole(), perms, locked);
     }
 
     /** Member, plus an ACTIVE, non-expired subscription for the store. Used by all business modules. */
@@ -175,8 +179,26 @@ public class TenantService {
         }
     }
 
-    /** Modules a package may leave out; debts, payments and reports are in every package. */
-    public static final List<String> PLAN_MODULES = List.of("SALES", "INVENTORY", "CASH", "EXPENSES");
+    /**
+     * Sections a package may leave out: every menu section except the subscription page. The first eight are also
+     * employee permissions; POCKET (cib pulu) and EMPLOYEES (işçilər) are package-only.
+     */
+    public static final List<String> PLAN_MODULES = List.of(
+            "CUSTOMER_DEBTS", "COMPANY_RECEIVABLES", "COMPANY_PAYABLES", "REPORTS",
+            "SALES", "INVENTORY", "CASH", "EXPENSES", "POCKET", "EMPLOYEES");
+
+    /** Business member whose package includes the module; otherwise 403 PLAN_MODULE. */
+    public CurrentMember requireModule(String module) {
+        CurrentMember member = requireBusinessMember();
+        requireModule(member, module);
+        return member;
+    }
+
+    public static void requireModule(CurrentMember member, String module) {
+        if (member.lockedModules().contains(module)) {
+            throw ApiException.forbidden("PLAN_MODULE", "Bu bölmə paketinizə daxil deyil. Paketi yüksəldin");
+        }
+    }
 
     /** Paid modules missing from a package's module list (null list = everything open). */
     public static Set<String> lockedModules(String planModules) {

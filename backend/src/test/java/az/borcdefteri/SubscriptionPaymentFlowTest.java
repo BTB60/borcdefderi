@@ -296,14 +296,20 @@ class SubscriptionPaymentFlowTest extends IntegrationTestBase {
     void aPackageOpensOnlyItsModulesAndLimitsProducts() throws Exception {
         Map<String, Object> body = planBody("Modul " + UUID.randomUUID().toString().substring(0, 6));
         body.put("maxProducts", 1);
-        body.put("modules", List.of("INVENTORY"));
+        body.put("modules", List.of("INVENTORY", "CUSTOMER_DEBTS"));
         JsonNode plan = body(post(adminToken(), "/api/admin/plans", body).andExpect(status().isCreated())
-                .andExpect(jsonPath("$.maxProducts", is(1))).andExpect(jsonPath("$.modules", contains("INVENTORY"))));
+                .andExpect(jsonPath("$.maxProducts", is(1))).andExpect(jsonPath("$.modules", containsInAnyOrder("INVENTORY", "CUSTOMER_DEBTS"))));
         String owner = register("Modul mağaza " + UUID.randomUUID());
         String id = requestPayment(owner, plan.get("code").asText(), "MONTHLY", "M10", "25").get("id").asText();
         post(adminToken(), "/api/admin/subscriptions/" + id + "/approve", Map.of()).andExpect(status().isOk());
 
-        get(owner, "/api/auth/me").andExpect(jsonPath("$.lockedModules", contains("CASH", "EXPENSES", "SALES")));
+        get(owner, "/api/auth/me").andExpect(jsonPath("$.lockedModules", hasItems("CASH", "EXPENSES", "SALES", "REPORTS", "POCKET",
+                        "EMPLOYEES", "COMPANY_PAYABLES")))
+                .andExpect(jsonPath("$.lockedModules", not(hasItem("INVENTORY"))));
+        get(owner, "/api/dashboard").andExpect(status().isForbidden());
+        get(owner, "/api/pocket").andExpect(status().isForbidden()).andExpect(jsonPath("$.error", is("PLAN_MODULE")));
+        get(owner, "/api/employees").andExpect(status().isForbidden()).andExpect(jsonPath("$.error", is("PLAN_MODULE")));
+        get(owner, "/api/debts?type=COMPANY_PAYABLE").andExpect(status().isForbidden());
         get(owner, "/api/sales").andExpect(status().isForbidden()).andExpect(jsonPath("$.error", is("PLAN_MODULE")));
         get(owner, "/api/expenses").andExpect(status().isForbidden());
         get(owner, "/api/products").andExpect(status().isOk());
@@ -315,10 +321,12 @@ class SubscriptionPaymentFlowTest extends IntegrationTestBase {
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.error", is("PLAN_LIMIT_PRODUCTS")));
 
         // ticking every module means no restriction
-        body.put("modules", List.of("SALES", "INVENTORY", "CASH", "EXPENSES"));
+        body.put("modules", List.of("CUSTOMER_DEBTS", "COMPANY_RECEIVABLES", "COMPANY_PAYABLES", "REPORTS", "SALES", "INVENTORY",
+                "CASH", "EXPENSES", "POCKET", "EMPLOYEES"));
         put(adminToken(), "/api/admin/plans/" + plan.get("id").asText(), body).andExpect(status().isOk())
                 .andExpect(jsonPath("$.modules").doesNotExist());
         get(owner, "/api/sales").andExpect(status().isOk());
+        get(owner, "/api/pocket").andExpect(status().isOk());
     }
 
     @Test

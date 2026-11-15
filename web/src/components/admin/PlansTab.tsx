@@ -10,7 +10,7 @@ import type { PeriodCode, PeriodOption, Plan } from "@/lib/types";
 import { PLAN_MODULE_LABEL } from "@/lib/format";
 import type { PlanModule } from "@/lib/types";
 
-const ALL_MODULES: PlanModule[] = ["SALES", "INVENTORY", "CASH", "EXPENSES"];
+const ALL_MODULES = Object.keys(PLAN_MODULE_LABEL) as PlanModule[];
 
 type Props = { onError: (m: string | null) => void; onNotice?: (m: string | null) => void };
 
@@ -369,7 +369,11 @@ function PlanEditor({ plan, onClose, onSaved }: { plan: Plan | null; onClose: ()
                   );
                 })}
               </div>
-              <p className="mt-1 text-xs text-slate-500">Borclar, ödənişlər, müştərilər və hesabatlar hər pakətdə var. İşarələnməyən bölmə bu paketdə bağlı olur.</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                <button type="button" className="font-medium text-gold-600 hover:underline" onClick={() => set("modules", [...ALL_MODULES])}>Hamısını seç</button>
+                <button type="button" className="font-medium text-slate-500 hover:underline" onClick={() => set("modules", [])}>Hamısını götür</button>
+                <span className="text-slate-500">İşarələnməyən bölmə bu paketdə bağlı olur (mağaza sahibi onu kilidli görür). Abunəlik bölməsi hər paketdə var.</span>
+              </div>
             </fieldset>
             <div className="flex flex-wrap gap-5 text-sm text-slate-700">
               <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-navy-800" checked={f.active} onChange={(e) => set("active", e.target.checked)} /> Aktiv (satışda)</label>

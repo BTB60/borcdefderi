@@ -498,6 +498,7 @@ public class DebtService {
     }
 
     public void requireAccess(CurrentMember m, DebtType type) {
+        TenantService.requireModule(m, type.permission());
         if (!m.has(type.permission())) {
             throw ApiException.forbidden("PERMISSION_DENIED", "Bu modul üçün icazəniz yoxdur");
         }

@@ -66,23 +66,26 @@ class MoreScreen extends StatelessWidget {
             padding: const EdgeInsets.only(top: 12),
             child: ErrorBanner('Abunəliyinizin müddəti ${sub.daysRemaining} gün sonra bitir. Abunəlik bölməsindən yeniləyin.'),
           ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.account_balance_wallet, color: navy),
-            title: const Text('Cib pulu'),
-            subtitle: const Text('Cibə qoyduğum və xərclədiyim pul, gün sonu qalıq'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PocketScreen(session: session))),
+        if (!me.lockedModules.contains('POCKET') || me.lockedFor('POCKET'))
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.account_balance_wallet, color: navy),
+              title: const Text('Cib pulu'),
+              subtitle: const Text('Cibə qoyduğum və xərclədiyim pul, gün sonu qalıq'),
+              trailing: me.lockedFor('POCKET') ? const Icon(Icons.lock_outline, color: gold) : const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => me.lockedFor('POCKET') ? SubscriptionScreen(session: session) : PocketScreen(session: session))),
+            ),
           ),
-        ),
-        if (me.can('REPORTS'))
+        if (me.can('REPORTS') || me.lockedFor('REPORTS'))
           Card(
             child: ListTile(
               leading: const Icon(Icons.insights_outlined, color: navy),
               title: const Text('Hesabat'),
               subtitle: const Text('Satış, mənfəət, ən çox satılan məhsullar'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReportsScreen(session: session))),
+              trailing: me.lockedFor('REPORTS') ? const Icon(Icons.lock_outline, color: gold) : const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => me.lockedFor('REPORTS') ? SubscriptionScreen(session: session) : ReportsScreen(session: session))),
             ),
           ),
         if (me.can('SALES') || me.lockedFor('SALES'))
@@ -135,8 +138,8 @@ class MoreScreen extends StatelessWidget {
               leading: const Icon(Icons.badge_outlined, color: navy),
               title: const Text('İşçilər'),
               subtitle: const Text('Əlavə et, icazələr, şifrə sıfırlama'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EmployeesScreen(session: session))),
+              trailing: me.lockedFor('EMPLOYEES') ? const Icon(Icons.lock_outline, color: gold) : const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => me.lockedFor('EMPLOYEES') ? SubscriptionScreen(session: session) : EmployeesScreen(session: session))),
             ),
           ),
         if (me.can('CUSTOMER_DEBTS'))

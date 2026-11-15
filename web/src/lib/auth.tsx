@@ -12,7 +12,7 @@ interface AuthContextValue {
   refresh: () => Promise<void>;
   can: (permission: Permission) => boolean;
   /** The store's package does not include this module. */
-  isLocked: (permission: Permission) => boolean;
+  isLocked: (module: string) => boolean;
   isOwner: boolean;
   /** The owner may change / delete anything; an employee only what they recorded themselves. */
   mayChange: (recordedBy: string | null | undefined) => boolean;
@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // a module missing from the package is closed even for the owner
       can: (permission: Permission) =>
         !(me?.lockedModules ?? []).includes(permission as never) && (isOwner || (me?.permissions ?? []).includes(permission)),
-      isLocked: (permission: Permission) => (me?.lockedModules ?? []).includes(permission as never),
+      isLocked: (module: string) => (me?.lockedModules ?? []).includes(module as never),
     };
   }, [me, loading, signIn, signOut, refresh]);
 

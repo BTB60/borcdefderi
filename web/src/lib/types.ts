@@ -356,8 +356,10 @@ export interface SubscriptionRecord {
   reviewedByName: string | null;
 }
 
-/** Modules a package may leave out (debts, payments and reports are in every package). */
-export type PlanModule = "SALES" | "INVENTORY" | "CASH" | "EXPENSES";
+/** Sections a package may leave out: every menu section except the subscription page. */
+export type PlanModule =
+  | "CUSTOMER_DEBTS" | "COMPANY_RECEIVABLES" | "COMPANY_PAYABLES" | "REPORTS"
+  | "SALES" | "INVENTORY" | "CASH" | "EXPENSES" | "POCKET" | "EMPLOYEES";
 
 export type JobTitle = "CASHIER" | "STOREKEEPER" | "ACCOUNTANT" | "SELLER" | "OTHER";
 

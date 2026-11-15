@@ -28,11 +28,17 @@ class _HomeShellState extends State<HomeShell> {
     final me = widget.session.me!;
     final s = widget.session;
     final tabs = <({String label, IconData icon, Widget page})>[
-      if (me.isOwner) ...[
-        (label: 'Panel', icon: Icons.dashboard_outlined, page: DashboardScreen(session: s)),
-        (label: 'Borclar', icon: Icons.account_balance_wallet_outlined, page: DebtSectionsScreen(session: s)),
-        (label: 'Ödənişlər', icon: Icons.payments_outlined, page: PaymentsScreen(session: s)),
-      ] else
+      if (me.isOwner)
+        // the owner's usual tabs, minus what the package leaves out (filled up with what it includes)
+        ...[
+          if (me.can('REPORTS')) (label: 'Panel', icon: Icons.dashboard_outlined, page: DashboardScreen(session: s)),
+          if (me.canAnyDebt) (label: 'Borclar', icon: Icons.account_balance_wallet_outlined, page: DebtSectionsScreen(session: s)),
+          if (me.canAnyDebt) (label: 'Ödənişlər', icon: Icons.payments_outlined, page: PaymentsScreen(session: s)),
+          if (me.can('SALES')) (label: 'Satış', icon: Icons.point_of_sale_outlined, page: SalesScreen(session: s)),
+          if (me.can('INVENTORY')) (label: 'Anbar', icon: Icons.inventory_2_outlined, page: InventoryScreen(session: s)),
+          if (me.can('CASH')) (label: 'Kassa', icon: Icons.account_balance_outlined, page: CashScreen(session: s)),
+        ].take(3)
+      else
         // an employee sees only the sections their job / permissions open (at most four, the rest under "Daha")
         ...[
           if (me.can('REPORTS')) (label: 'Panel', icon: Icons.dashboard_outlined, page: DashboardScreen(session: s)),

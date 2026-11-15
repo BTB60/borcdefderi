@@ -171,7 +171,7 @@ class _PaymentEditSheetState extends State<PaymentEditSheet> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, sheetBottomInset(context) + 20),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text('Ödənişi düzəlt — ${widget.payment.partyName}',
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: navy)),

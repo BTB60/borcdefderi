@@ -79,7 +79,7 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
       showDragHandle: true,
       useSafeArea: true,
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
         child: _StartSheet(session: widget.session),
       ),
     );

@@ -64,7 +64,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       showDragHandle: true,
       useSafeArea: true,
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
         child: _EmployeeForm(session: widget.session, employee: employee),
       ),
     );

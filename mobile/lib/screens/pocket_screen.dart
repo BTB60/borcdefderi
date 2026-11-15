@@ -59,7 +59,7 @@ Future<bool> openPocketSheet(BuildContext context, {required Session session, re
     showDragHandle: true,
     useSafeArea: true,
     builder: (ctx) => Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
       child: _EntrySheet(session: session, isIn: isIn, date: date),
     ),
   );

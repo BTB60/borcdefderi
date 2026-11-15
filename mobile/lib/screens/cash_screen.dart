@@ -61,7 +61,7 @@ class _CashScreenState extends State<CashScreen> {
       showDragHandle: true,
       useSafeArea: true,
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
         child: _MoveSheet(session: widget.session, type: type, accounts: accounts, accountId: accountId),
       ),
     );

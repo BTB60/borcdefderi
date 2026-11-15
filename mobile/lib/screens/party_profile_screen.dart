@@ -131,7 +131,7 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
       showDragHandle: true,
       useSafeArea: true,
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
         child: _WhatsAppSheet(
           phone: p.party.phone!,
           vars: TemplateVars(

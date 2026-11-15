@@ -21,7 +21,7 @@ Future<void> showLabelPrintSheet(BuildContext context, Session session, {Map<Str
       showDragHandle: true,
       useSafeArea: true,
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
         child: _LabelSheet(session: session, product: product),
       ),
     );

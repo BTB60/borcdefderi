@@ -203,7 +203,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       isScrollControlled: true,
       showDragHandle: true,
       useSafeArea: true,
-      builder: (ctx) => Padding(padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom), child: child),
+      builder: (ctx) => Padding(padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)), child: child),
     );
     if (msg == null || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));

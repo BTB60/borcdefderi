@@ -714,7 +714,7 @@ class _ReturnSheetState extends State<_ReturnSheet> {
       );
     }
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + sheetBottomInset(context)),
       child: ListView(shrinkWrap: true, children: [
         Text('Mal qaytarma · ${sale['number']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: navy)),
         if (sale['customerName'] != null) Text('${sale['customerName']}', style: TextStyle(color: Colors.grey.shade600)),

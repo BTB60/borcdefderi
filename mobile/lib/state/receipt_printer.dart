@@ -138,7 +138,7 @@ class _ReceiptPrinterSheetState extends State<_ReceiptPrinterSheet> {
   @override
   Widget build(BuildContext context) {
     if (!_ready) return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()));
-    return ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(20, 0, 20, 24), children: [
+    return ListView(shrinkWrap: true, padding: EdgeInsets.fromLTRB(20, 0, 20, 24 + MediaQuery.of(context).viewPadding.bottom), children: [
       const Text('Çek printeri', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
       const SizedBox(height: 8),
       SwitchListTile(

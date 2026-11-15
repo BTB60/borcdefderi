@@ -15,7 +15,7 @@ Future<Debt?> openDebtIncrease(BuildContext context, {required Session session, 
     showDragHandle: true,
     useSafeArea: true,
     builder: (ctx) => Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
       child: DebtIncreaseSheet(session: session, debt: debt),
     ),
   );

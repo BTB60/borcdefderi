@@ -172,7 +172,7 @@ Future<Party?> openPartyForm(BuildContext context,
     isScrollControlled: true,
     useSafeArea: true,
     builder: (ctx) => Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
       child: _PartyForm(session: session, isCustomer: isCustomer, party: party),
     ),
   );

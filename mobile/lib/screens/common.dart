@@ -106,3 +106,10 @@ const voidedIcon = Icons.money_off_rounded;
 final voidedColor = Colors.deepOrange.shade700;
 final voidedBg = Colors.deepOrange.shade50;
 const voidedCard = Color(0xFFFFF7ED);
+
+/// Bottom space a bottom sheet must leave free: the keyboard when it is open, otherwise the phone's own
+/// navigation bar / gesture area, so buttons never sit under the system buttons on any phone.
+double sheetBottomInset(BuildContext context) {
+  final mq = MediaQuery.of(context);
+  return mq.viewInsets.bottom > mq.viewPadding.bottom ? mq.viewInsets.bottom : mq.viewPadding.bottom;
+}

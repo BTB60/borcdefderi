@@ -422,7 +422,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
       showDragHandle: true,
       useSafeArea: true,
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
         child: EditDebtSheet(session: widget.session, debt: _debt),
       ),
     );
@@ -780,7 +780,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, sheetBottomInset(context) + 20),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text('Ödəniş — ${widget.debt.partyName}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: navy)),
         const SizedBox(height: 4),

@@ -54,7 +54,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       showDragHandle: true,
       useSafeArea: true,
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
         child: _ExpenseSheet(session: widget.session, categories: _categories, expense: e),
       ),
     );
@@ -115,7 +115,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       showDragHandle: true,
       useSafeArea: true,
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
         child: _RecurringSheet(session: widget.session, categories: _categories),
       ),
     );

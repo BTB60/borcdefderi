@@ -31,7 +31,7 @@ Future<String?> openAccountSheet(BuildContext context,
     showDragHandle: true,
     useSafeArea: true,
     builder: (ctx) => Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
       child: _AccountSheet(session: session, isCustomer: isCustomer, partyId: partyId, mode: mode, initialType: initialType),
     ),
   );

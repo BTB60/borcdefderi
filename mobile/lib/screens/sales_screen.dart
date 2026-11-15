@@ -284,8 +284,12 @@ class _SalesScreenState extends State<SalesScreen> {
       );
 }
 
+/// Top 1 (topdan) when [wholesale] and the product has one, otherwise Top 2 (pərakəndə).
+double _priceOf(Map<String, dynamic> p, bool wholesale) =>
+    wholesale && p['wholesalePrice'] != null ? _n(p['wholesalePrice']) : _n(p['salePrice']);
+
 class _Line {
-  _Line(this.product) : qty = 1, price = _n(product['salePrice']);
+  _Line(this.product, {bool wholesale = false}) : qty = 1, price = _priceOf(product, wholesale);
   final Map<String, dynamic> product;
   double qty;
   double price;
@@ -314,6 +318,8 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
   double _customerPct = 0; // the customer's standing discount (%)
   double _bonusBalance = 0;
   final _bonus = TextEditingController();
+  // Top 2 (pərakəndə) is the normal price; Top 1 (topdan) only when the seller picks it for this sale
+  bool _wholesale = false;
   final _requestId = newRequestId();
   bool _busy = false;
   String? _error;
@@ -354,7 +360,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
       if (i >= 0) {
         _cart[i].qty += 1;
       } else {
-        _cart.add(_Line(p));
+        _cart.add(_Line(p, wholesale: _wholesale));
       }
       _results = [];
       _search.clear();
@@ -454,6 +460,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
         'paidCash': _cashPaid.toStringAsFixed(2),
         'paidCard': _cardPaid.toStringAsFixed(2),
         'clientRequestId': _requestId,
+        'priceLevel': _wholesale ? 'WHOLESALE' : 'RETAIL',
       };
     try {
       Map<String, dynamic> s;
@@ -536,7 +543,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
     final change = _change;
     final credit = _credit;
     return Scaffold(
-      appBar: AppBar(title: const Text('Yeni satış'), actions: [
+      appBar: AppBar(title: Text(_wholesale ? 'Yeni satış · topdan' : 'Yeni satış'), actions: [
         IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
       ]),
       bottomNavigationBar: SafeArea(
@@ -582,7 +589,22 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
           ),
 
         // ----- cart -----
-        _section('Səbət${_cart.isEmpty ? '' : ' (${_cart.length})'}'),
+        _section('Səbət${_cart.isEmpty ? '' : ' (${_cart.length})'}',
+            trailing: SegmentedButton<bool>(
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: true, label: Text('Top 1 · topdan')),
+                ButtonSegment(value: false, label: Text('Top 2')),
+              ],
+              selected: {_wholesale},
+              onSelectionChanged: (v) => setState(() {
+                _wholesale = v.first;
+                for (final l in _cart) {
+                  l.price = _priceOf(l.product, _wholesale);
+                }
+              }),
+            )),
         if (_cart.isEmpty)
           Container(
             padding: const EdgeInsets.symmetric(vertical: 28),

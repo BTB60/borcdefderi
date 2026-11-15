@@ -125,6 +125,7 @@ public class ProductExportService {
                 num(row, 7, p.stockQty(), qty);
                 num(row, 8, p.minStock(), qty);
                 row.createCell(9).setCellValue(p.active() ? "Bəli" : "Xeyr");
+                if (p.wholesalePrice() != null) num(row, 10, p.wholesalePrice(), money);
             }
             wb.write(out);
             return out.toByteArray();

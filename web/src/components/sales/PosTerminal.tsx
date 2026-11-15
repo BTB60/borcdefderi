@@ -106,6 +106,10 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
   const [customerOpen, setCustomerOpen] = useState(false);
   const [discount, setDiscount] = useState("");
   const [bonusInput, setBonusInput] = useState("");
+  // Top 2 (pərakəndə) is the till's normal price; the cashier switches to Top 1 (topdan) for a wholesale sale
+  const [level, setLevel] = useState<"RETAIL" | "WHOLESALE">("RETAIL");
+  const priceOf = useCallback((p: Product, lv: "RETAIL" | "WHOLESALE") =>
+    (lv === "WHOLESALE" && p.wholesalePrice != null ? p.wholesalePrice : p.salePrice), []);
   const [percent, setPercent] = useState(false);
   const [mode, setMode] = useState<PayMode>("cash");
   const [given, setGiven] = useState("");
@@ -159,12 +163,18 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
     setCart((c) => {
       const i = c.findIndex((l) => l.product.id === p.id);
       if (i >= 0) return c.map((l, j) => (j === i ? { ...l, quantity: qtyText(num(l.quantity) + qty) } : l));
-      return [...c, { product: p, quantity: qtyText(qty), price: String(p.salePrice), discount: "" }];
+      return [...c, { product: p, quantity: qtyText(qty), price: String(priceOf(p, level)), discount: "" }];
     });
     setFlash(p.id);
     setTimeout(() => setFlash((f) => (f === p.id ? null : f)), 600);
     setError(null);
-  }, []);
+  }, [level, priceOf]);
+
+  /** Switching Top 1 / Top 2 re-prices everything already in the receipt. */
+  function switchLevel(lv: "RETAIL" | "WHOLESALE") {
+    setLevel(lv);
+    setCart((c) => c.map((l) => ({ ...l, price: String(priceOf(l.product, lv)) })));
+  }
 
   const setQty = (id: string, q: number) =>
     setCart((c) => (q <= 0 ? c.filter((l) => l.product.id !== id) : c.map((l) => (l.product.id === id ? { ...l, quantity: qtyText(q) } : l))));
@@ -217,7 +227,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
   const canSell = !busy && cart.length > 0 && !over && !needsCustomer && !stockProblem && total >= 0;
 
   const reset = () => {
-    setCart([]); setDiscount(""); setBonusInput(""); setPercent(false); setGiven(""); setCash(""); setCard(""); setNote(""); setShowNote(false);
+    setCart([]); setDiscount(""); setBonusInput(""); setLevel("RETAIL"); setPercent(false); setGiven(""); setCash(""); setCard(""); setNote(""); setShowNote(false);
     setCustomer(null); setCustomerQuery(""); setMode("cash"); setEditing(null); setError(null); setRequestId(crypto.randomUUID());
   };
 
@@ -233,6 +243,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
           customerId: customer?.id ?? null,
           discount: discountAmount > 0 ? discountAmount.toFixed(2) : null,
           bonusUsed: bonusAmount > 0 ? bonusAmount.toFixed(2) : null,
+          priceLevel: level,
           paidCash: paidCash.toFixed(2),
           paidCard: paidCard.toFixed(2),
           note: note || null,
@@ -350,7 +361,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
                       <div className="mt-auto flex items-end justify-between pt-2">
                         <span>
                           {p.oldPrice && p.oldPrice > p.salePrice && <span className="block text-[11px] text-slate-400 line-through">{formatMoney(p.oldPrice)}</span>}
-                          <span className="font-serif text-base font-semibold tabular-nums text-navy-800">{formatMoney(p.salePrice)}</span>
+                          <span className="font-serif text-base font-semibold tabular-nums text-navy-800">{formatMoney(priceOf(p, level))}</span>
                         </span>
                         <span className={cx("text-[11px] font-medium", out ? "text-rose-600" : p.lowStock ? "text-amber-600" : "text-slate-400")}>
                           {out ? "bitib" : `${qtyText(p.stockQty)} ${p.unit}`}
@@ -372,8 +383,22 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
             <p className="font-serif text-lg font-semibold">Çek</p>
             <p className="text-xs text-white/60">{cart.length === 0 ? "Səbət boşdur" : `${cart.length} məhsul · ${qtyText(itemCount)} ədəd`}</p>
           </div>
-          {cart.length > 0 && <button type="button" onClick={reset} className="rounded-lg px-2.5 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white">Təmizlə</button>}
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-lg bg-white/10 p-0.5" role="group" aria-label="Qiymət növü">
+              {([["WHOLESALE", "Top 1", "Topdan"], ["RETAIL", "Top 2", "Pərakəndə"]] as const).map(([lv, top, label]) => (
+                <button key={lv} type="button" onClick={() => switchLevel(lv)} title={`${top} — ${label} qiyməti`}
+                  className={cx("rounded-md px-2.5 py-1 text-xs font-semibold transition",
+                    level === lv ? (lv === "WHOLESALE" ? "bg-gold-500 text-navy-900" : "bg-white text-navy-800") : "text-white/70 hover:text-white")}>
+                  {top}<span className="hidden 2xl:inline"> · {label}</span>
+                </button>
+              ))}
+            </div>
+            {cart.length > 0 && <button type="button" onClick={reset} className="rounded-lg px-2.5 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white">Təmizlə</button>}
+          </div>
         </header>
+        {level === "WHOLESALE" && (
+          <p className="bg-gold-500/15 px-5 py-1.5 text-xs font-semibold text-gold-600">Topdan satış — Top 1 qiymətləri ilə</p>
+        )}
 
         {/* customer */}
         <div className="relative border-b border-slate-100 px-5 py-3">

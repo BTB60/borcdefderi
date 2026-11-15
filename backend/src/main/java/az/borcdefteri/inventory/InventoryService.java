@@ -36,7 +36,9 @@ public class InventoryService {
                           BigDecimal stockQty, BigDecimal minStock, boolean active, boolean lowStock, boolean outOfStock,
                           boolean hasImage, BigDecimal stockCostValue, BigDecimal stockSaleValue, long version,
                           /** Price before a discount (shown struck through on labels); null = no discount. */
-                          BigDecimal oldPrice) {}
+                          BigDecimal oldPrice,
+                          /** Top 1 — topdan (wholesale) price; null = same as the retail salePrice (Top 2). */
+                          BigDecimal wholesalePrice) {}
 
     public record ProductRequest(
             @jakarta.validation.constraints.NotBlank(message = "Məhsulun adını daxil edin")
@@ -59,7 +61,18 @@ public class InventoryService {
             Long version,
             /** Price before a discount. null = keep as is (on update), 0 = remove the discount. */
             @jakarta.validation.constraints.DecimalMin("0.00")
-            @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal oldPrice) {}
+            @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal oldPrice,
+            /** Top 1 — topdan qiyməti. null = keep as is (on update), 0 = remove (sells at retail). */
+            @jakarta.validation.constraints.DecimalMin("0.00")
+            @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal wholesalePrice) {
+
+        public ProductRequest(String name, String code, String barcode, UUID categoryId, UUID supplierId, String unit,
+                              BigDecimal purchasePrice, BigDecimal salePrice, BigDecimal minStock, BigDecimal initialStock,
+                              Boolean active, Long version, BigDecimal oldPrice) {
+            this(name, code, barcode, categoryId, supplierId, unit, purchasePrice, salePrice, minStock, initialStock, active,
+                    version, oldPrice, null);
+        }
+    }
 
     public record StockRequest(
             @jakarta.validation.constraints.NotNull UUID productId,
@@ -202,14 +215,14 @@ public class InventoryService {
         try {
             jdbc.sql("""
                     INSERT INTO products (id, store_id, code, barcode, name, category_id, supplier_id, unit, purchase_price,
-                                          sale_price, min_stock, active, created_by, old_price)
-                    VALUES (:id, :s, :code, :bc, :n, :c, :sup, :u, :pp, :sp, :min, :act, :by, :op)
+                                          sale_price, min_stock, active, created_by, old_price, wholesale_price)
+                    VALUES (:id, :s, :code, :bc, :n, :c, :sup, :u, :pp, :sp, :min, :act, :by, :op, :wp)
                     """).param("id", id).param("s", m.storeId()).param("code", code).param("bc", blank(req.barcode()))
                     .param("n", req.name().trim()).param("c", req.categoryId()).param("sup", req.supplierId())
                     .param("u", req.unit() == null || req.unit().isBlank() ? "ədəd" : req.unit().trim())
                     .param("pp", Money.of(req.purchasePrice())).param("sp", Money.of(req.salePrice()))
                     .param("min", qty(req.minStock())).param("act", req.active() == null || req.active()).param("by", m.userId())
-                    .param("op", oldPrice(req.oldPrice(), null))
+                    .param("op", oldPrice(req.oldPrice(), null)).param("wp", oldPrice(req.wholesalePrice(), null))
                     .update();
         } catch (org.springframework.dao.DuplicateKeyException e) {
             throw ApiException.conflict("DUPLICATE_CODE", "Bu kod və ya barkod artıq başqa məhsulda istifadə olunur");
@@ -232,7 +245,7 @@ public class InventoryService {
         try {
             jdbc.sql("""
                     UPDATE products SET code = :code, barcode = :bc, name = :n, category_id = :c, supplier_id = :sup, unit = :u,
-                           purchase_price = :pp, sale_price = :sp, min_stock = :min, active = :act, old_price = :op, updated_at = now(),
+                           purchase_price = :pp, sale_price = :sp, min_stock = :min, active = :act, old_price = :op, wholesale_price = :wp, updated_at = now(),
                            version = version + 1
                     WHERE id = :id AND store_id = :s
                     """).param("code", req.code() == null || req.code().isBlank() ? cur.code() : req.code().trim())
@@ -240,6 +253,7 @@ public class InventoryService {
                     .param("sup", req.supplierId()).param("u", req.unit() == null || req.unit().isBlank() ? cur.unit() : req.unit().trim())
                     .param("pp", Money.of(req.purchasePrice())).param("sp", Money.of(req.salePrice())).param("min", qty(req.minStock()))
                     .param("act", req.active() == null || req.active()).param("op", oldPrice(req.oldPrice(), cur.oldPrice()))
+                    .param("wp", oldPrice(req.wholesalePrice(), cur.wholesalePrice()))
                     .param("id", id).param("s", m.storeId()).update();
         } catch (org.springframework.dao.DuplicateKeyException e) {
             throw ApiException.conflict("DUPLICATE_CODE", "Bu kod və ya barkod artıq başqa məhsulda istifadə olunur");
@@ -417,7 +431,7 @@ public class InventoryService {
 
     private static final String SELECT = """
             SELECT p.id, p.code, p.barcode, p.name, p.category_id, c.name AS category_name, p.supplier_id, co.name AS supplier_name,
-                   p.unit, p.purchase_price, p.sale_price, p.old_price, p.stock_qty, p.min_stock, p.active, p.image IS NOT NULL AS has_image,
+                   p.unit, p.purchase_price, p.sale_price, p.old_price, p.wholesale_price, p.stock_qty, p.min_stock, p.active, p.image IS NOT NULL AS has_image,
                    p.version
             FROM products p
             LEFT JOIN product_categories c ON c.id = p.category_id
@@ -439,7 +453,8 @@ public class InventoryService {
                 rs.getString("supplier_name"), rs.getString("unit"), pp, sp, stock, min, active,
                 active && stock.compareTo(min) <= 0, stock.signum() == 0, rs.getBoolean("has_image"),
                 Money.of(stock.multiply(pp)), Money.of(stock.multiply(sp)), rs.getLong("version"),
-                rs.getBigDecimal("old_price") == null ? null : Money.of(rs.getBigDecimal("old_price")));
+                rs.getBigDecimal("old_price") == null ? null : Money.of(rs.getBigDecimal("old_price")),
+                rs.getBigDecimal("wholesale_price") == null ? null : Money.of(rs.getBigDecimal("wholesale_price")));
     }
 
     private static Movement mapMove(java.sql.ResultSet rs) throws java.sql.SQLException {

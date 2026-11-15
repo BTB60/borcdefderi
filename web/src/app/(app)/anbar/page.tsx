@@ -97,7 +97,7 @@ export default function InventoryPage() {
         </div>
         {!items ? <Spinner /> : items.length === 0 ? <EmptyState title="Məhsul yoxdur" text="“+ Məhsul əlavə et” ilə başlayın." /> : (
           <Table>
-            <thead className="bg-slate-50/70"><tr><Th>Məhsul</Th><Th>Kateqoriya</Th><Th className="text-right">Alış</Th><Th className="text-right">Satış</Th><Th className="text-right">Qalıq</Th><Th className="text-right">Əməliyyat</Th></tr></thead>
+            <thead className="bg-slate-50/70"><tr><Th>Məhsul</Th><Th>Kateqoriya</Th><Th className="text-right">Alış</Th><Th className="text-right">Top 1 · topdan</Th><Th className="text-right">Top 2 · pərakəndə</Th><Th className="text-right">Qalıq</Th><Th className="text-right">Əməliyyat</Th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {items.map((p) => (
                 <tr key={p.id} className={p.active ? "" : "opacity-50"}>
@@ -107,6 +107,7 @@ export default function InventoryPage() {
                   </Td>
                   <Td className="text-xs">{p.categoryName ?? "—"}</Td>
                   <Td className="text-right tabular-nums">{formatMoney(p.purchasePrice)}</Td>
+                  <Td className="text-right tabular-nums text-slate-600">{p.wholesalePrice != null ? formatMoney(p.wholesalePrice) : <span className="text-slate-300">—</span>}</Td>
                   <Td className="text-right tabular-nums">{formatMoney(p.salePrice)}{p.oldPrice && p.oldPrice > p.salePrice ? <div className="text-xs text-rose-600 line-through">{formatMoney(p.oldPrice)}</div> : null}</Td>
                   <Td className="text-right">
                     <span className={`font-semibold tabular-nums ${p.outOfStock ? "text-rose-600" : p.lowStock ? "text-amber-600" : "text-navy-800"}`}>{q(p.stockQty)} {p.unit}</span>
@@ -144,6 +145,7 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
     supplierId: product?.supplierId ?? "", unit: product?.unit ?? "ədəd", purchasePrice: product ? String(product.purchasePrice) : "",
     salePrice: product ? String(product.salePrice) : "", minStock: product ? String(product.minStock) : "0", initialStock: "", active: product?.active ?? true,
     oldPrice: product?.oldPrice ? String(product.oldPrice) : "",
+    wholesalePrice: product?.wholesalePrice != null ? String(product.wholesalePrice) : "",
   });
   const [newCat, setNewCat] = useState("");
   const [image, setImage] = useState<File | null>(null);
@@ -173,6 +175,7 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
       ...form, code: form.code || null, barcode: form.barcode || null, categoryId: form.categoryId || null, supplierId: form.supplierId || null,
       initialStock: product ? null : form.initialStock || null, version: product?.version,
       oldPrice: form.oldPrice ? form.oldPrice : (product?.oldPrice ? "0" : null),
+      wholesalePrice: form.wholesalePrice ? form.wholesalePrice : (product?.wholesalePrice != null ? "0" : null),
     };
     try {
       const saved = await api<Product>(product ? `/api/products/${product.id}` : "/api/products", { method: product ? "PUT" : "POST", json: body });
@@ -219,7 +222,8 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
         </Field>
         <Field label="Ölçü vahidi"><Input maxLength={20} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="ədəd, kq, litr" /></Field>
         <Field label="Alış qiyməti (₼)"><Input required type="number" min="0" step="0.01" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} /></Field>
-        <Field label="Satış qiyməti (₼)"><Input required type="number" min="0" step="0.01" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} /></Field>
+        <Field label="Top 1 — topdan qiyməti (₼)" hint="Boş = topdan satışda da pərakəndə qiymət"><Input type="number" min="0" step="0.01" value={form.wholesalePrice} onChange={(e) => setForm({ ...form, wholesalePrice: e.target.value })} /></Field>
+        <Field label="Top 2 — pərakəndə satış qiyməti (₼)" hint="Kassa həmişə bu qiymətlə satır"><Input required type="number" min="0" step="0.01" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} /></Field>
         <Field label="Endirimdən əvvəlki qiymət (₼)" hint="Boş = endirim yoxdur. Barkod etiketində xətli göstərilir"><Input type="number" min="0" step="0.01" value={form.oldPrice} onChange={(e) => setForm({ ...form, oldPrice: e.target.value })} /></Field>
         <Field label="Minimum stok" hint="Bundan az olanda xəbərdarlıq"><Input type="number" min="0" step="0.001" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: e.target.value })} /></Field>
         {!product && <Field label="Başlanğıc qalıq"><Input type="number" min="0" step="0.001" value={form.initialStock} onChange={(e) => setForm({ ...form, initialStock: e.target.value })} /></Field>}
@@ -332,7 +336,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (m: str
     <Modal open size="xl" title="Excel-dən import" onClose={onClose}
       footer={<><Button variant="ghost" onClick={onClose}>Bağla</Button><Button type="submit" form="import-form" variant="gold" disabled={!file || busy}>{busy ? "Yüklənir…" : "Import et"}</Button></>}>
       <div className="mb-4 space-y-2 text-sm text-slate-600">
-        <p>Sütunlar: <strong>Kod, Barkod, Ad, Kateqoriya, Vahid, Alış qiyməti, Satış qiyməti, Qalıq, Minimum stok, Aktiv</strong>. Ad, alış və satış qiyməti mütləqdir.</p>
+        <p>Sütunlar: <strong>Kod, Barkod, Ad, Kateqoriya, Vahid, Alış qiyməti, Satış qiyməti, Qalıq, Minimum stok, Aktiv, Topdan qiyməti</strong>. Ad, alış və satış qiyməti mütləqdir.</p>
         <p>Kodu (və ya barkodu) mövcud məhsula uyğun gələn sətir həmin məhsulu yeniləyir, qalanları yeni məhsul kimi əlavə olunur. Mövcud məhsulların qalığı importla dəyişmir — bunun üçün Sayım istifadə edin. Səhv sətir olsa, heç nə saxlanmır.</p>
         <p>
           <button type="button" className="font-medium text-navy-800 underline" onClick={() => download("/api/products/import-template", "mehsul-import-sablonu.xlsx")}>Boş şablonu yüklə</button>

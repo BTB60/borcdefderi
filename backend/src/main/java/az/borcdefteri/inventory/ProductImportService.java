@@ -40,7 +40,7 @@ import java.util.UUID;
 public class ProductImportService {
 
     public static final String[] HEADERS = {"Kod", "Barkod", "Ad", "Kateqoriya", "Vahid", "Alış qiyməti", "Satış qiyməti",
-            "Qalıq", "Minimum stok", "Aktiv"};
+            "Qalıq", "Minimum stok", "Aktiv", "Topdan qiyməti"};
     private static final int MAX_ROWS = 3000;
 
     public record RowError(int row, String message) {}
@@ -48,7 +48,7 @@ public class ProductImportService {
     public record Result(boolean applied, int created, int updated, int unchanged, List<RowError> errors) {}
 
     private record Parsed(int row, String code, String barcode, String name, String category, String unit,
-                          BigDecimal buy, BigDecimal sell, BigDecimal qty, BigDecimal min, Boolean active) {}
+                          BigDecimal buy, BigDecimal sell, BigDecimal qty, BigDecimal min, Boolean active, BigDecimal wholesale) {}
 
     private final InventoryService inventory;
     private final AuditService audit;
@@ -116,7 +116,7 @@ public class ProductImportService {
             try {
                 if (p == null) {
                     inventory.create(new ProductRequest(r.name(), r.code(), r.barcode(), categoryId, null, r.unit(), r.buy(),
-                            r.sell(), r.min(), r.qty(), r.active() == null || r.active(), null, null));
+                            r.sell(), r.min(), r.qty(), r.active() == null || r.active(), null, null, r.wholesale()));
                     created++;
                 } else {
                     String unit = r.unit() == null ? p.unit() : r.unit();
@@ -126,13 +126,14 @@ public class ProductImportService {
                     String barcode = r.barcode() == null ? p.barcode() : r.barcode();
                     boolean same = p.name().equals(r.name()) && Objects.equals(p.barcode(), barcode) && Objects.equals(p.categoryId(), cat)
                             && p.unit().equals(unit) && p.purchasePrice().compareTo(r.buy()) == 0 && p.salePrice().compareTo(r.sell()) == 0
-                            && p.minStock().compareTo(min) == 0 && p.active() == active;
+                            && p.minStock().compareTo(min) == 0 && p.active() == active
+                            && (r.wholesale() == null || (p.wholesalePrice() != null && p.wholesalePrice().compareTo(r.wholesale()) == 0));
                     if (same) {
                         unchanged++;
                         continue;
                     }
                     inventory.update(p.id(), new ProductRequest(r.name(), p.code(), barcode, cat, p.supplierId(), unit, r.buy(),
-                            r.sell(), min, null, active, p.version(), null));
+                            r.sell(), min, null, active, p.version(), null, r.wholesale()));
                     updated++;
                 }
             } catch (ApiException e) {
@@ -180,6 +181,7 @@ public class ProductImportService {
                 BigDecimal sell = number(row, col, "Satış qiyməti", fmt, true, problems, 2);
                 BigDecimal qty = number(row, col, "Qalıq", fmt, false, problems, 3);
                 BigDecimal min = number(row, col, "Minimum stok", fmt, false, problems, 3);
+                BigDecimal wholesale = number(row, col, "Topdan qiyməti", fmt, false, problems, 2);
                 String unit = text(row, col, "Vahid", fmt);
                 if (unit != null && unit.length() > 20) problems.add("Vahid 20 simvoldan uzundur");
                 String category = text(row, col, "Kateqoriya", fmt);
@@ -191,7 +193,7 @@ public class ProductImportService {
                     errors.add(new RowError(line, String.join("; ", problems)));
                     continue;
                 }
-                out.add(new Parsed(line, code, barcode, name, category, unit, buy, sell, qty, min, active));
+                out.add(new Parsed(line, code, barcode, name, category, unit, buy, sell, qty, min, active, wholesale));
             }
         } catch (ApiException e) {
             throw e;

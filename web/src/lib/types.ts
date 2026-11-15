@@ -484,6 +484,8 @@ export interface Product {
   stockCostValue: number; stockSaleValue: number; version: number;
   /** Price before a discount; shown struck through on labels. */
   oldPrice?: number | null;
+  /** Top 1 — topdan (wholesale) price; null = same as the retail salePrice (Top 2). */
+  wholesalePrice?: number | null;
 }
 
 export interface StockMovement {
@@ -519,7 +521,7 @@ export interface Sale {
   costTotal: number; debtId: string | null; soldOn: string; note: string | null; createdByName: string; createdAt: string; items: SaleItem[];
   returns: { id: string; amount: number; debtReduced: number; refunded: number; returnedOn: string; reason: string | null; createdByName: string; createdAt: string }[];
   createdBy: string | null;
-  bonusUsed?: number; bonusEarned?: number;
+  bonusUsed?: number; bonusEarned?: number; priceLevel?: "RETAIL" | "WHOLESALE";
 }
 
 export interface SalePage { items: Sale[]; total: number; sum: number; page: number; size: number }

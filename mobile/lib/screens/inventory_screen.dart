@@ -445,13 +445,14 @@ class _ProductSheetState extends State<_ProductSheet> {
   final _min = TextEditingController(text: '0');
   final _unit = TextEditingController(text: 'ədəd');
   final _old = TextEditingController();
+  final _wholesale = TextEditingController();
   ({Uint8List bytes, bool png})? _image;
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
-    for (final c in [_name, _barcode, _buy, _sell, _stock, _min, _unit, _old]) {
+    for (final c in [_name, _barcode, _buy, _sell, _stock, _min, _unit, _old, _wholesale]) {
       c.dispose();
     }
     super.dispose();
@@ -475,6 +476,7 @@ class _ProductSheetState extends State<_ProductSheet> {
         'minStock': _d(_min).isEmpty ? '0' : _d(_min),
         'initialStock': _d(_stock).isEmpty ? null : _d(_stock),
         'oldPrice': _d(_old).isEmpty ? null : _d(_old),
+        'wholesalePrice': _d(_wholesale).isEmpty ? null : _d(_wholesale),
       }) as Map<String, dynamic>;
       var msg = 'Məhsul əlavə edildi: ${p['code']}';
       if (_image != null) {
@@ -604,11 +606,22 @@ class _ProductSheetState extends State<_ProductSheet> {
               controller: _sell,
               keyboardType: _decimal,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(labelText: 'Satış qiyməti *', suffixText: '₼'),
+              decoration: const InputDecoration(labelText: 'Top 2 · pərakəndə *', suffixText: '₼'),
             ),
           ),
         ]),
         _margin(),
+        _gap,
+        TextField(
+          controller: _wholesale,
+          keyboardType: _decimal,
+          decoration: const InputDecoration(
+            labelText: 'Top 1 · topdan qiyməti (istəyə bağlı)',
+            suffixText: '₼',
+            helperText: 'Kassa pərakəndə satır; satışda “Top 1” seçiləndə bu qiymət işləyir',
+            helperMaxLines: 2,
+          ),
+        ),
         _gap,
         TextField(
           controller: _old,
@@ -836,7 +849,9 @@ class _ProductHeader extends StatelessWidget {
               style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
           const SizedBox(height: 8),
           Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
-            Text('Satış: ${formatMoney(_n(p['salePrice']))}', style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text('Top 2: ${formatMoney(_n(p['salePrice']))}', style: const TextStyle(fontWeight: FontWeight.w600)),
+            if (p['wholesalePrice'] != null)
+              Text('Top 1 (topdan): ${formatMoney(_n(p['wholesalePrice']))}', style: TextStyle(color: Colors.grey.shade700)),
             if (p['oldPrice'] != null && _n(p['oldPrice']) > _n(p['salePrice']))
               Text(formatMoney(_n(p['oldPrice'])),
                   style: TextStyle(color: Colors.red.shade700, decoration: TextDecoration.lineThrough, fontSize: 13)),

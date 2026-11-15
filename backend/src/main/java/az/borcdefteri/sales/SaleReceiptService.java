@@ -62,7 +62,7 @@ public class SaleReceiptService {
             center(doc, store.name(), title);
             if (store.phone() != null) center(doc, store.phone(), small);
             if (store.address() != null) center(doc, store.address(), small);
-            center(doc, "Satış çeki " + s.number(), cellBold);
+            center(doc, ("WHOLESALE".equals(s.priceLevel()) ? "Topdan satış çeki " : "Satış çeki ") + s.number(), cellBold);
             center(doc, s.createdAt().atZoneSameInstant(ZoneId.of("Asia/Baku")).format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
                     + " · " + s.createdByName(), small);
             if (s.customerName() != null) center(doc, "Müştəri: " + s.customerName() + (s.customerCode() != null ? " (" + s.customerCode() + ")" : ""), small);

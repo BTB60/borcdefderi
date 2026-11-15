@@ -65,7 +65,9 @@ public class SalesService {
             UUID clientRequestId,
             /** Customer bonus spent on this sale (works as a discount). */
             @jakarta.validation.constraints.DecimalMin("0.00")
-            @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal bonusUsed) {}
+            @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal bonusUsed,
+            /** RETAIL (Top 2, the default) or WHOLESALE (Top 1, topdan): which price the goods are sold at. */
+            @jakarta.validation.constraints.Pattern(regexp = "RETAIL|WHOLESALE") String priceLevel) {}
 
     public record ReturnItem(@jakarta.validation.constraints.NotNull UUID saleItemId,
                              @jakarta.validation.constraints.NotNull
@@ -89,7 +91,7 @@ public class SalesService {
                        BigDecimal subtotal, BigDecimal discount, BigDecimal total, BigDecimal paidCash, BigDecimal paidCard,
                        BigDecimal creditAmount, BigDecimal returnedAmount, BigDecimal costTotal, UUID debtId, LocalDate soldOn,
                        String note, String createdByName, OffsetDateTime createdAt, List<Item> items, List<ReturnView> returns,
-                       UUID createdBy, BigDecimal bonusUsed, BigDecimal bonusEarned) {}
+                       UUID createdBy, BigDecimal bonusUsed, BigDecimal bonusEarned, String priceLevel) {}
 
     public record SalePage(List<Sale> items, long total, BigDecimal sum, int page, int size) {}
 
@@ -132,6 +134,7 @@ public class SalesService {
         req.items().stream().map(ItemRequest::productId).distinct().sorted(Comparator.naturalOrder())
                 .forEach(id -> products.put(id, inventory.lockProduct(m.storeId(), id)));
 
+        boolean wholesale = "WHOLESALE".equals(req.priceLevel());
         record Line(ItemRequest req, Product p, BigDecimal qty, BigDecimal price, BigDecimal disc, BigDecimal total) {}
         List<Line> lines = new ArrayList<>();
         BigDecimal subtotal = Money.zero();
@@ -139,7 +142,8 @@ public class SalesService {
             Product p = products.get(it.productId());
             if (!p.active()) throw ApiException.badRequest("PRODUCT_INACTIVE", "“" + p.name() + "” satışda deyil (deaktiv)");
             BigDecimal qty = it.quantity().setScale(3, RoundingMode.HALF_UP);
-            BigDecimal price = Money.of(it.unitPrice() != null ? it.unitPrice() : p.salePrice());
+            BigDecimal list = wholesale && p.wholesalePrice() != null ? p.wholesalePrice() : p.salePrice();
+            BigDecimal price = Money.of(it.unitPrice() != null ? it.unitPrice() : list);
             BigDecimal gross = Money.of(qty.multiply(price));
             BigDecimal disc = Money.of(it.discount() != null ? it.discount() : BigDecimal.ZERO);
             if (disc.compareTo(gross) > 0) throw ApiException.badRequest("INVALID_DISCOUNT", "Endirim məbləğdən çox ola bilməz");
@@ -181,13 +185,15 @@ public class SalesService {
         for (Line l : lines) costTotal = costTotal.add(Money.of(l.qty().multiply(l.p().purchasePrice())));
         jdbc.sql("""
                 INSERT INTO sales (id, store_id, number, customer_id, status, subtotal, discount, total, paid_cash, paid_card,
-                                   credit_amount, cost_total, sold_on, note, created_by, client_request_id, bonus_used, bonus_earned)
-                VALUES (:id, :s, :n, :c, 'COMPLETED', :sub, :d, :t, :pc, :pk, :cr, :cost, :day, :note, :by, :req, :bu, :be)
+                                   credit_amount, cost_total, sold_on, note, created_by, client_request_id, bonus_used, bonus_earned,
+                                   price_level)
+                VALUES (:id, :s, :n, :c, 'COMPLETED', :sub, :d, :t, :pc, :pk, :cr, :cost, :day, :note, :by, :req, :bu, :be, :pl)
                 """).param("id", saleId).param("s", m.storeId()).param("n", number).param("c", req.customerId())
                 .param("sub", subtotal).param("d", discount).param("t", total).param("pc", paidCash).param("pk", paidCard)
                 .param("cr", credit).param("cost", Money.of(costTotal)).param("day", today)
                 .param("note", req.note() == null || req.note().isBlank() ? null : req.note().trim()).param("by", m.userId())
-                .param("req", req.clientRequestId()).param("bu", bonusUsed).param("be", bonusEarned).update();
+                .param("req", req.clientRequestId()).param("bu", bonusUsed).param("be", bonusEarned)
+                .param("pl", wholesale ? "WHOLESALE" : "RETAIL").update();
         for (Line l : lines) {
             jdbc.sql("""
                     INSERT INTO sale_items (id, sale_id, store_id, product_id, name, quantity, unit_price, discount, line_total, unit_cost)
@@ -221,7 +227,7 @@ public class SalesService {
             bonus.add(m, req.customerId(), saleId, "EARN", bonusEarned, number);
         }
         audit.log(m.storeId(), m.userId(), "SALE_CREATED", "SALE", saleId.toString(),
-                number + ": " + total + " AZN (nağd " + paidCash + ", kart " + paidCard + ", borc " + credit + ")");
+                number + (wholesale ? " (topdan)" : "") + ": " + total + " AZN (nağd " + paidCash + ", kart " + paidCard + ", borc " + credit + ")");
         return load(m.storeId(), saleId);
     }
 
@@ -390,7 +396,8 @@ public class SalesService {
                         Money.of(rs.getBigDecimal("cost_total")), rs.getObject("debt_id", UUID.class),
                         rs.getObject("sold_on", LocalDate.class), rs.getString("note"), rs.getString("created_by_name"),
                         rs.getObject("created_at", OffsetDateTime.class), items, returns, rs.getObject("created_by", UUID.class),
-                        Money.of(rs.getBigDecimal("bonus_used")), Money.of(rs.getBigDecimal("bonus_earned"))))
+                        Money.of(rs.getBigDecimal("bonus_used")), Money.of(rs.getBigDecimal("bonus_earned")),
+                        rs.getString("price_level")))
                 .optional().orElseThrow(() -> ApiException.notFound("Satış tapılmadı"));
     }
 }

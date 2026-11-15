@@ -1,0 +1,522 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Alert, Button, Modal, cx } from "@/components/ui";
+import { API_URL, ApiError, api, getToken, openProtected } from "@/lib/api";
+import { formatMoney } from "@/lib/format";
+import type { Party, Product, Sale } from "@/lib/types";
+
+type Line = { product: Product; quantity: string; price: string; discount: string };
+type PayMode = "cash" | "card" | "mixed" | "credit";
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+const num = (s: string) => (s.trim() === "" ? 0 : Number(s.replace(",", ".")) || 0);
+const qtyText = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/0+$/, ""));
+
+/** Banknotes for "müştəri verdi": exact amount plus the next notes that cover the total. */
+function quickCash(total: number): number[] {
+  if (total <= 0) return [];
+  const notes = [1, 5, 10, 20, 50, 100, 200, 500];
+  const out = new Set<number>([r2(total)]);
+  for (const n of notes) {
+    const v = Math.ceil(total / n) * n;
+    if (v > total) out.add(v);
+    if (out.size >= 5) break;
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+/* ---------- product picture (protected endpoint, cached object URLs) ---------- */
+const imageCache = new Map<string, Promise<string | null>>();
+function loadImage(id: string, version: number): Promise<string | null> {
+  const key = `${id}:${version}`;
+  let p = imageCache.get(key);
+  if (!p) {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    p = fetch(`${API_URL}/api/products/${id}/image`, { headers })
+      .then(async (r) => (r.ok ? URL.createObjectURL(await r.blob()) : null))
+      .catch(() => null);
+    imageCache.set(key, p);
+  }
+  return p;
+}
+function Thumb({ product, className }: { product: Product; className?: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    if (product.hasImage) loadImage(product.id, product.version).then((u) => alive && setSrc(u));
+    return () => { alive = false; };
+  }, [product.id, product.version, product.hasImage]);
+  // words that start with a letter: "Su 1.5L" -> "S", "Kofe Jacobs" -> "KJ"
+  const initials = product.name.trim().split(/\s+/).map((w) => w.match(/^\p{L}/u)?.[0] ?? "").filter(Boolean).slice(0, 2).join("").toLocaleUpperCase("az");
+  return src ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" className={cx("object-cover", className)} />
+  ) : (
+    <div className={cx("flex items-center justify-center bg-gradient-to-br from-navy-50 to-slate-100 font-serif font-semibold text-navy-600", className)}>{initials || "•"}</div>
+  );
+}
+
+function Kbd({ children }: { children: ReactNode }) {
+  return <kbd className="rounded border border-slate-300 bg-white px-1.5 py-0.5 font-sans text-[10px] font-semibold text-slate-500 shadow-sm">{children}</kbd>;
+}
+
+/**
+ * Point-of-sale terminal: product catalogue (search, barcode, categories) on the left,
+ * the receipt with customer, discount and payment (cash given → change, card, mixed, credit) on the right.
+ */
+export function PosTerminal({ onSold }: { onSold?: () => void }) {
+  const [products, setProducts] = useState<Product[] | null>(null);
+  const [customers, setCustomers] = useState<Party[]>([]);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
+  const [cart, setCart] = useState<Line[]>([]);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [customer, setCustomer] = useState<Party | null>(null);
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [discount, setDiscount] = useState("");
+  const [percent, setPercent] = useState(false);
+  const [mode, setMode] = useState<PayMode>("cash");
+  const [given, setGiven] = useState("");
+  const [cash, setCash] = useState("");
+  const [card, setCard] = useState("");
+  const [note, setNote] = useState("");
+  const [showNote, setShowNote] = useState(false);
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<{ sale: Sale; change: number } | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const loadProducts = useCallback(() => {
+    api<Product[]>("/api/products?active=true").then(setProducts).catch(() => setProducts([]));
+  }, []);
+  useEffect(() => {
+    loadProducts();
+    api<Party[]>("/api/customers").then(setCustomers).catch(() => setCustomers([]));
+  }, [loadProducts]);
+
+  const categories = useMemo(() => {
+    const m = new Map<string, string>();
+    (products ?? []).forEach((p) => p.categoryId && p.categoryName && m.set(p.categoryId, p.categoryName));
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], "az"));
+  }, [products]);
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (products ?? [])
+      .filter((p) => !category || p.categoryId === category)
+      .filter((p) => !q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || (p.barcode ?? "").toLowerCase().includes(q))
+      // in stock first, then by name; finished goods go to the end
+      .sort((a, b) => Number(a.stockQty <= 0) - Number(b.stockQty <= 0) || a.name.localeCompare(b.name, "az"))
+      .slice(0, 60);
+  }, [products, search, category]);
+
+  const inCart = (id: string) => cart.find((l) => l.product.id === id);
+
+  const add = useCallback((p: Product, qty = 1) => {
+    setCart((c) => {
+      const i = c.findIndex((l) => l.product.id === p.id);
+      if (i >= 0) return c.map((l, j) => (j === i ? { ...l, quantity: qtyText(num(l.quantity) + qty) } : l));
+      return [...c, { product: p, quantity: qtyText(qty), price: String(p.salePrice), discount: "" }];
+    });
+    setFlash(p.id);
+    setTimeout(() => setFlash((f) => (f === p.id ? null : f)), 600);
+    setError(null);
+  }, []);
+
+  const setQty = (id: string, q: number) =>
+    setCart((c) => (q <= 0 ? c.filter((l) => l.product.id !== id) : c.map((l) => (l.product.id === id ? { ...l, quantity: qtyText(q) } : l))));
+  const patch = (id: string, v: Partial<Line>) => setCart((c) => c.map((l) => (l.product.id === id ? { ...l, ...v } : l)));
+
+  // Enter: exact barcode / code (scanner) adds at once; otherwise the only match
+  async function onSearchEnter(e: FormEvent) {
+    e.preventDefault();
+    const q = search.trim();
+    if (!q) return;
+    const exact = (products ?? []).find((p) => p.barcode === q || p.code.toLowerCase() === q.toLowerCase());
+    if (exact) { add(exact); setSearch(""); return; }
+    try {
+      add(await api<Product>(`/api/products/by-code/${encodeURIComponent(q)}`));
+      setSearch("");
+    } catch {
+      if (visible.length === 1) { add(visible[0]); setSearch(""); }
+      else setError(`“${q}” tapılmadı`);
+    }
+  }
+
+  /* ---------- totals ---------- */
+  const lines = cart.map((l) => ({ ...l, total: r2(Math.max(0, num(l.quantity) * num(l.price) - num(l.discount))) }));
+  const subtotal = r2(lines.reduce((s, l) => s + l.total, 0));
+  const discountAmount = r2(Math.min(subtotal, percent ? (subtotal * Math.min(100, num(discount))) / 100 : num(discount)));
+  const total = r2(Math.max(0, subtotal - discountAmount));
+  const itemCount = lines.reduce((s, l) => s + num(l.quantity), 0);
+
+  let paidCash = 0, paidCard = 0, change = 0;
+  if (mode === "cash") {
+    const g = given.trim() === "" ? total : num(given);
+    paidCash = Math.min(g, total);
+    change = r2(Math.max(0, g - total));
+  } else if (mode === "card") {
+    paidCard = total;
+  } else if (mode === "mixed") {
+    paidCash = num(cash);
+    paidCard = num(card);
+  } else {
+    paidCash = num(cash); // optional advance
+  }
+  paidCash = r2(paidCash);
+  paidCard = r2(paidCard);
+  const credit = r2(total - paidCash - paidCard);
+  const over = credit < -0.004;
+  const stockProblem = lines.find((l) => num(l.quantity) > l.product.stockQty);
+  const needsCustomer = credit > 0.004 && !customer;
+  const canSell = !busy && cart.length > 0 && !over && !needsCustomer && !stockProblem && total >= 0;
+
+  const reset = () => {
+    setCart([]); setDiscount(""); setPercent(false); setGiven(""); setCash(""); setCard(""); setNote(""); setShowNote(false);
+    setCustomer(null); setCustomerQuery(""); setMode("cash"); setEditing(null); setError(null); setRequestId(crypto.randomUUID());
+  };
+
+  async function submit() {
+    if (!canSell) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const s = await api<Sale>("/api/sales", {
+        method: "POST",
+        json: {
+          items: lines.map((l) => ({ productId: l.product.id, quantity: l.quantity, unitPrice: l.price, discount: l.discount || null })),
+          customerId: customer?.id ?? null,
+          discount: discountAmount > 0 ? discountAmount.toFixed(2) : null,
+          paidCash: paidCash.toFixed(2),
+          paidCard: paidCard.toFixed(2),
+          note: note || null,
+          clientRequestId: requestId,
+        },
+      });
+      setDone({ sale: s, change });
+      reset();
+      loadProducts();
+      onSold?.();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Satış alınmadı");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // keyboard: F2 search, F9 sell, Esc clears search
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); }
+      else if (e.key === "F9") { e.preventDefault(); void submitRef.current(); }
+      else if (e.key === "Escape" && document.activeElement === searchRef.current) setSearch("");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const customerMatches = useMemo(() => {
+    const q = customerQuery.trim().toLowerCase();
+    return customers
+      .filter((c) => !q || c.name.toLowerCase().includes(q) || (c.phone ?? "").replace(/\s/g, "").includes(q.replace(/\s/g, "")) || (c.code ?? "").toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [customers, customerQuery]);
+
+  return (
+    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+      {/* ---------------- catalogue ---------------- */}
+      <section className="min-w-0 rounded-2xl bg-white p-4 shadow-card ring-1 ring-slate-200/70 sm:p-5">
+        <form onSubmit={onSearchEnter} className="relative">
+          <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path d="M3 5v14M7 5v14M11 5v14M14 5v14M18 5v14M21 5v14" /></svg>
+          <input
+            ref={searchRef}
+            autoFocus
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setError(null); }}
+            placeholder="Məhsul adı, kod və ya barkod — skanerlə oxudun və Enter"
+            aria-label="Məhsul axtar"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 pl-12 pr-20 text-base text-navy-800 outline-none transition focus:border-gold-500 focus:bg-white focus:shadow-glow"
+          />
+          <span className="absolute right-4 top-1/2 -translate-y-1/2"><Kbd>F2</Kbd></span>
+        </form>
+
+        {categories.length > 0 && (
+          <div className="-mx-1 mt-4 flex gap-2 overflow-x-auto px-1 pb-1">
+            {[["", "Hamısı"] as [string, string], ...categories].map(([id, name]) => (
+              <button key={id || "all"} type="button" onClick={() => setCategory(id)}
+                className={cx("shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition", category === id ? "bg-navy-800 text-white shadow" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}>
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-4">
+          {!products ? (
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-44 animate-pulse rounded-2xl bg-slate-100" />)}</div>
+          ) : visible.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 py-14 text-center text-sm text-slate-500">Məhsul tapılmadı</div>
+          ) : (
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
+              {visible.map((p) => {
+                const line = inCart(p.id);
+                const out = p.stockQty <= 0;
+                return (
+                  <button key={p.id} type="button" disabled={out} onClick={() => add(p)}
+                    className={cx(
+                      "group relative flex flex-col overflow-hidden rounded-2xl border bg-white text-left transition-all duration-150",
+                      out ? "cursor-not-allowed border-slate-200 opacity-50" : "border-slate-200 hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-card active:scale-[0.98]",
+                      flash === p.id && "ring-2 ring-gold-500",
+                    )}>
+                    <Thumb product={p} className="h-24 w-full text-2xl" />
+                    {line && <span className="absolute right-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-gold-500 px-2 text-xs font-bold text-navy-900 shadow">{qtyText(num(line.quantity))}</span>}
+                    {p.oldPrice && p.oldPrice > p.salePrice && <span className="absolute left-2 top-2 rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">Endirim</span>}
+                    <div className="flex flex-1 flex-col p-3">
+                      <span className="line-clamp-2 text-sm font-medium leading-snug text-navy-800">{p.name}</span>
+                      <div className="mt-auto flex items-end justify-between pt-2">
+                        <span>
+                          {p.oldPrice && p.oldPrice > p.salePrice && <span className="block text-[11px] text-slate-400 line-through">{formatMoney(p.oldPrice)}</span>}
+                          <span className="font-serif text-base font-semibold tabular-nums text-navy-800">{formatMoney(p.salePrice)}</span>
+                        </span>
+                        <span className={cx("text-[11px] font-medium", out ? "text-rose-600" : p.lowStock ? "text-amber-600" : "text-slate-400")}>
+                          {out ? "bitib" : `${qtyText(p.stockQty)} ${p.unit}`}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ---------------- receipt ---------------- */}
+      <aside className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-slate-200/70 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)]">
+        <header className="flex items-center justify-between bg-navy-800 px-5 py-3.5 text-white">
+          <div>
+            <p className="font-serif text-lg font-semibold">Çek</p>
+            <p className="text-xs text-white/60">{cart.length === 0 ? "Səbət boşdur" : `${cart.length} məhsul · ${qtyText(itemCount)} ədəd`}</p>
+          </div>
+          {cart.length > 0 && <button type="button" onClick={reset} className="rounded-lg px-2.5 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white">Təmizlə</button>}
+        </header>
+
+        {/* customer */}
+        <div className="relative border-b border-slate-100 px-5 py-3">
+          {customer ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-navy-50 px-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-navy-800">{customer.name}</p>
+                <p className="text-xs text-slate-500">{[customer.code, customer.phone, customer.openBalance > 0 && `borc ${formatMoney(customer.openBalance)}`].filter(Boolean).join(" · ")}</p>
+              </div>
+              <button type="button" onClick={() => setCustomer(null)} className="text-slate-400 hover:text-rose-600" aria-label="Müştərini çıxar">✕</button>
+            </div>
+          ) : (
+            <>
+              <input
+                value={customerQuery}
+                onChange={(e) => { setCustomerQuery(e.target.value); setCustomerOpen(true); }}
+                onFocus={() => setCustomerOpen(true)}
+                onBlur={() => setTimeout(() => setCustomerOpen(false), 150)}
+                placeholder="Müştəri (istəyə bağlı) — ad, telefon, kod"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-gold-500"
+              />
+              {customerOpen && customerMatches.length > 0 && (
+                <ul className="absolute left-5 right-5 z-20 mt-1 max-h-64 overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                  {customerMatches.map((c) => (
+                    <li key={c.id}>
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCustomer(c); setCustomerQuery(""); setCustomerOpen(false); }}
+                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50">
+                        <span className="min-w-0 truncate"><span className="font-medium text-navy-800">{c.name}</span> <span className="text-xs text-slate-400">{c.code}</span></span>
+                        {c.openBalance > 0 && <span className="shrink-0 text-xs text-rose-600">{formatMoney(c.openBalance)}</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* lines */}
+        <div className="min-h-[120px] flex-1 overflow-y-auto px-3 py-2">
+          {cart.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center py-10 text-center text-sm text-slate-400">
+              <svg viewBox="0 0 24 24" className="mb-2 h-10 w-10 text-slate-300" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true"><path d="M3 4h2l2.4 11h11.2L21 8H6.2M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" /></svg>
+              Məhsula toxunun və ya barkodu oxudun
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {lines.map((l) => {
+                const id = l.product.id;
+                const short = num(l.quantity) > l.product.stockQty;
+                return (
+                  <li key={id} className="px-2 py-2.5">
+                    <div className="flex items-start gap-3">
+                      <button type="button" onClick={() => setEditing(editing === id ? null : id)} className="min-w-0 flex-1 text-left">
+                        <p className="truncate text-sm font-medium text-navy-800">{l.product.name}</p>
+                        <p className="text-xs text-slate-500">
+                          {formatMoney(num(l.price))} × {l.quantity || 0}
+                          {num(l.discount) > 0 && <span className="text-rose-600"> · −{formatMoney(num(l.discount))}</span>}
+                          {short && <span className="text-rose-600"> · anbarda {qtyText(l.product.stockQty)}</span>}
+                        </p>
+                      </button>
+                      <span className="pt-0.5 text-sm font-semibold tabular-nums text-navy-800">{formatMoney(l.total)}</span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <button type="button" onClick={() => setQty(id, num(l.quantity) - 1)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-lg leading-none text-slate-600 hover:border-gold-500" aria-label="Azalt">−</button>
+                      <input value={l.quantity} onChange={(e) => patch(id, { quantity: e.target.value })} inputMode="decimal" aria-label="Miqdar"
+                        className="h-8 w-14 rounded-lg border border-slate-200 text-center text-sm font-semibold tabular-nums outline-none focus:border-gold-500" />
+                      <button type="button" onClick={() => setQty(id, num(l.quantity) + 1)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-lg leading-none text-slate-600 hover:border-gold-500" aria-label="Artır">+</button>
+                      <button type="button" onClick={() => setEditing(editing === id ? null : id)} className="ml-1 rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100">Qiymət / endirim</button>
+                      <button type="button" onClick={() => setQty(id, 0)} className="ml-auto rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Sil">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3" /></svg>
+                      </button>
+                    </div>
+                    {editing === id && (
+                      <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-2">
+                        <label className="text-[11px] text-slate-500">Qiymət (₼)
+                          <input value={l.price} onChange={(e) => patch(id, { price: e.target.value })} inputMode="decimal" className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-gold-500" />
+                        </label>
+                        <label className="text-[11px] text-slate-500">Sətir endirimi (₼)
+                          <input value={l.discount} onChange={(e) => patch(id, { discount: e.target.value })} inputMode="decimal" className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-gold-500" />
+                        </label>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        {/* totals + payment */}
+        <div className="space-y-3 border-t border-slate-200 bg-slate-50/60 px-5 py-4">
+          <div className="flex items-center justify-between text-sm text-slate-600"><span>Ara cəmi</span><span className="tabular-nums">{formatMoney(subtotal)}</span></div>
+          <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
+            <span>Endirim</span>
+            <div className="flex items-center gap-1.5">
+              <input value={discount} onChange={(e) => setDiscount(e.target.value)} inputMode="decimal" placeholder="0" aria-label="Ümumi endirim"
+                className="h-8 w-20 rounded-lg border border-slate-200 bg-white px-2 text-right text-sm tabular-nums outline-none focus:border-gold-500" />
+              <div className="inline-flex rounded-lg bg-white p-0.5 ring-1 ring-slate-200">
+                {[false, true].map((pc) => (
+                  <button key={String(pc)} type="button" onClick={() => setPercent(pc)} className={cx("rounded-md px-2 py-1 text-xs font-semibold", percent === pc ? "bg-navy-800 text-white" : "text-slate-500")}>{pc ? "%" : "₼"}</button>
+                ))}
+              </div>
+              {discountAmount > 0 && <span className="w-20 text-right tabular-nums text-rose-600">−{formatMoney(discountAmount)}</span>}
+            </div>
+          </div>
+          <div className="flex items-end justify-between rounded-2xl bg-navy-800 px-4 py-3 text-white">
+            <span className="text-sm text-white/70">Yekun</span>
+            <span className="font-serif text-3xl font-semibold tabular-nums text-gold-400">{formatMoney(total)}</span>
+          </div>
+
+          <div className="grid grid-cols-4 gap-1 rounded-xl bg-white p-1 ring-1 ring-slate-200" role="tablist" aria-label="Ödəniş üsulu">
+            {([["cash", "Nağd"], ["card", "Kart"], ["mixed", "Qarışıq"], ["credit", "Borca"]] as const).map(([k, label]) => (
+              <button key={k} type="button" role="tab" aria-selected={mode === k} onClick={() => { setMode(k); setCash(""); setCard(""); setGiven(""); }}
+                className={cx("rounded-lg py-2 text-sm font-medium transition", mode === k ? "bg-gold-500 text-navy-900 shadow" : "text-slate-600 hover:bg-slate-100")}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {mode === "cash" && total > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-slate-600" htmlFor="pos-given">Müştəri verdi</label>
+                <input id="pos-given" value={given} onChange={(e) => setGiven(e.target.value)} inputMode="decimal" placeholder={total.toFixed(2)}
+                  className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-right text-lg font-semibold tabular-nums outline-none focus:border-gold-500" />
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {quickCash(total).map((v) => (
+                  <button key={v} type="button" onClick={() => setGiven(v.toFixed(2))}
+                    className={cx("rounded-lg border px-2.5 py-1 text-xs font-semibold tabular-nums transition", num(given) === v ? "border-gold-500 bg-gold-500/10 text-navy-800" : "border-slate-200 bg-white text-slate-600 hover:border-gold-500")}>
+                    {v === r2(total) ? "Dəqiq" : formatMoney(v)}
+                  </button>
+                ))}
+              </div>
+              {change > 0 && (
+                <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-4 py-2.5 text-emerald-800 ring-1 ring-emerald-200">
+                  <span className="text-sm font-medium">Qaytarılacaq pul</span>
+                  <span className="font-serif text-2xl font-semibold tabular-nums">{formatMoney(change)}</span>
+                </div>
+              )}
+            </div>
+          )}
+          {mode === "card" && total > 0 && <p className="rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-800">Kartla {formatMoney(total)} ödənilir.</p>}
+          {(mode === "mixed" || mode === "credit") && (
+            <div className={cx("grid gap-2", mode === "mixed" ? "grid-cols-2" : "grid-cols-1")}>
+              <label className="text-xs text-slate-500">{mode === "credit" ? "İlkin ödəniş, nağd (istəyə bağlı)" : "Nağd (₼)"}
+                <input value={cash} onChange={(e) => setCash(e.target.value)} inputMode="decimal" placeholder="0"
+                  className="mt-0.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-right font-semibold tabular-nums outline-none focus:border-gold-500" />
+              </label>
+              {mode === "mixed" && (
+                <label className="text-xs text-slate-500">Kart (₼)
+                  <input value={card} onChange={(e) => setCard(e.target.value)} inputMode="decimal" placeholder="0"
+                    className="mt-0.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-right font-semibold tabular-nums outline-none focus:border-gold-500" />
+                </label>
+              )}
+            </div>
+          )}
+
+          {credit > 0.004 && !over && (
+            <p className={cx("rounded-xl px-3 py-2 text-sm", customer ? "bg-amber-50 text-amber-800" : "bg-rose-50 text-rose-700")}>
+              {customer ? <>{formatMoney(credit)} <b>{customer.name}</b> adlı müştərinin borcuna yazılacaq</> : <>Ödənilməyən {formatMoney(credit)} borca yazılır — yuxarıdan müştəri seçin</>}
+            </p>
+          )}
+          {over && <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">Ödəniş yekundan {formatMoney(-credit)} çoxdur.</p>}
+          {stockProblem && <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">“{stockProblem.product.name}” anbarda kifayət deyil ({qtyText(stockProblem.product.stockQty)}).</p>}
+          {error && <Alert>{error}</Alert>}
+
+          {showNote ? (
+            <input autoFocus value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="Qeyd"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-gold-500" />
+          ) : (
+            <button type="button" onClick={() => setShowNote(true)} className="text-xs font-medium text-slate-500 hover:text-navy-800">+ Qeyd əlavə et</button>
+          )}
+
+          <button type="button" disabled={!canSell} onClick={submit}
+            className="flex w-full items-center justify-between rounded-2xl bg-gold-500 px-5 py-4 text-navy-900 shadow-sm transition hover:bg-gold-600 hover:text-white active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50">
+            <span className="text-base font-semibold">{busy ? "Saxlanılır…" : "Satışı tamamla"}</span>
+            <span className="flex items-center gap-2"><span className="font-serif text-lg font-semibold tabular-nums">{formatMoney(total)}</span><Kbd>F9</Kbd></span>
+          </button>
+        </div>
+      </aside>
+
+      {done && (
+        <Modal open title="Satış tamamlandı" onClose={() => { setDone(null); searchRef.current?.focus(); }}
+          footer={<>
+            <Button variant="outline" onClick={() => openProtected(`/api/sales/${done.sale.id}/receipt`).catch(() => undefined)}>Çeki çap et (PDF)</Button>
+            <Button variant="gold" autoFocus onClick={() => { setDone(null); setTimeout(() => searchRef.current?.focus(), 0); }}>Yeni satış</Button>
+          </>}>
+          <div className="text-center">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+              <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth={2.5} aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
+            </div>
+            <p className="text-sm text-slate-500">{done.sale.number}{done.sale.customerName ? ` · ${done.sale.customerName}` : ""}</p>
+            <p className="mt-1 font-serif text-3xl font-semibold tabular-nums text-navy-800">{formatMoney(done.sale.total)}</p>
+            <div className="mx-auto mt-4 max-w-xs space-y-1 text-sm">
+              {done.sale.paidCash > 0 && <div className="flex justify-between"><span className="text-slate-500">Nağd</span><span className="tabular-nums">{formatMoney(done.sale.paidCash)}</span></div>}
+              {done.sale.paidCard > 0 && <div className="flex justify-between"><span className="text-slate-500">Kart</span><span className="tabular-nums">{formatMoney(done.sale.paidCard)}</span></div>}
+              {done.sale.creditAmount > 0 && <div className="flex justify-between text-amber-700"><span>Borca</span><span className="tabular-nums">{formatMoney(done.sale.creditAmount)}</span></div>}
+            </div>
+            {done.change > 0 && (
+              <div className="mx-auto mt-4 max-w-xs rounded-2xl bg-emerald-50 px-4 py-3 text-emerald-800 ring-1 ring-emerald-200">
+                <p className="text-xs font-medium uppercase tracking-wider">Müştəriyə qaytarın</p>
+                <p className="font-serif text-3xl font-semibold tabular-nums">{formatMoney(done.change)}</p>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}

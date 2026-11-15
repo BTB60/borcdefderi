@@ -176,6 +176,9 @@ export interface Party {
   lastContactAt?: string | null;
   lastActivityAt?: string | null;
   overdueDebts?: number;
+  /** Customers: standing discount (%) applied at the till, and bonus balance. */
+  discountPercent?: number;
+  bonusBalance?: number;
 }
 
 // ----- HesabPro 2.0 -----
@@ -516,6 +519,7 @@ export interface Sale {
   costTotal: number; debtId: string | null; soldOn: string; note: string | null; createdByName: string; createdAt: string; items: SaleItem[];
   returns: { id: string; amount: number; debtReduced: number; refunded: number; returnedOn: string; reason: string | null; createdByName: string; createdAt: string }[];
   createdBy: string | null;
+  bonusUsed?: number; bonusEarned?: number;
 }
 
 export interface SalePage { items: Sale[]; total: number; sum: number; page: number; size: number }

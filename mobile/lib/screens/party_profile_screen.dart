@@ -268,6 +268,13 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
                   Text(party.name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
                   Text([if (widget.isCustomer) party.code, party.phone].where((e) => e != null && e.isNotEmpty).join(' · '),
                       style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  if (widget.isCustomer && (party.discountPercent > 0 || party.bonusBalance > 0))
+                    Text(
+                        [
+                          if (party.discountPercent > 0) 'Endirim ${party.discountPercent.toStringAsFixed(party.discountPercent % 1 == 0 ? 0 : 2)}%',
+                          if (party.bonusBalance > 0) 'Bonus ${formatMoney(party.bonusBalance)}',
+                        ].join(' · '),
+                        style: const TextStyle(color: Color(0xFFE8C77A), fontSize: 12, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

@@ -43,6 +43,7 @@ export default function SettingsPage() {
         <div className="space-y-6 xl:col-span-2">
           <PersonalCard profile={profile} onChange={updated} />
           {profile.role === "STORE_OWNER" && <StoreCard profile={profile} onChange={updated} />}
+          {profile.role === "STORE_OWNER" && <BonusCard />}
           <PasswordCard isAdmin={profile.platformRole === "SUPER_ADMIN"} />
         </div>
       </div>
@@ -222,6 +223,47 @@ function StoreCard({ profile, onChange }: { profile: Profile; onChange: (p: Prof
           <Input maxLength={255} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
         </Field>
         <Button type="submit" variant="primary" disabled={busy}>{busy ? "Saxlanılır…" : "Yadda saxla"}</Button>
+      </form>
+    </Card>
+  );
+}
+
+/** Müştəri bonusu: % of what customers pay at the till comes back to them as bonus (0 = off). */
+function BonusCard() {
+  const [value, setValue] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<Msg>(null);
+
+  useEffect(() => {
+    api<{ bonusPercent: number }>("/api/settings/bonus").then((r) => { setValue(String(r.bonusPercent ?? 0)); setLoaded(true); }).catch(() => setLoaded(true));
+  }, []);
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api<{ bonusPercent: number }>("/api/settings/bonus", { method: "PUT", json: { bonusPercent: Number(value.replace(",", ".")) || 0 } });
+      setValue(String(r.bonusPercent));
+      setMsg({ kind: "success", text: Number(r.bonusPercent) > 0 ? `Müştərilər ödədiklərinin ${r.bonusPercent}%-ni bonus qazanacaq` : "Bonus söndürüldü" });
+    } catch (err) {
+      setMsg({ kind: "error", text: errorText(err, "Yadda saxlanılmadı") });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Müştəri bonusu</h2>
+      <p className="mb-5 text-sm text-slate-500">Müştəri seçilmiş satışda ödənilən məbləğin bu faizi müştərinin bonusuna yazılır, növbəti alışda bonusla ödəyə bilər. 0 — bonus yoxdur. Müştəriyə daimi endirim faizi onun kartında təyin olunur.</p>
+      {msg && <div className="mb-4"><Alert kind={msg.kind}>{msg.text}</Alert></div>}
+      <form onSubmit={save} className="flex flex-wrap items-end gap-3">
+        <Field label="Bonus faizi (%)">
+          <Input inputMode="decimal" className="w-32" value={value} disabled={!loaded} onChange={(e) => setValue(e.target.value)} placeholder="0" />
+        </Field>
+        <Button type="submit" variant="primary" disabled={busy || !loaded}>{busy ? "Saxlanılır…" : "Yadda saxla"}</Button>
       </form>
     </Card>
   );

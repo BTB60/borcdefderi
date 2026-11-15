@@ -67,6 +67,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _storeName = TextEditingController();
   final _storePhone = TextEditingController();
   final _storeAddress = TextEditingController();
+  final _bonusPct = TextEditingController();
   final _current = TextEditingController();
   final _next = TextEditingController();
   final _repeat = TextEditingController();
@@ -82,7 +83,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
-    for (final c in [_fullName, _phone, _email, _emailPassword, _storeName, _storePhone, _storeAddress, _current, _next, _repeat]) {
+    for (final c in [_fullName, _phone, _email, _emailPassword, _storeName, _storePhone, _storeAddress, _bonusPct, _current, _next, _repeat]) {
       c.dispose();
     }
     super.dispose();
@@ -90,7 +91,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _load() async {
     try {
-      _fill(Profile.fromJson(await _api.get('/api/profile') as Map<String, dynamic>));
+      final p = Profile.fromJson(await _api.get('/api/profile') as Map<String, dynamic>);
+      _fill(p);
+      if (p.isOwner) {
+        final b = await _api.get('/api/settings/bonus') as Map<String, dynamic>;
+        if (mounted) _bonusPct.text = '${b['bonusPercent']}';
+      }
     } catch (e) {
       setState(() => _error = errorMessage(e));
     }
@@ -195,6 +201,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }) as Map<String, dynamic>));
       }, 'Mağaza məlumatları yadda saxlanıldı');
 
+  Future<void> _saveBonus() => _run(() async {
+        final r = await _api.put('/api/settings/bonus', {'bonusPercent': double.tryParse(_bonusPct.text.trim().replaceAll(',', '.')) ?? 0})
+            as Map<String, dynamic>;
+        _bonusPct.text = '${r['bonusPercent']}';
+      }, 'Bonus faizi yadda saxlanıldı');
+
   Future<void> _changePassword() async {
     final min = (_profile?.isSuperAdmin ?? false) ? 12 : 8;
     if (_next.text.length < min) {
@@ -278,6 +290,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     TextField(controller: _storeAddress, decoration: const InputDecoration(labelText: 'Ünvan')),
                     const SizedBox(height: 12),
                     FilledButton(onPressed: _saveStore, child: const Text('Yadda saxla')),
+                  ]),
+                if (p.isOwner)
+                  _section('Müştəri bonusu', [
+                    Text('Müştəri seçilmiş satışda ödənilən məbləğin bu faizi müştərinin bonusuna yazılır. 0 — bonus yoxdur.',
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _bonusPct,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Bonus faizi', suffixText: '%'),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(onPressed: _saveBonus, child: const Text('Yadda saxla')),
                   ]),
                 _section('Şifrəni dəyiş', [
                   TextField(controller: _current, obscureText: true, decoration: const InputDecoration(labelText: 'Cari şifrə')),

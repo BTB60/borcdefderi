@@ -62,7 +62,10 @@ public class SalesService {
             UUID cashAccountId,
             UUID cardAccountId,
             @jakarta.validation.constraints.Size(max = 500) String note,
-            UUID clientRequestId) {}
+            UUID clientRequestId,
+            /** Customer bonus spent on this sale (works as a discount). */
+            @jakarta.validation.constraints.DecimalMin("0.00")
+            @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal bonusUsed) {}
 
     public record ReturnItem(@jakarta.validation.constraints.NotNull UUID saleItemId,
                              @jakarta.validation.constraints.NotNull
@@ -86,7 +89,7 @@ public class SalesService {
                        BigDecimal subtotal, BigDecimal discount, BigDecimal total, BigDecimal paidCash, BigDecimal paidCard,
                        BigDecimal creditAmount, BigDecimal returnedAmount, BigDecimal costTotal, UUID debtId, LocalDate soldOn,
                        String note, String createdByName, OffsetDateTime createdAt, List<Item> items, List<ReturnView> returns,
-                       UUID createdBy) {}
+                       UUID createdBy, BigDecimal bonusUsed, BigDecimal bonusEarned) {}
 
     public record SalePage(List<Sale> items, long total, BigDecimal sum, int page, int size) {}
 
@@ -97,9 +100,11 @@ public class SalesService {
     private final PartyAccountService accounts;
     private final DebtService debts;
     private final AuditService audit;
+    private final BonusService bonus;
 
     public SalesService(JdbcClient jdbc, TenantService tenant, InventoryService inventory, CashService cash,
-                        PartyAccountService accounts, DebtService debts, AuditService audit) {
+                        PartyAccountService accounts, DebtService debts, AuditService audit, BonusService bonus) {
+        this.bonus = bonus;
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.inventory = inventory;
@@ -145,6 +150,18 @@ public class SalesService {
         subtotal = Money.of(subtotal);
         BigDecimal discount = Money.of(req.discount() != null ? req.discount() : BigDecimal.ZERO);
         if (discount.compareTo(subtotal) > 0) throw ApiException.badRequest("INVALID_DISCOUNT", "Endirim məbləğdən çox ola bilməz");
+        BigDecimal bonusUsed = Money.of(req.bonusUsed() != null ? req.bonusUsed() : BigDecimal.ZERO);
+        if (bonusUsed.signum() > 0) {
+            if (req.customerId() == null) throw ApiException.badRequest("CUSTOMER_REQUIRED", "Bonusla ödəniş üçün müştəri seçin");
+            BigDecimal available = bonus.lockBalance(m.storeId(), req.customerId());
+            if (bonusUsed.compareTo(available) > 0) {
+                throw ApiException.conflict("BONUS_EXCEEDS", "Müştərinin bonusu kifayət etmir (balans: " + available + " AZN)");
+            }
+            if (bonusUsed.compareTo(subtotal.subtract(discount)) > 0) {
+                throw ApiException.badRequest("BONUS_EXCEEDS", "Bonus satış məbləğindən çox ola bilməz");
+            }
+            discount = Money.of(discount.add(bonusUsed)); // bonus is spent as a discount
+        }
         BigDecimal total = Money.of(subtotal.subtract(discount));
         BigDecimal paidCash = Money.of(req.paidCash() != null ? req.paidCash() : BigDecimal.ZERO);
         BigDecimal paidCard = Money.of(req.paidCard() != null ? req.paidCard() : BigDecimal.ZERO);
@@ -157,19 +174,20 @@ public class SalesService {
             throw ApiException.badRequest("CUSTOMER_REQUIRED", "Borcla və ya qismən ödənişli satış üçün müştəri seçin");
         }
 
+        BigDecimal bonusEarned = req.customerId() == null ? Money.zero() : bonus.earnedFor(m.storeId(), paid);
         UUID saleId = UUID.randomUUID();
         String number = "S-" + String.format("%06d", jdbc.sql("SELECT nextval('sale_number_seq')").query(Long.class).single());
         BigDecimal costTotal = Money.zero();
         for (Line l : lines) costTotal = costTotal.add(Money.of(l.qty().multiply(l.p().purchasePrice())));
         jdbc.sql("""
                 INSERT INTO sales (id, store_id, number, customer_id, status, subtotal, discount, total, paid_cash, paid_card,
-                                   credit_amount, cost_total, sold_on, note, created_by, client_request_id)
-                VALUES (:id, :s, :n, :c, 'COMPLETED', :sub, :d, :t, :pc, :pk, :cr, :cost, :day, :note, :by, :req)
+                                   credit_amount, cost_total, sold_on, note, created_by, client_request_id, bonus_used, bonus_earned)
+                VALUES (:id, :s, :n, :c, 'COMPLETED', :sub, :d, :t, :pc, :pk, :cr, :cost, :day, :note, :by, :req, :bu, :be)
                 """).param("id", saleId).param("s", m.storeId()).param("n", number).param("c", req.customerId())
                 .param("sub", subtotal).param("d", discount).param("t", total).param("pc", paidCash).param("pk", paidCard)
                 .param("cr", credit).param("cost", Money.of(costTotal)).param("day", today)
                 .param("note", req.note() == null || req.note().isBlank() ? null : req.note().trim()).param("by", m.userId())
-                .param("req", req.clientRequestId()).update();
+                .param("req", req.clientRequestId()).param("bu", bonusUsed).param("be", bonusEarned).update();
         for (Line l : lines) {
             jdbc.sql("""
                     INSERT INTO sale_items (id, sale_id, store_id, product_id, name, quantity, unit_price, discount, line_total, unit_cost)
@@ -197,6 +215,10 @@ public class SalesService {
                     .param("s", m.storeId()).query(Long.class).single() == 0) {
                 throw ApiException.notFound("Müştəri tapılmadı");
             }
+        }
+        if (req.customerId() != null) {
+            bonus.add(m, req.customerId(), saleId, "USE", bonusUsed.negate(), number);
+            bonus.add(m, req.customerId(), saleId, "EARN", bonusEarned, number);
         }
         audit.log(m.storeId(), m.userId(), "SALE_CREATED", "SALE", saleId.toString(),
                 number + ": " + total + " AZN (nağd " + paidCash + ", kart " + paidCard + ", borc " + credit + ")");
@@ -258,6 +280,9 @@ public class SalesService {
         BigDecimal amount = Money.of(sale.total().subtract(sale.returnedAmount()));
         if (amount.signum() > 0) settleReturn(m, sale, amount, cost, req == null ? null : req.refundAccountId(),
                 req == null || req.reason() == null ? "Satış ləğv edildi" : req.reason());
+        else if (sale.total().signum() == 0) {
+            bonus.reverseSale(m, sale.customerId(), sale.id(), sale.number(), sale.bonusEarned(), sale.bonusUsed(), BigDecimal.ONE);
+        }
         jdbc.sql("UPDATE sales SET status = 'CANCELLED', cancelled_at = now() WHERE id = :id").param("id", saleId).update();
         audit.log(m.storeId(), m.userId(), "SALE_CANCELLED", "SALE", saleId.toString(), sale.number());
         return load(m.storeId(), saleId);
@@ -265,6 +290,10 @@ public class SalesService {
 
     /** Lowers the sale's still-unpaid debt first, refunds the rest in money; records the return. */
     private void settleReturn(CurrentMember m, Sale sale, BigDecimal amount, BigDecimal cost, UUID refundAccountId, String reason) {
+        // the same share of the sale's bonus goes back: earned bonus is taken back, spent bonus is returned
+        BigDecimal share = sale.total().signum() == 0 ? BigDecimal.ONE
+                : amount.divide(sale.total(), 6, java.math.RoundingMode.HALF_UP).min(BigDecimal.ONE);
+        bonus.reverseSale(m, sale.customerId(), sale.id(), sale.number(), sale.bonusEarned(), sale.bonusUsed(), share);
         BigDecimal debtReduced = Money.zero();
         if (sale.debtId() != null) {
             DebtView d = debts.lockAndLoad(m, sale.debtId());
@@ -360,7 +389,8 @@ public class SalesService {
                         Money.of(rs.getBigDecimal("credit_amount")), Money.of(rs.getBigDecimal("returned_amount")),
                         Money.of(rs.getBigDecimal("cost_total")), rs.getObject("debt_id", UUID.class),
                         rs.getObject("sold_on", LocalDate.class), rs.getString("note"), rs.getString("created_by_name"),
-                        rs.getObject("created_at", OffsetDateTime.class), items, returns, rs.getObject("created_by", UUID.class)))
+                        rs.getObject("created_at", OffsetDateTime.class), items, returns, rs.getObject("created_by", UUID.class),
+                        Money.of(rs.getBigDecimal("bonus_used")), Money.of(rs.getBigDecimal("bonus_earned"))))
                 .optional().orElseThrow(() -> ApiException.notFound("Satış tapılmadı"));
     }
 }

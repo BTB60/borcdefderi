@@ -276,6 +276,8 @@ class _PartyFormState extends State<_PartyForm> {
   late final _name = TextEditingController(text: widget.party?.name ?? '');
   late final _phone = TextEditingController(text: widget.party?.phone ?? '');
   late final _note = TextEditingController(text: widget.party?.note ?? '');
+  late final _discount = TextEditingController(
+      text: (widget.party?.discountPercent ?? 0) > 0 ? widget.party!.discountPercent.toString().replaceAll(RegExp(r'\.0$'), '') : '');
   bool _busy = false;
   String? _error;
 
@@ -286,6 +288,7 @@ class _PartyFormState extends State<_PartyForm> {
     _name.dispose();
     _phone.dispose();
     _note.dispose();
+    _discount.dispose();
     super.dispose();
   }
 
@@ -299,6 +302,7 @@ class _PartyFormState extends State<_PartyForm> {
       'name': _name.text.trim(),
       'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
       'note': _note.text.trim().isEmpty ? null : _note.text.trim(),
+      if (widget.isCustomer) 'discountPercent': double.tryParse(_discount.text.trim().replaceAll(',', '.')) ?? 0,
     };
     try {
       final base = _endpoint(widget.isCustomer);
@@ -349,6 +353,21 @@ class _PartyFormState extends State<_PartyForm> {
           maxLength: 1000,
           decoration: const InputDecoration(labelText: 'Qeyd (istəyə bağlı)'),
         ),
+        if (widget.isCustomer) ...[
+          const SizedBox(height: 14),
+          TextFormField(
+            controller: _discount,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+                labelText: 'Daimi endirim (%)', helperText: 'Satışda bu müştəri seçiləndə avtomatik tətbiq olunur', suffixText: '%'),
+            validator: (v) {
+              final t = (v ?? '').trim();
+              if (t.isEmpty) return null;
+              final d = double.tryParse(t.replaceAll(',', '.'));
+              return d == null || d < 0 || d > 100 ? '0 ilə 100 arası' : null;
+            },
+          ),
+        ],
         const SizedBox(height: 12),
         FilledButton(
           onPressed: _busy ? null : _save,

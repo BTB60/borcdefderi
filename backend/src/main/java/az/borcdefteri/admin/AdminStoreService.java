@@ -28,6 +28,7 @@ public class AdminStoreService {
      * and the audit log.
      */
     static final List<String> RESET_ORDER = List.of(
+            "customer_bonus_entries",
             "ledger_hidden",
             "cash_transactions",
             "financial_transactions",

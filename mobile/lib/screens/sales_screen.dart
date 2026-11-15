@@ -216,13 +216,16 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
   List<Map<String, dynamic>> _results = [];
   String? _customerId;
   String? _customerName;
+  double _customerPct = 0; // the customer's standing discount (%)
+  double _bonusBalance = 0;
+  final _bonus = TextEditingController();
   final _requestId = newRequestId();
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
-    for (final c in [_search, _discount, _cash, _card]) {
+    for (final c in [_search, _discount, _cash, _card, _bonus]) {
       c.dispose();
     }
     super.dispose();
@@ -276,7 +279,10 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
   }
 
   double get _subtotal => _cart.fold<double>(0, (s, l) => s + l.total);
-  double get _total => _r((_subtotal - _p(_discount.text)).clamp(0, double.infinity).toDouble());
+  double get _pctDiscount => _r(_subtotal * _customerPct / 100);
+  double get _discountSum => _r((_p(_discount.text) + _pctDiscount).clamp(0, _subtotal).toDouble());
+  double get _bonusUsed => _r(_p(_bonus.text).clamp(0, _bonusBalance).clamp(0, (_subtotal - _discountSum).clamp(0, double.infinity)).toDouble());
+  double get _total => _r((_subtotal - _discountSum - _bonusUsed).clamp(0, double.infinity).toDouble());
   double get _cardPaid => _p(_card.text);
 
   /// Cash the customer handed over (may be more than owed, e.g. 10 ₼ for 4 ₼).
@@ -297,9 +303,13 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
     if (id == null) return;
     try {
       final p = await widget.session.api.get('/api/customers/$id/profile') as Map<String, dynamic>;
+      final party = p['party'] as Map;
       setState(() {
         _customerId = id;
-        _customerName = (p['party'] as Map)['name'] as String?;
+        _customerName = party['name'] as String?;
+        _customerPct = (party['discountPercent'] as num?)?.toDouble() ?? 0;
+        _bonusBalance = (party['bonusBalance'] as num?)?.toDouble() ?? 0;
+        _bonus.clear();
       });
     } catch (e) {
       if (mounted) showError(context, e);
@@ -327,7 +337,8 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
           for (final l in _cart) {'productId': l.product['id'], 'quantity': l.qty.toString(), 'unitPrice': l.price.toStringAsFixed(2)}
         ],
         'customerId': _customerId,
-        'discount': _p(_discount.text).toStringAsFixed(2),
+        'discount': _discountSum.toStringAsFixed(2),
+        'bonusUsed': _bonusUsed > 0 ? _bonusUsed.toStringAsFixed(2) : null,
         'paidCash': _cashPaid.toStringAsFixed(2),
         'paidCard': _cardPaid.toStringAsFixed(2),
         'clientRequestId': _requestId,
@@ -517,6 +528,28 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                   decoration: const InputDecoration(labelText: 'Endirim', suffixText: '₼', prefixIcon: Icon(Icons.local_offer_outlined)),
                   onChanged: (_) => setState(() {}),
                 ),
+                if (_pctDiscount > 0) ...[
+                  const SizedBox(height: 8),
+                  _sumRow('Müştəri endirimi ${_amount(_customerPct)}%', '−${formatMoney(_pctDiscount)}'),
+                ],
+                if (_bonusBalance > 0) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _bonus,
+                    keyboardType: _decimal,
+                    decoration: InputDecoration(
+                      labelText: 'Bonusla ödə (balans ${formatMoney(_bonusBalance)})',
+                      suffixText: '₼',
+                      prefixIcon: Icon(Icons.card_giftcard, color: Colors.green.shade700),
+                      suffixIcon: TextButton(
+                        onPressed: () => setState(() => _bonus.text = _amount(
+                            _r(_bonusBalance.clamp(0, (_subtotal - _discountSum).clamp(0, double.infinity)).toDouble()))),
+                        child: const Text('Hamısı'),
+                      ),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ],
                 const Divider(height: 24),
                 _sumRow('Yekun', formatMoney(_total), big: true),
               ]),
@@ -598,7 +631,13 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
               child: const Icon(Icons.person_outline, color: navy),
             ),
             title: Text(_customerName ?? 'Müştəri seçin', style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text(_customerName == null ? 'Borcla satış üçün lazımdır' : 'Seçildi'),
+            subtitle: Text(_customerName == null
+                ? 'Borcla satış, endirim və bonus üçün'
+                : [
+                    'Seçildi',
+                    if (_customerPct > 0) 'endirim ${_amount(_customerPct)}%',
+                    if (_bonusBalance > 0) 'bonus ${formatMoney(_bonusBalance)}',
+                  ].join(' · ')),
             trailing: _customerId == null
                 ? const Icon(Icons.chevron_right)
                 : IconButton(
@@ -607,6 +646,9 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                     onPressed: () => setState(() {
                       _customerId = null;
                       _customerName = null;
+                      _customerPct = 0;
+                      _bonusBalance = 0;
+                      _bonus.clear();
                     }),
                   ),
             onTap: _pickCustomer,

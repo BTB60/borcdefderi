@@ -44,7 +44,7 @@ export default function PartyProfilePage() {
   const params = useParams<{ kind: string; id: string }>();
   const isCustomer = params.kind === "musteri";
   const base = `/api/${isCustomer ? "customers" : "companies"}/${params.id}`;
-  const { can, me, mayChange } = useAuth();
+  const { can, me, mayChange, isOwner } = useAuth();
   const [data, setData] = useState<PartyProfile | null>(null);
   const [paymentAction, setPaymentAction] = useState<{ kind: "edit" | "cancel"; payment: Payment } | null>(null);
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
@@ -54,6 +54,7 @@ export default function PartyProfilePage() {
   const [historyOf, setHistoryOf] = useState<Debt | null>(null);
   const [whatsapp, setWhatsapp] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [bonusOpen, setBonusOpen] = useState(false);
   const [tab, setTab] = useState<"history" | "debts" | "payments">("history");
 
   const load = useCallback(async () => {
@@ -119,6 +120,15 @@ export default function PartyProfilePage() {
               {isCustomer && <> · Son əlaqə: {party.lastContactAt ? formatDateTime(party.lastContactAt) : "—"}</>}
             </p>
             {party.note && <p className="mt-2 text-sm text-white/80">{party.note}</p>}
+            {isCustomer && (
+              <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                {party.discountPercent ? <span className="rounded-full bg-gold-500/20 px-2.5 py-0.5 text-gold-300">Daimi endirim {party.discountPercent}%</span> : null}
+                <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-emerald-200">Bonus {formatMoney(party.bonusBalance ?? 0)}</span>
+                {isOwner && (
+                  <button type="button" onClick={() => setBonusOpen(true)} className="text-xs text-white/70 underline hover:text-white">bonusu dəyiş</button>
+                )}
+              </p>
+            )}
           </div>
         </div>
         {isCustomer || !data.receivable || !data.payable ? (
@@ -268,6 +278,10 @@ export default function PartyProfilePage() {
       {whatsapp && (
         <WhatsAppModal phone={party.phone} name={party.name} storeName={me?.storeName ?? ""} total={totals.totalDebt} paid={totals.paid}
           remaining={totals.remaining} lastPayment={payments[0]?.amount ?? null} onOpen={() => logContact("WHATSAPP")} onClose={() => setWhatsapp(false)} />
+      )}
+      {bonusOpen && (
+        <BonusModal customerId={party.id} balance={party.bonusBalance ?? 0} onClose={() => setBonusOpen(false)}
+          onSaved={(msg) => { setBonusOpen(false); setNotice(msg); load(); }} />
       )}
       {editing && (
         <EditPartyModal base={base} party={party} isCustomer={isCustomer} onClose={() => setEditing(false)}
@@ -447,6 +461,49 @@ function EditPartyModal({ base, party, isCustomer, onClose, onSaved }: { base: s
         <Field label={isCustomer ? "Ad, soyad" : "Şirkət adı"} error={errors.name}><Input required maxLength={150} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
         <Field label="Telefon" error={errors.phone}><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+994 50 000 00 00" /></Field>
         <Field label="Qeyd"><Input maxLength={1000} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
+      </form>
+    </Modal>
+  );
+}
+
+/** Owner gives or takes bonus by hand (a gift, a correction). */
+function BonusModal({ customerId, balance, onClose, onSaved }: { customerId: string; balance: number; onClose: () => void; onSaved: (m: string) => void }) {
+  const [amount, setAmount] = useState("");
+  const [sign, setSign] = useState<1 | -1>(1);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    const a = Number(amount.replace(",", "."));
+    if (!(a > 0)) { setError("Məbləği daxil edin"); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/customers/${customerId}/bonus`, { method: "POST", json: { amount: (sign * a).toFixed(2), note: note || null } });
+      onSaved(sign > 0 ? `${formatMoney(a)} bonus əlavə edildi` : `${formatMoney(a)} bonus çıxıldı`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Yadda saxlanmadı");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open title="Bonusu dəyiş" onClose={onClose}
+      footer={<><Button variant="ghost" onClick={onClose}>Ləğv et</Button><Button type="submit" form="bonus-form" disabled={busy}>Saxla</Button></>}>
+      <p className="mb-3 text-sm text-slate-600">İndiki balans: <b>{formatMoney(balance)}</b></p>
+      {error && <div className="mb-3"><Alert>{error}</Alert></div>}
+      <form id="bonus-form" onSubmit={submit} className="space-y-3">
+        <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
+          {([1, -1] as const).map((v) => (
+            <button key={v} type="button" onClick={() => setSign(v)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium ${sign === v ? "bg-white text-navy-800 shadow" : "text-slate-500"}`}>{v > 0 ? "Əlavə et" : "Çıx"}</button>
+          ))}
+        </div>
+        <Field label="Məbləğ (₼)"><Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus /></Field>
+        <Field label="Qeyd"><Input maxLength={255} value={note} onChange={(e) => setNote(e.target.value)} placeholder="məs. ad günü hədiyyəsi" /></Field>
       </form>
     </Modal>
   );

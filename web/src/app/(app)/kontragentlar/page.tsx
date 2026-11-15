@@ -156,6 +156,7 @@ function PartiesList() {
 
 function PartyModal({ tab, party, onClose, onSaved }: { tab: Tab; party: Party | null; onClose: () => void; onSaved: (msg: string) => void }) {
   const [form, setForm] = useState<FormState>(party ? { name: party.name, phone: party.phone ?? "", note: party.note ?? "" } : EMPTY);
+  const [discountPct, setDiscountPct] = useState(party?.discountPercent ? String(party.discountPercent) : "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -166,7 +167,8 @@ function PartyModal({ tab, party, onClose, onSaved }: { tab: Tab; party: Party |
     setBusy(true);
     setError(null);
     setErrors({});
-    const body = { name: form.name, phone: form.phone || null, note: form.note || null };
+    const pct = Number(discountPct.replace(",", ".")) || 0;
+    const body = { name: form.name, phone: form.phone || null, note: form.note || null, ...(tab === "customers" ? { discountPercent: pct } : {}) };
     try {
       if (party) await api(`/api/${tab}/${party.id}`, { method: "PUT", json: body });
       else await api(`/api/${tab}`, { method: "POST", json: body });
@@ -199,6 +201,11 @@ function PartyModal({ tab, party, onClose, onSaved }: { tab: Tab; party: Party |
         <Field label="Qeyd">
           <Input maxLength={1000} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
         </Field>
+        {tab === "customers" && (
+          <Field label="Daimi endirim (%)" error={errors.discountPercent} hint="Kassada bu müştəri seçiləndə çekə avtomatik tətbiq olunur">
+            <Input inputMode="decimal" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} placeholder="0" />
+          </Field>
+        )}
       </form>
     </Modal>
   );

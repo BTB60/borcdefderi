@@ -105,6 +105,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
   const [discount, setDiscount] = useState("");
+  const [bonusInput, setBonusInput] = useState("");
   const [percent, setPercent] = useState(false);
   const [mode, setMode] = useState<PayMode>("cash");
   const [given, setGiven] = useState("");
@@ -189,7 +190,9 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
   const lines = cart.map((l) => ({ ...l, total: r2(Math.max(0, num(l.quantity) * num(l.price) - num(l.discount))) }));
   const subtotal = r2(lines.reduce((s, l) => s + l.total, 0));
   const discountAmount = r2(Math.min(subtotal, percent ? (subtotal * Math.min(100, num(discount))) / 100 : num(discount)));
-  const total = r2(Math.max(0, subtotal - discountAmount));
+  const bonusAvailable = customer?.bonusBalance ?? 0;
+  const bonusAmount = r2(Math.max(0, Math.min(num(bonusInput), bonusAvailable, subtotal - discountAmount)));
+  const total = r2(Math.max(0, subtotal - discountAmount - bonusAmount));
   const itemCount = lines.reduce((s, l) => s + num(l.quantity), 0);
 
   let paidCash = 0, paidCard = 0, change = 0;
@@ -214,7 +217,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
   const canSell = !busy && cart.length > 0 && !over && !needsCustomer && !stockProblem && total >= 0;
 
   const reset = () => {
-    setCart([]); setDiscount(""); setPercent(false); setGiven(""); setCash(""); setCard(""); setNote(""); setShowNote(false);
+    setCart([]); setDiscount(""); setBonusInput(""); setPercent(false); setGiven(""); setCash(""); setCard(""); setNote(""); setShowNote(false);
     setCustomer(null); setCustomerQuery(""); setMode("cash"); setEditing(null); setError(null); setRequestId(crypto.randomUUID());
   };
 
@@ -229,6 +232,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
           items: lines.map((l) => ({ productId: l.product.id, quantity: l.quantity, unitPrice: l.price, discount: l.discount || null })),
           customerId: customer?.id ?? null,
           discount: discountAmount > 0 ? discountAmount.toFixed(2) : null,
+          bonusUsed: bonusAmount > 0 ? bonusAmount.toFixed(2) : null,
           paidCash: paidCash.toFixed(2),
           paidCard: paidCard.toFixed(2),
           note: note || null,
@@ -236,6 +240,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
         },
       });
       setDone({ sale: s, change });
+      api<Party[]>("/api/customers").then(setCustomers).catch(() => undefined); // fresh bonus balances
       setPayOpen(false);
       if (autoPrint) void printReceipt(s.id);
       reset();
@@ -273,6 +278,16 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  /** Choosing a customer applies their standing discount (%) to the whole receipt. */
+  function pickCustomer(c: Party | null) {
+    setCustomer(c);
+    setBonusInput("");
+    if (c?.discountPercent && c.discountPercent > 0) {
+      setPercent(true);
+      setDiscount(String(c.discountPercent));
+    }
+  }
 
   const customerMatches = useMemo(() => {
     const q = customerQuery.trim().toLowerCase();
@@ -366,9 +381,11 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
             <div className="flex items-center justify-between gap-3 rounded-xl bg-navy-50 px-3 py-2">
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-navy-800">{customer.name}</p>
-                <p className="text-xs text-slate-500">{[customer.code, customer.phone, customer.openBalance > 0 && `borc ${formatMoney(customer.openBalance)}`].filter(Boolean).join(" · ")}</p>
+                <p className="text-xs text-slate-500">{[customer.code, customer.phone, customer.openBalance > 0 && `borc ${formatMoney(customer.openBalance)}`,
+                  customer.discountPercent ? `endirim ${customer.discountPercent}%` : null,
+                  bonusAvailable > 0 ? `bonus ${formatMoney(bonusAvailable)}` : null].filter(Boolean).join(" · ")}</p>
               </div>
-              <button type="button" onClick={() => setCustomer(null)} className="text-slate-400 hover:text-rose-600" aria-label="Müştərini çıxar">✕</button>
+              <button type="button" onClick={() => pickCustomer(null)} className="text-slate-400 hover:text-rose-600" aria-label="Müştərini çıxar">✕</button>
             </div>
           ) : (
             <>
@@ -384,7 +401,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
                 <ul className="absolute left-5 right-5 z-20 mt-1 max-h-64 overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
                   {customerMatches.map((c) => (
                     <li key={c.id}>
-                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCustomer(c); setCustomerQuery(""); setCustomerOpen(false); }}
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { pickCustomer(c); setCustomerQuery(""); setCustomerOpen(false); }}
                         className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50">
                         <span className="min-w-0 truncate"><span className="font-medium text-navy-800">{c.name}</span> <span className="text-xs text-slate-400">{c.code}</span></span>
                         {c.openBalance > 0 && <span className="shrink-0 text-xs text-rose-600">{formatMoney(c.openBalance)}</span>}
@@ -465,6 +482,18 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
               {discountAmount > 0 && <span className="w-20 text-right tabular-nums text-rose-600">−{formatMoney(discountAmount)}</span>}
             </div>
           </div>
+          {bonusAvailable > 0 && (
+            <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
+              <span>Bonus <span className="text-xs text-emerald-700">(balans {formatMoney(bonusAvailable)})</span></span>
+              <div className="flex items-center gap-1.5">
+                <input value={bonusInput} onChange={(e) => setBonusInput(e.target.value)} inputMode="decimal" placeholder="0" aria-label="Bonusdan istifadə"
+                  className="h-8 w-20 rounded-lg border border-slate-200 bg-white px-2 text-right text-sm tabular-nums outline-none focus:border-gold-500" />
+                <button type="button" onClick={() => setBonusInput(String(r2(Math.min(bonusAvailable, subtotal - discountAmount))))}
+                  className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-slate-200">Hamısı</button>
+                {bonusAmount > 0 && <span className="w-20 text-right tabular-nums text-emerald-700">−{formatMoney(bonusAmount)}</span>}
+              </div>
+            </div>
+          )}
           <div className="flex items-end justify-between rounded-2xl bg-navy-800 px-4 py-3 text-white">
             <span className="text-sm text-white/70">Yekun</span>
             <span className="font-serif text-3xl font-semibold tabular-nums text-gold-400">{formatMoney(total)}</span>

@@ -233,10 +233,13 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     setInterval(sync, 30_000);
     setTimeout(sync, 5_000);
-    try {
-      const { autoUpdater } = require("electron-updater");
-      autoUpdater.checkForUpdatesAndNotify().catch(() => undefined);
-    } catch { /* not packaged */ }
+    // the Microsoft Store version is updated by the Store itself
+    if (!process.windowsStore) {
+      try {
+        const { autoUpdater } = require("electron-updater");
+        autoUpdater.checkForUpdatesAndNotify().catch(() => undefined);
+      } catch { /* not packaged */ }
+    }
   });
   app.on("window-all-closed", () => app.quit());
 }

@@ -51,3 +51,38 @@ jobs:
             desktop/dist/HesabPro-Kassa-Setup.exe.blockmap
             desktop/dist/latest.yml
           body: "Avtomatik yığılıb: ${{ github.ref_name }} @ ${{ github.sha }}"
+
+  # Microsoft Store package (.appx). The Store signs it, so Windows Smart App Control lets it run.
+  # Set the three repository variables from Partner Center (Product identity) before uploading to the Store:
+  #   MS_STORE_IDENTITY_NAME, MS_STORE_PUBLISHER (CN=...), MS_STORE_PUBLISHER_NAME
+  store:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm pkg set version=1.0.${{ github.run_number }}
+      - name: Build the Store package
+        shell: pwsh
+        run: >
+          npx electron-builder --win appx --publish never
+          "-c.appx.identityName=${{ vars.MS_STORE_IDENTITY_NAME || 'HesabPro.Kassa' }}"
+          "-c.appx.publisher=${{ vars.MS_STORE_PUBLISHER || 'CN=00000000-0000-0000-0000-000000000000' }}"
+          "-c.appx.publisherDisplayName=${{ vars.MS_STORE_PUBLISHER_NAME || 'HesabPro' }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HesabPro-Kassa-Store
+          path: desktop/dist/*.appx
+      - name: Attach to the desktop-latest pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-latest
+          prerelease: true
+          files: desktop/dist/*.appx

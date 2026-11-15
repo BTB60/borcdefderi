@@ -9,7 +9,8 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis --publish never"
+    "dist": "electron-builder --win nsis --publish never",
+    "dist:store": "electron-builder --win appx --publish never"
   },
   "dependencies": {
     "electron-updater": "6.8.11"
@@ -22,9 +23,21 @@
     "appId": "az.hesabpro.kassa",
     "productName": "HesabPro Kassa",
     "artifactName": "HesabPro-Kassa-Setup.${ext}",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["main.js", "preload.js", "offline.html", "package.json"],
-    "win": { "target": "nsis", "icon": "build/icon.ico" },
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html",
+      "package.json",
+      "!build/**"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
     "nsis": {
       "oneClick": true,
       "perMachine": false,
@@ -32,6 +45,24 @@
       "createStartMenuShortcut": true,
       "shortcutName": "HesabPro Kassa"
     },
-    "publish": [{ "provider": "generic", "url": "https://github.com/BTB60/borcdefderi/releases/download/desktop-latest/" }]
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://github.com/BTB60/borcdefderi/releases/download/desktop-latest/"
+      }
+    ],
+    "appx": {
+      "applicationId": "HesabProKassa",
+      "displayName": "HesabPro Kassa",
+      "identityName": "HesabPro.Kassa",
+      "publisher": "CN=00000000-0000-0000-0000-000000000000",
+      "publisherDisplayName": "HesabPro",
+      "backgroundColor": "#0F1B33",
+      "languages": [
+        "az-AZ",
+        "en-US"
+      ],
+      "artifactName": "HesabPro-Kassa-Store.${ext}"
+    }
   }
 }

@@ -436,7 +436,7 @@ export type MovementKind =
 export interface CashMovement {
   id: string; accountId: string; accountName: string; direction: "IN" | "OUT"; amount: number; kind: MovementKind;
   occurredOn: string; transferId: string | null; paymentId: string | null; expenseId: string | null; note: string | null;
-  actorName: string; createdAt: string;
+  actorName: string; createdAt: string; saleId: string | null; saleCancelled: boolean;
 }
 
 export interface DayReport {

@@ -34,7 +34,7 @@ public class CashService {
 
     public record Movement(UUID id, UUID accountId, String accountName, String direction, BigDecimal amount, String kind,
                            LocalDate occurredOn, UUID transferId, UUID paymentId, UUID expenseId, String note,
-                           String actorName, OffsetDateTime createdAt) {}
+                           String actorName, OffsetDateTime createdAt, UUID saleId, boolean saleCancelled) {}
 
     public record AccountRequest(
             @jakarta.validation.constraints.NotBlank(message = "Adı daxil edin")
@@ -473,8 +473,10 @@ public class CashService {
 
     private static final String MOVE_SELECT = """
             SELECT t.id, t.account_id, a.name AS account_name, t.direction, t.amount, t.kind, t.occurred_on, t.transfer_id,
-                   t.payment_id, t.expense_id, t.note, u.full_name AS actor_name, t.created_at
-            FROM cash_transactions t JOIN cash_accounts a ON a.id = t.account_id JOIN users u ON u.id = t.actor_id""";
+                   t.payment_id, t.expense_id, t.note, u.full_name AS actor_name, t.created_at, t.sale_id,
+                   (sl.status = 'CANCELLED') AS sale_cancelled
+            FROM cash_transactions t JOIN cash_accounts a ON a.id = t.account_id JOIN users u ON u.id = t.actor_id
+            LEFT JOIN sales sl ON sl.id = t.sale_id""";
 
     private static Account mapAccount(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new Account(rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("kind"),
@@ -487,6 +489,7 @@ public class CashService {
                 rs.getString("direction"), Money.of(rs.getBigDecimal("amount")), rs.getString("kind"),
                 rs.getObject("occurred_on", LocalDate.class), rs.getObject("transfer_id", UUID.class),
                 rs.getObject("payment_id", UUID.class), rs.getObject("expense_id", UUID.class), rs.getString("note"),
-                rs.getString("actor_name"), rs.getObject("created_at", OffsetDateTime.class));
+                rs.getString("actor_name"), rs.getObject("created_at", OffsetDateTime.class),
+                rs.getObject("sale_id", UUID.class), rs.getBoolean("sale_cancelled"));
     }
 }

@@ -6,6 +6,7 @@ import '../format.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'swipe_actions.dart';
 
 const _kindLabels = {'CASH': 'Nağd kassa', 'BANK': 'Bank hesabı', 'CARD': 'Kart hesabı'};
 const moveLabels = {
@@ -53,6 +54,36 @@ class _CashScreenState extends State<CashScreen> {
       ]);
 
   void _reload() => setState(() => _data = _fetch());
+
+  /// Deletes a sale from the Kassa: the sale is cancelled (goods back to stock, money out of the till,
+  /// its unpaid part off the customer's debt) and both its rows leave the list.
+  Future<void> _deleteSale(Map<String, dynamic> m) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Satışı sil'),
+        content: Text('${m['note'] ?? 'Satış'} · ${formatMoney((m['amount'] as num).toDouble())}\n\n'
+            'Satış ləğv edilir: mal anbara qayıdır, pul kassadan çıxılır, nisyə hissəsi müştərinin borcundan silinir.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ləğv et')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await widget.session.api.post('/api/sales/${m['saleId']}/cancel', {});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Satış silindi')));
+      _reload();
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
 
   Future<void> _action(String type, List<Map<String, dynamic>> accounts, {String? accountId}) async {
     final msg = await showModalBottomSheet<String>(
@@ -111,7 +142,11 @@ class _CashScreenState extends State<CashScreen> {
       future: _data,
       builder: (context, snap) {
         final accounts = snap.hasData ? (snap.data![0] as List).cast<Map<String, dynamic>>() : <Map<String, dynamic>>[];
-        final moves = snap.hasData ? (snap.data![1] as List).cast<Map<String, dynamic>>() : <Map<String, dynamic>>[];
+        // a cancelled sale nets to zero in the till, so its sale and refund rows are left out of the list
+        final moves = snap.hasData
+            ? (snap.data![1] as List).cast<Map<String, dynamic>>().where((m) => m['saleCancelled'] != true).toList()
+            : <Map<String, dynamic>>[];
+        final canDeleteSale = widget.session.me!.can('SALES');
         double total(String k) =>
             accounts.where((a) => a['kind'] == k).fold<double>(0, (s, a) => s + (a['balance'] as num).toDouble());
         final active = accounts.where((a) => a['active'] == true).toList();
@@ -197,7 +232,12 @@ class _CashScreenState extends State<CashScreen> {
                         const Text('Hərəkətlər', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: navy)),
                         if (moves.isEmpty) const EmptyState(title: 'Hərəkət yoxdur'),
                         for (final m in moves)
-                          ListTile(
+                          SwipeActions(
+                            actions: [
+                              if (canDeleteSale && m['kind'] == 'SALE' && m['saleId'] != null)
+                                SwipeAction.delete(() => _deleteSale(m)),
+                            ],
+                            child: ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: Icon(m['direction'] == 'IN' ? Icons.south_west : Icons.north_east,
                                 color: m['direction'] == 'IN' ? Colors.green.shade700 : Colors.red.shade700),
@@ -208,10 +248,20 @@ class _CashScreenState extends State<CashScreen> {
                               if (m['note'] != null) '${m['note']}',
                               '${m['actorName']}',
                             ].join(' · ')),
-                            trailing: Text('${m['direction'] == 'IN' ? '+' : '−'}${formatMoney((m['amount'] as num).toDouble())}',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    color: m['direction'] == 'IN' ? Colors.green.shade700 : Colors.red.shade700)),
+                            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Text('${m['direction'] == 'IN' ? '+' : '−'}${formatMoney((m['amount'] as num).toDouble())}',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: m['direction'] == 'IN' ? Colors.green.shade700 : Colors.red.shade700)),
+                              if (canDeleteSale && m['kind'] == 'SALE' && m['saleId'] != null)
+                                IconButton(
+                                  tooltip: 'Satışı sil',
+                                  visualDensity: VisualDensity.compact,
+                                  icon: Icon(Icons.delete_outline, color: Colors.red.shade400),
+                                  onPressed: () => _deleteSale(m),
+                                ),
+                            ]),
+                          ),
                           ),
                       ]),
                     ),

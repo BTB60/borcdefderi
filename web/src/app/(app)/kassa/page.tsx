@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, Table, Td, Th } from "@/components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, Table, Td, Th, useConfirm } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDate, formatDateTime, formatMoney, todayBaku } from "@/lib/format";
@@ -43,6 +43,7 @@ export default function CashPage() {
   const [action, setAction] = useState<{ type: Action; accountId?: string; edit?: CashAccount } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(async () => {
     setError(null);
@@ -51,11 +52,29 @@ export default function CashPage() {
       Object.entries(filter).forEach(([k, v]) => v && qs.set(k, v));
       const [a, m] = await Promise.all([api<CashAccount[]>("/api/cash/accounts"), api<CashMovement[]>(`/api/cash/movements?${qs}`)]);
       setAccounts(a);
-      setMoves(m);
+      // a cancelled sale nets to zero in the till, so its sale and refund rows are left out
+      setMoves(m.filter((x) => !x.saleCancelled));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Yüklənmədi");
     }
   }, [filter]);
+
+  /** Deleting a sale from the Kassa cancels it: goods back to stock, money out of the till, its credit off the debt. */
+  async function deleteSale(m: CashMovement) {
+    const ok = await confirm(
+      <><b>{m.note ?? "Satış"} · {formatMoney(m.amount)}</b> silinsin?
+        <span className="mt-2 block text-xs text-slate-500">Satış ləğv edilir: mal anbara qayıdır, pul kassadan çıxılır, nisyə hissəsi müştərinin borcundan silinir.</span></>,
+      { title: "Satışı sil", confirmLabel: "Sil", danger: true },
+    );
+    if (!ok) return;
+    try {
+      await api(`/api/sales/${m.saleId}/cancel`, { method: "POST", json: {} });
+      setNotice("Satış silindi");
+      load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Silinmədi");
+    }
+  }
 
   const loadDay = useCallback(() => {
     api<DayReport>(`/api/cash/day-report?date=${dayDate}`).then(setDay).catch((e) => setError(e instanceof ApiError ? e.message : "Hesabat yüklənmədi"));
@@ -73,6 +92,7 @@ export default function CashPage() {
 
   return (
     <>
+      {confirmDialog}
       <PageHeader
         title="Kassa və bank"
         subtitle="Pulun harada olduğu və hərəkəti. Köçürmə gəlir və ya xərc sayılmır."
@@ -147,7 +167,7 @@ export default function CashPage() {
             </div>
             {!moves ? <Spinner /> : moves.length === 0 ? <EmptyState title="Hərəkət yoxdur" /> : (
               <Table>
-                <thead className="bg-slate-50/70"><tr><Th>Tarix</Th><Th>Hesab</Th><Th>Növ</Th><Th>Qeyd</Th><Th>İşçi</Th><Th className="text-right">Məbləğ</Th></tr></thead>
+                <thead className="bg-slate-50/70"><tr><Th>Tarix</Th><Th>Hesab</Th><Th>Növ</Th><Th>Qeyd</Th><Th>İşçi</Th><Th className="text-right">Məbləğ</Th><Th /></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {moves.map((m) => (
                     <tr key={m.id}>
@@ -157,6 +177,12 @@ export default function CashPage() {
                       <Td className="max-w-[16rem] truncate text-xs text-slate-500">{m.note ?? "—"}</Td>
                       <Td className="text-xs">{m.actorName}</Td>
                       <Td className={`text-right font-semibold tabular-nums ${m.direction === "IN" ? "text-emerald-700" : "text-rose-600"}`}>{m.direction === "IN" ? "+" : "−"}{formatMoney(m.amount)}</Td>
+                      <Td className="w-10 text-right">
+                        {m.kind === "SALE" && m.saleId && can("SALES") && (
+                          <button type="button" title="Satışı sil" onClick={() => deleteSale(m)}
+                            className="rounded-lg px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50">Sil</button>
+                        )}
+                      </Td>
                     </tr>
                   ))}
                 </tbody>

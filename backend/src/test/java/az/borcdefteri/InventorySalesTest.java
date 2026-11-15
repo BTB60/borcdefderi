@@ -144,6 +144,8 @@ class InventorySalesTest extends IntegrationTestBase {
         String id = s.get("id").asText();
         String line = s.get("items").get(0).get("id").asText();
         assertEquals(180.0, s.get("creditAmount").asDouble());
+        get(owner, "/api/cash/movements?kind=SALE").andExpect(jsonPath("$[0].saleId", is(id)))
+                .andExpect(jsonPath("$[0].saleCancelled", is(false)));
         assertEquals(2.0, stock(owner, p));
 
         // return 2 of 3 (200): 180 of the debt is cleared, 20 is paid back from the cash desk
@@ -157,6 +159,8 @@ class InventorySalesTest extends IntegrationTestBase {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error", is("RETURN_EXCEEDS")));
 
         post(owner, "/api/sales/" + id + "/cancel", Map.of()).andExpect(status().isOk()).andExpect(jsonPath("$.status", is("CANCELLED")));
+        // the Kassa leaves a cancelled sale out of its list
+        get(owner, "/api/cash/movements?kind=SALE").andExpect(jsonPath("$[0].saleCancelled", is(true)));
         assertEquals(5.0, stock(owner, p));
         assertEquals(0.0, cashBalance(owner));
         post(owner, "/api/sales/" + id + "/cancel", Map.of()).andExpect(status().isConflict());

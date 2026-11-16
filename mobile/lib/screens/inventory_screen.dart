@@ -427,10 +427,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
 }
 
 class _ProductSheet extends StatefulWidget {
-  const _ProductSheet({required this.session, this.barcode});
+  const _ProductSheet({required this.session, this.barcode, this.product});
 
   final Session session;
   final String? barcode;
+  /// Editing an existing product (null = a new one).
+  final Map<String, dynamic>? product;
 
   @override
   State<_ProductSheet> createState() => _ProductSheetState();
@@ -450,6 +452,24 @@ class _ProductSheetState extends State<_ProductSheet> {
   bool _busy = false;
   String? _error;
 
+  bool get _editing => widget.product != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.product;
+    if (p == null) return;
+    String money(Object? v) => v == null ? '' : _n(v).toStringAsFixed(2);
+    _name.text = '${p['name'] ?? ''}';
+    _barcode.text = '${p['barcode'] ?? ''}';
+    _buy.text = money(p['purchasePrice']);
+    _sell.text = money(p['salePrice']);
+    _wholesale.text = money(p['wholesalePrice']);
+    _old.text = money(p['oldPrice']);
+    _unit.text = '${p['unit'] ?? 'ədəd'}';
+    _min.text = _q(p['minStock']);
+  }
+
   @override
   void dispose() {
     for (final c in [_name, _barcode, _buy, _sell, _stock, _min, _unit, _old, _wholesale]) {
@@ -466,6 +486,34 @@ class _ProductSheetState extends State<_ProductSheet> {
       return;
     }
     setState(() => _busy = true);
+    if (_editing) {
+      final cur = widget.product!;
+      try {
+        await widget.session.api.put('/api/products/${cur['id']}', {
+          'name': _name.text.trim(),
+          'code': cur['code'],
+          'barcode': _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
+          'categoryId': cur['categoryId'],
+          'supplierId': cur['supplierId'],
+          'unit': _unit.text.trim(),
+          'purchasePrice': _d(_buy),
+          'salePrice': _d(_sell),
+          'minStock': _d(_min).isEmpty ? '0' : _d(_min),
+          'active': cur['active'] ?? true,
+          'version': cur['version'],
+          // empty = remove (0), as the server expects
+          'oldPrice': _d(_old).isEmpty ? '0' : _d(_old),
+          'wholesalePrice': _d(_wholesale).isEmpty ? '0' : _d(_wholesale),
+        });
+        if (_image != null) await _uploadProductImage(widget.session, '${cur['id']}', _image!);
+        if (mounted) Navigator.pop(context, '${_name.text.trim()}: dəyişikliklər saxlanıldı');
+      } catch (e) {
+        if (mounted) setState(() => _error = errorMessage(e));
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+      return;
+    }
     try {
       final p = await widget.session.api.post('/api/products', {
         'name': _name.text.trim(),
@@ -526,7 +574,7 @@ class _ProductSheetState extends State<_ProductSheet> {
 
   @override
   Widget build(BuildContext context) => ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(20, 0, 20, 24), children: [
-        const Text('Yeni məhsul', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: navy)),
+        Text(_editing ? 'Məhsulu redaktə et' : 'Yeni məhsul', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: navy)),
         const SizedBox(height: 4),
         Text('Ulduzlu (*) sahələr mütləqdir', style: TextStyle(color: Colors.grey.shade600)),
         if (_error != null) ...[const SizedBox(height: 12), ErrorBanner(_error!)],
@@ -635,15 +683,18 @@ class _ProductSheetState extends State<_ProductSheet> {
         ),
         _section('Anbar'),
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-            flex: 3,
-            child: TextField(
-              controller: _stock,
-              keyboardType: _decimal,
-              decoration: const InputDecoration(labelText: 'Başlanğıc qalıq', hintText: '0'),
+          // the stock of an existing product changes only through receipts / counts
+          if (!_editing) ...[
+            Expanded(
+              flex: 3,
+              child: TextField(
+                controller: _stock,
+                keyboardType: _decimal,
+                decoration: const InputDecoration(labelText: 'Başlanğıc qalıq', hintText: '0'),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
+          ],
           Expanded(
             flex: 2,
             child: TextField(controller: _unit, decoration: const InputDecoration(labelText: 'Vahid')),
@@ -747,10 +798,31 @@ class _StockSheetState extends State<_StockSheet> {
     }
   }
 
+  /// Name, barcode, unit, minimum stock and all prices (Top 1 / Top 2 / alış) of this product.
+  Future<void> _editProduct() async {
+    final msg = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
+        child: _ProductSheet(session: widget.session, product: _product),
+      ),
+    );
+    if (msg == null || !mounted) return;
+    try {
+      final fresh = await widget.session.api.get('/api/products/${_product['id']}') as Map<String, dynamic>;
+      if (mounted) setState(() => _product = fresh);
+    } catch (_) {}
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   @override
   Widget build(BuildContext context) => ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
         _ProductHeader(session: widget.session, product: _product),
         Wrap(spacing: 4, children: [
+          TextButton.icon(onPressed: _editProduct, icon: const Icon(Icons.edit_outlined), label: const Text('Redaktə et')),
           TextButton.icon(
             onPressed: _imageBusy ? null : _changeImage,
             icon: _imageBusy

@@ -11,6 +11,7 @@ import '../theme.dart';
 import 'barcode_scanner.dart';
 import 'cash_screen.dart' show newRequestId;
 import 'common.dart';
+import 'shift_card.dart';
 import 'swipe_actions.dart';
 import 'finance_cards.dart' show pickParty;
 
@@ -36,7 +37,12 @@ class _SalesScreenState extends State<SalesScreen> {
     return widget.session.api.get('/api/sales', query: {'from': from, 'size': '100'}).then((j) => j as Map<String, dynamic>);
   }
 
-  void _reload() => setState(() => _data = _fetch());
+  final _shiftKey = GlobalKey<ShiftCardState>();
+
+  void _reload() {
+    setState(() => _data = _fetch());
+    _shiftKey.currentState?.reload();
+  }
 
   /// Sales saved without internet: send now, or drop one the server refused.
   Future<void> _offlineSheet() async {
@@ -222,6 +228,7 @@ class _SalesScreenState extends State<SalesScreen> {
               onRefresh: () async => _reload(),
               child: ListView(padding: const EdgeInsets.fromLTRB(12, 12, 12, 96), children: [
                 _offlineBanner(),
+                ShiftCard(key: _shiftKey, session: widget.session),
                 StatTile(label: 'Bu ayın satışları (xalis)', value: formatMoney(_n(snap.data!['sum'])), hint: '${snap.data!['total']} satış'),
                 const SizedBox(height: 8),
                 if (items.isEmpty) const EmptyState(title: 'Bu ay satış yoxdur'),

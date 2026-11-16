@@ -107,6 +107,12 @@ class Session extends ChangeNotifier {
     await _apply(res);
   }
 
+  /// Second step of two-step login: the 6-digit code that was sent to the e-mail.
+  Future<void> verifyLoginCode(String challengeId, String code) async {
+    final res = await api.post('/api/auth/login/verify', {'challengeId': challengeId, 'code': code}) as Map<String, dynamic>;
+    await _apply(res);
+  }
+
   Future<void> register({
     required String email,
     required String password,

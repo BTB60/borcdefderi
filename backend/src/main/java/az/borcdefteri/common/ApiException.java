@@ -7,11 +7,22 @@ public class ApiException extends RuntimeException {
 
     private final HttpStatus status;
     private final String code;
+    private final java.util.Map<String, String> details;
 
     public ApiException(HttpStatus status, String code, String message) {
+        this(status, code, message, null);
+    }
+
+    /** With extra values for the client (sent as "fields"), e.g. the id of a login challenge. */
+    public ApiException(HttpStatus status, String code, String message, java.util.Map<String, String> details) {
         super(message);
         this.status = status;
         this.code = code;
+        this.details = details;
+    }
+
+    public java.util.Map<String, String> getDetails() {
+        return details;
     }
 
     public HttpStatus getStatus() {

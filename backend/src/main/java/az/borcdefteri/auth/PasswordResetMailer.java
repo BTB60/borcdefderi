@@ -38,6 +38,27 @@ public class PasswordResetMailer {
         return host != null && !host.isBlank() && sender.getIfAvailable() != null;
     }
 
+    /** The 6-digit sign-in code of two-step login. Returns true if the message was handed to the SMTP server. */
+    public boolean sendLoginCode(String to, String fullName, String code, int minutes) {
+        JavaMailSender mail = sender.getIfAvailable();
+        if (!enabled() || mail == null) {
+            return false;
+        }
+        try {
+            SimpleMailMessage msg = new SimpleMailMessage();
+            msg.setFrom(props.passwordReset().mailFrom());
+            msg.setTo(to);
+            msg.setSubject("HesabPro giriş kodu: " + code);
+            msg.setText("Salam " + (fullName == null ? "" : fullName) + ",\n\nHesabPro-ya giriş kodunuz: " + code
+                    + "\n\nKod " + minutes + " dəqiqə etibarlıdır. Bu girişi siz etməmisinizsə, şifrənizi dəyişin.\n\nHesabPro");
+            mail.send(msg);
+            return true;
+        } catch (RuntimeException e) {
+            log.warn("Login code e-mail failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
     /** Returns true if the message was handed to the SMTP server. */
     public boolean send(String to, String fullName, String link, int minutes) {
         JavaMailSender mail = sender.getIfAvailable();

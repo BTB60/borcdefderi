@@ -39,7 +39,7 @@ public class ProfileService {
 
     public record Profile(UUID userId, String email, String fullName, String phone, String platformRole,
                           String role, UUID storeId, String storeName, String storePhone, String storeAddress,
-                          boolean hasAvatar, Long avatarVersion) {}
+                          boolean hasAvatar, Long avatarVersion, boolean twoFactorEnabled) {}
 
     public record Avatar(byte[] content, String contentType) {}
 
@@ -49,9 +49,11 @@ public class ProfileService {
     private final JwtService jwt;
     private final AuthService auth;
     private final AuditService audit;
+    private final az.borcdefteri.auth.TwoFactorService twoFactor;
 
     public ProfileService(JdbcClient jdbc, TenantService tenant, PasswordEncoder passwordEncoder, JwtService jwt,
-                          AuthService auth, AuditService audit) {
+                          AuthService auth, AuditService audit, az.borcdefteri.auth.TwoFactorService twoFactor) {
+        this.twoFactor = twoFactor;
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.passwordEncoder = passwordEncoder;
@@ -63,7 +65,7 @@ public class ProfileService {
     public Profile get() {
         UUID userId = tenant.currentUserId();
         return jdbc.sql("""
-                SELECT u.id, u.email, u.full_name, u.phone, u.platform_role, u.avatar_updated_at,
+                SELECT u.id, u.email, u.full_name, u.phone, u.platform_role, u.avatar_updated_at, u.two_factor_enabled,
                        m.role, s.id AS store_id, s.name AS store_name, s.phone AS store_phone, s.address AS store_address
                 FROM users u
                 LEFT JOIN store_members m ON m.user_id = u.id
@@ -76,7 +78,8 @@ public class ProfileService {
                             rs.getString("phone"), rs.getString("platform_role"), rs.getString("role"),
                             rs.getObject("store_id", UUID.class), rs.getString("store_name"),
                             rs.getString("store_phone"), rs.getString("store_address"),
-                            avatarAt != null, avatarAt == null ? null : avatarAt.toInstant().toEpochMilli());
+                            avatarAt != null, avatarAt == null ? null : avatarAt.toInstant().toEpochMilli(),
+                            rs.getBoolean("two_factor_enabled"));
                 })
                 .optional().orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Hesab tapılmadı"));
     }
@@ -102,6 +105,32 @@ public class ProfileService {
         audit.log(current.storeId(), userId, "PROFILE_UPDATED", "USER", userId.toString(),
                 emailChanged ? "Ad/telefon, e-poçt: " + current.email() + " -> " + newEmail : "Ad/telefon yeniləndi");
         return get();
+    }
+
+    /** Two-step login on / off; needs the current password and working e-mail sending. */
+    @Transactional
+    public Profile setTwoFactor(boolean enabled, String currentPassword) {
+        UUID userId = tenant.currentUserId();
+        requireCurrentPassword(userId, currentPassword);
+        if (enabled && !twoFactor.mailAvailable()) {
+            throw ApiException.conflict("MAIL_UNAVAILABLE", "E-poçt göndərmə qurulmayıb, iki addımlı girişi açmaq olmur");
+        }
+        jdbc.sql("UPDATE users SET two_factor_enabled = :e WHERE id = :id").param("e", enabled).param("id", userId).update();
+        Profile p = get();
+        audit.log(p.storeId(), userId, enabled ? "TWO_FACTOR_ON" : "TWO_FACTOR_OFF", "USER", userId.toString(),
+                enabled ? "İki addımlı giriş açıldı" : "İki addımlı giriş söndürüldü");
+        return p;
+    }
+
+    /** Signs the user out on every other device (their older tokens stop working); this device gets a new token. */
+    @Transactional
+    public AuthResponse logoutEverywhere() {
+        UUID userId = tenant.currentUserId();
+        jdbc.sql("UPDATE users SET password_changed_at = now() WHERE id = :id").param("id", userId).update();
+        String platformRole = jdbc.sql("SELECT platform_role FROM users WHERE id = :id").param("id", userId).query(String.class).single();
+        Profile p = get();
+        audit.log(p.storeId(), userId, "LOGOUT_ALL", "USER", userId.toString(), "Bütün cihazlardan çıxış");
+        return new AuthResponse(jwt.issue(userId, platformRole), jwt.expiresInSeconds(), auth.me(userId));
     }
 
     /** Store name / phone / address — store owner only. Does not require an active subscription. */

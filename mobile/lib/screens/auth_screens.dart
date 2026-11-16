@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api/api_client.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
@@ -50,13 +51,50 @@ class _AuthScreenState extends State<AuthScreen> {
           storePhone: _storePhone.text.trim(),
         );
       } else {
-        await widget.session.login(_email.text.trim(), _password.text);
+        try {
+          await widget.session.login(_email.text.trim(), _password.text);
+        } on ApiException catch (e) {
+          if (e.code != 'TWO_FACTOR_REQUIRED' || e.fields['challengeId'] == null) rethrow;
+          // two-step login: ask for the code that was sent to the e-mail
+          final code = await _askCode(e.message);
+          if (code == null) return;
+          await widget.session.verifyLoginCode(e.fields['challengeId']!, code);
+        }
       }
     } catch (e) {
       if (mounted) setState(() => _error = errorMessage(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<String?> _askCode(String message) {
+    final c = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Giriş kodu'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(message),
+          const SizedBox(height: 12),
+          TextField(
+            controller: c,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 24, letterSpacing: 8),
+            decoration: const InputDecoration(hintText: '······', counterText: ''),
+            onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ləğv et')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('Təsdiqlə')),
+        ],
+      ),
+    ).whenComplete(c.dispose);
   }
 
   @override

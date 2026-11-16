@@ -72,6 +72,7 @@ export interface Profile {
   storeAddress: string | null;
   hasAvatar: boolean;
   avatarVersion: number | null;
+  twoFactorEnabled?: boolean;
 }
 
 export interface AuthResponse {

@@ -55,6 +55,19 @@ public class ProfileController {
         return profile.updateStore(req.name(), req.phone(), req.address());
     }
 
+    public record TwoFactorUpdate(boolean enabled, @jakarta.validation.constraints.NotBlank String currentPassword) {}
+
+    @PutMapping("/two-factor")
+    public Profile twoFactor(@Valid @RequestBody TwoFactorUpdate req) {
+        return profile.setTwoFactor(req.enabled(), req.currentPassword());
+    }
+
+    /** Signs out every other device; returns a new token for this one. */
+    @PostMapping("/logout-all")
+    public az.borcdefteri.auth.AuthResponse logoutAll() {
+        return profile.logoutEverywhere();
+    }
+
     /** Returns a new token: other devices are signed out, this one continues. */
     @PutMapping("/password")
     public AuthResponse changePassword(@Valid @RequestBody PasswordChange req) {

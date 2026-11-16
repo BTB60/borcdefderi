@@ -45,6 +45,7 @@ export default function SettingsPage() {
           {profile.role === "STORE_OWNER" && <StoreCard profile={profile} onChange={updated} />}
           {profile.role === "STORE_OWNER" && <BonusCard />}
           <PasswordCard isAdmin={profile.platformRole === "SUPER_ADMIN"} />
+          <SecurityCard profile={profile} onChange={updated} />
         </div>
       </div>
     </>
@@ -265,6 +266,61 @@ function BonusCard() {
         </Field>
         <Button type="submit" variant="primary" disabled={busy || !loaded}>{busy ? "Saxlanılır…" : "Yadda saxla"}</Button>
       </form>
+    </Card>
+  );
+}
+
+/** İki addımlı giriş (e-mail code) and "sign out on every other device". */
+function SecurityCard({ profile, onChange }: { profile: Profile; onChange: (p: Profile) => Promise<void> }) {
+  const { signIn } = useAuth();
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<Msg>(null);
+  const on = !!profile.twoFactorEnabled;
+
+  async function toggle(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      await onChange(await api<Profile>("/api/profile/two-factor", { method: "PUT", json: { enabled: !on, currentPassword: password } }));
+      setPassword("");
+      setMsg({ kind: "success", text: on ? "İki addımlı giriş söndürüldü" : "İki addımlı giriş açıldı: növbəti girişdə e-poçtunuza kod gələcək" });
+    } catch (err) {
+      setMsg({ kind: "error", text: errorText(err, "Alınmadı") });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function logoutAll() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      signIn(await api<AuthResponse>("/api/profile/logout-all", { method: "POST" }));
+      setMsg({ kind: "success", text: "Bütün digər cihazlardan çıxış edildi. Bu cihazda davam edirsiniz." });
+    } catch (err) {
+      setMsg({ kind: "error", text: errorText(err, "Alınmadı") });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Təhlükəsizlik</h2>
+      <p className="mb-5 text-sm text-slate-500">İki addımlı girişdə şifrədən sonra e-poçtunuza gələn 6 rəqəmli kod da soruşulur.</p>
+      {msg && <div className="mb-4"><Alert kind={msg.kind}>{msg.text}</Alert></div>}
+      <form onSubmit={toggle} className="flex flex-wrap items-end gap-3">
+        <Field label={`İki addımlı giriş: ${on ? "açıqdır" : "bağlıdır"} — təsdiq üçün şifrə`}>
+          <Input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-64" />
+        </Field>
+        <Button type="submit" variant={on ? "outline" : "primary"} disabled={busy || !password}>{on ? "Söndür" : "Aç"}</Button>
+      </form>
+      <div className="mt-6 border-t border-slate-100 pt-4">
+        <p className="mb-2 text-sm text-slate-600">Telefonunuz itibsə və ya başqa kompüterdə hesabınız açıq qalıbsa:</p>
+        <Button variant="outline" disabled={busy} onClick={logoutAll}>Bütün digər cihazlardan çıxış</Button>
+      </div>
     </Card>
   );
 }

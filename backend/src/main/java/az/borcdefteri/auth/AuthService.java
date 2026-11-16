@@ -27,9 +27,11 @@ public class AuthService {
     private final AuditService audit;
     private final TenantService tenant;
     private final SubscriptionService subscriptions;
+    private final TwoFactorService twoFactor;
 
     public AuthService(JdbcClient jdbc, PasswordEncoder passwordEncoder, JwtService jwtService,
-                       AuditService audit, TenantService tenant, SubscriptionService subscriptions) {
+                       AuditService audit, TenantService tenant, SubscriptionService subscriptions, TwoFactorService twoFactor) {
+        this.twoFactor = twoFactor;
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -93,11 +95,26 @@ public class AuthService {
         if (!creds.enabled()) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "ACCOUNT_DISABLED", "Hesab deaktiv edilib");
         }
+        if (twoFactor.required(creds.id())) {
+            twoFactor.challenge(creds.id(), email); // throws TWO_FACTOR_REQUIRED with the challenge id
+        }
+        return issue(creds.id(), creds.platformRole());
+    }
+
+    /** Second step of two-step login: the code from the e-mail. */
+    public AuthResponse verifyLoginCode(UUID challengeId, String code) {
+        UUID userId = twoFactor.verify(challengeId, code);
+        String role = jdbc.sql("SELECT platform_role FROM users WHERE id = :id AND enabled").param("id", userId)
+                .query(String.class).optional()
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "ACCOUNT_DISABLED", "Hesab deaktiv edilib"));
+        return issue(userId, role);
+    }
+
+    private AuthResponse issue(UUID userId, String platformRole) {
         UUID storeId = jdbc.sql("SELECT store_id FROM store_members WHERE user_id = :id")
-                .param("id", creds.id()).query(UUID.class).optional().orElse(null);
-        audit.log(storeId, creds.id(), "LOGIN", "USER", creds.id().toString(), "Sistemə giriş");
-        return new AuthResponse(jwtService.issue(creds.id(), creds.platformRole()), jwtService.expiresInSeconds(),
-                me(creds.id()));
+                .param("id", userId).query(UUID.class).optional().orElse(null);
+        audit.log(storeId, userId, "LOGIN", "USER", userId.toString(), "Sistemə giriş");
+        return new AuthResponse(jwtService.issue(userId, platformRole), jwtService.expiresInSeconds(), me(userId));
     }
 
     public MeResponse me(UUID userId) {

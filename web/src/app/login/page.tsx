@@ -17,18 +17,34 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // two-step login: after the password, the 6-digit code sent to the e-mail
+  const [challenge, setChallenge] = useState<{ id: string; email: string } | null>(null);
+  const [code, setCode] = useState("");
+
+  function enter(res: AuthResponse) {
+    signIn(res);
+    // the desktop till (HesabPro Kassa) opens straight on the sales screen
+    router.replace(window.hesabDesktop ? "/satis" : res.me.platformRole === "SUPER_ADMIN" ? "/admin" : "/dashboard");
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
-      const res = await api<AuthResponse>("/api/auth/login", { method: "POST", json: { email, password } });
-      signIn(res);
-      // the desktop till (HesabPro Kassa) opens straight on the sales screen
-      router.replace(window.hesabDesktop ? "/satis" : res.me.platformRole === "SUPER_ADMIN" ? "/admin" : "/dashboard");
+      if (challenge) {
+        enter(await api<AuthResponse>("/api/auth/login/verify", { method: "POST", json: { challengeId: challenge.id, code } }));
+      } else {
+        enter(await api<AuthResponse>("/api/auth/login", { method: "POST", json: { email, password } }));
+      }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Serverlə əlaqə qurula bilmədi");
+      if (err instanceof ApiError && err.code === "TWO_FACTOR_REQUIRED" && err.fields?.challengeId) {
+        setChallenge({ id: err.fields.challengeId, email: err.fields.email ?? "" });
+        setCode("");
+      } else {
+        if (err instanceof ApiError && err.code === "CODE_EXPIRED") setChallenge(null);
+        setError(err instanceof ApiError ? err.message : "Serverlə əlaqə qurula bilmədi");
+      }
     } finally {
       setBusy(false);
     }
@@ -67,6 +83,17 @@ export default function LoginPage() {
 
           <form onSubmit={onSubmit} className="mt-8 space-y-5" noValidate>
             {error && <Alert>{error}</Alert>}
+            {challenge ? (
+              <>
+                <Alert kind="info">Giriş kodu <b>{challenge.email}</b> ünvanına göndərildi. Kod 10 dəqiqə etibarlıdır.</Alert>
+                <Field label="6 rəqəmli kod">
+                  <Input autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} placeholder="••••••" className="text-center text-2xl tracking-[0.5em]" />
+                </Field>
+                <Button type="submit" variant="primary" className="w-full py-3" disabled={busy || code.length !== 6}>{busy ? "Yoxlanılır…" : "Təsdiqlə"}</Button>
+                <button type="button" onClick={() => { setChallenge(null); setError(null); }} className="w-full text-center text-sm text-slate-500 hover:text-navy-800">← Geri</button>
+              </>
+            ) : (<>
             <Field label="E-poçt və ya istifadəçi adı">
               <Input type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ad@mağaza.az" />
             </Field>
@@ -81,6 +108,7 @@ export default function LoginPage() {
             <Button type="submit" variant="primary" className="w-full py-3" disabled={busy}>
               {busy ? "Yoxlanılır…" : "Daxil ol"}
             </Button>
+            </>)}
           </form>
 
           <p className="mt-8 text-center text-sm text-slate-500">

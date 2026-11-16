@@ -28,6 +28,15 @@ public class AuthController {
         return authService.login(request);
     }
 
+    public record VerifyRequest(@jakarta.validation.constraints.NotNull java.util.UUID challengeId,
+                                @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 12) String code) {}
+
+    /** Second step of two-step login: the 6-digit code from the e-mail. */
+    @PostMapping("/login/verify")
+    public AuthResponse verify(@Valid @RequestBody VerifyRequest request) {
+        return authService.verifyLoginCode(request.challengeId(), request.code());
+    }
+
     @GetMapping("/me")
     public MeResponse me() {
         return authService.me(tenant.currentUserId());

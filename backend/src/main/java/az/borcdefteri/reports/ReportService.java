@@ -196,7 +196,7 @@ public class ReportService {
         return switch (type) {
             case CUSTOMER_DEBT -> "Müştəri borcları";
             case COMPANY_RECEIVABLE -> "Şirkətin bizə borcu";
-            case COMPANY_PAYABLE -> "Bizim şirkətə borcumuz";
+            case COMPANY_PAYABLE -> "Təchizatçılar üzrə borc uçotu";
         };
     }
 

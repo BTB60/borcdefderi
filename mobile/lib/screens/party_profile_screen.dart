@@ -308,7 +308,7 @@ class _PartyProfileScreenState extends State<PartyProfileScreen> {
                     payLabel: 'Ödəniş qəbul et', onPay: () => _account(AccountMode.pay, 'COMPANY_RECEIVABLE')),
               if (widget.session.me!.can('COMPANY_RECEIVABLES') && widget.session.me!.can('COMPANY_PAYABLES')) const SizedBox(height: 8),
               if (widget.session.me!.can('COMPANY_PAYABLES'))
-                _SideBlock(title: 'Bizim şirkətə borcumuz', side: p.payable!, color: Colors.red, onPdf: () => _pdf(party, 'COMPANY_PAYABLE'),
+                _SideBlock(title: 'Təchizatçılar üzrə borc uçotu', side: p.payable!, color: Colors.red, onPdf: () => _pdf(party, 'COMPANY_PAYABLE'),
                     payLabel: 'Ödəniş et', onPay: () => _account(AccountMode.pay, 'COMPANY_PAYABLE')),
             ],
             const SizedBox(height: 10),

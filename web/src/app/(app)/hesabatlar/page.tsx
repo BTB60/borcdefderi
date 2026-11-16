@@ -28,7 +28,7 @@ export default function ReportsPage() {
     { title: "Bağlanmış müştəri borcları", text: "Tam ödənilmiş borclar", path: "/api/reports/debts/export?type=CUSTOMER_DEBT&status=PAID", file: "baglanmis-borclar", show: cust },
     { title: "Bütün müştəri borcları", text: "Seçilmiş dövr üzrə", path: "/api/reports/debts/export?type=CUSTOMER_DEBT", file: "borclar", dated: true, show: cust },
     { title: "Şirkətin bizə borcu", text: "Seçilmiş dövr üzrə", path: "/api/reports/debts/export?type=COMPANY_RECEIVABLE", file: "alacaqlar", dated: true, show: rec },
-    { title: "Bizim şirkətə borcumuz", text: "Seçilmiş dövr üzrə", path: "/api/reports/debts/export?type=COMPANY_PAYABLE", file: "borcumuz", dated: true, show: pay },
+    { title: "Təchizatçılar üzrə borc uçotu", text: "Seçilmiş dövr üzrə", path: "/api/reports/debts/export?type=COMPANY_PAYABLE", file: "borcumuz", dated: true, show: pay },
     { title: "Ödənişlər — gündəlik/aylıq", text: "Seçilmiş dövr üzrə, ödəniş üsulları ilə", path: "/api/reports/payments/export?", file: "odenisler", dated: true, show: reports },
   ];
 

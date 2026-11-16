@@ -169,7 +169,7 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
   return (
     <Modal open title="Yeni mal qəbulu" onClose={onClose} size="xl">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Təchizatçı (şirkət)" hint="Seçilsə, ödənilməyən hissə “Bizim şirkətə borcumuz”a yazılır">
+        <Field label="Təchizatçı (şirkət)" hint="Seçilsə, ödənilməyən hissə “Təchizatçılar üzrə borc uçotu”na yazılır">
           <Select value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
             <option value="">— Təchizatçısız —</option>
             {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

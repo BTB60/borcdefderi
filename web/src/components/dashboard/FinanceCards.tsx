@@ -91,7 +91,7 @@ export function FinanceCards() {
         <BigCard
           href={listHref("company-payables")}
           gradient="from-violet-600 to-purple-800"
-          label="Bizim şirkətə borcumuz"
+          label="Təchizatçılar üzrə borc uçotu"
           value={formatMoney(o.companyPayables.sum)}
           hint={`${o.companyPayables.count} şirkətə açıq öhdəlik`}
           icon={ICONS.wallet}

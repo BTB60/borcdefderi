@@ -13,7 +13,7 @@ String formatDateTime(DateTime date) => _dateTime.format(date.toLocal());
 const debtSectionTitles = {
   'CUSTOMER_DEBT': 'Müştəri borcları',
   'COMPANY_RECEIVABLE': 'Şirkətin bizə borcu',
-  'COMPANY_PAYABLE': 'Bizim şirkətə borcumuz',
+  'COMPANY_PAYABLE': 'Təchizatçılar üzrə borc uçotu',
 };
 
 const debtStatusLabels = {
@@ -32,7 +32,7 @@ const methodLabels = {
 const permissionLabels = {
   'CUSTOMER_DEBTS': 'Müştəri borcları',
   'COMPANY_RECEIVABLES': 'Şirkətin bizə borcu',
-  'COMPANY_PAYABLES': 'Bizim şirkətə borcumuz',
+  'COMPANY_PAYABLES': 'Təchizatçılar üzrə borc uçotu',
   'REPORTS': 'Hesabatlar',
   'CASH': 'Kassa və bank',
   'EXPENSES': 'Xərclər və büdcə',
@@ -44,7 +44,7 @@ const permissionLabels = {
 const planModuleLabels = {
   'CUSTOMER_DEBTS': 'Müştəri borcları',
   'COMPANY_RECEIVABLES': 'Şirkətin bizə borcu',
-  'COMPANY_PAYABLES': 'Bizim şirkətə borcumuz',
+  'COMPANY_PAYABLES': 'Təchizatçılar üzrə borc uçotu',
   'REPORTS': 'Panel, gəlir və mənfəət, hesabatlar',
   'SALES': 'Satış və kassa',
   'INVENTORY': 'Anbar, sayım, barkod',

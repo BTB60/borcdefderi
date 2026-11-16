@@ -349,7 +349,7 @@ public class AdminPurgeService {
         return switch (debtType) {
             case "CUSTOMER_DEBT" -> "müştəri";
             case "COMPANY_RECEIVABLE" -> "şirkətin bizə borcu";
-            default -> "bizim şirkətə borcumuz";
+            default -> "təchizatçılar üzrə borc uçotu";
         };
     }
 }

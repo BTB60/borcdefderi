@@ -150,7 +150,7 @@ public class StatementService {
 
             Paragraph t = new Paragraph(customer || types.size() != 1 ? "Borc çıxarışı"
                     : DebtType.valueOf(types.get(0)) == DebtType.COMPANY_RECEIVABLE ? "Şirkətin bizə borcu — çıxarış"
-                    : "Bizim şirkətə borcumuz — çıxarış", title);
+                    : "Təchizatçılar üzrə borc uçotu — çıxarış", title);
             t.setSpacingBefore(10);
             doc.add(t);
             doc.add(new Paragraph((customer ? "Müştəri: " : "Şirkət: ") + nz(name)

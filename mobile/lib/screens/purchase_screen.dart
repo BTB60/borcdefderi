@@ -305,7 +305,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
           DropdownButtonFormField<String?>(
             initialValue: _companyId,
             isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Təchizatçı (şirkət)', helperText: 'Ödənilməyən hissə “Bizim şirkətə borcumuz”a yazılır'),
+            decoration: const InputDecoration(labelText: 'Təchizatçı (şirkət)', helperText: 'Ödənilməyən hissə “Təchizatçılar üzrə borc uçotu”na yazılır'),
             items: [
               const DropdownMenuItem<String?>(value: null, child: Text('— Təchizatçısız —')),
               for (final s in _suppliers) DropdownMenuItem<String?>(value: '${s['id']}', child: Text('${s['name']}')),

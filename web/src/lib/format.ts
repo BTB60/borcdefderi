@@ -21,7 +21,7 @@ export function formatDateTime(value: string | null | undefined): string {
 export const DEBT_TYPE_LABEL: Record<DebtType, string> = {
   CUSTOMER_DEBT: "Müştəri borcları",
   COMPANY_RECEIVABLE: "Şirkətin bizə borcu",
-  COMPANY_PAYABLE: "Bizim şirkətə borcumuz",
+  COMPANY_PAYABLE: "Təchizatçılar üzrə borc uçotu",
 };
 
 export const DEBT_SECTION_SLUG: Record<string, DebtType> = {
@@ -58,7 +58,7 @@ export function todayBaku(): string {
 export const PERMISSION_LABEL: Record<Permission, string> = {
   CUSTOMER_DEBTS: "Müştəri borcları",
   COMPANY_RECEIVABLES: "Şirkətin bizə borcu",
-  COMPANY_PAYABLES: "Bizim şirkətə borcumuz",
+  COMPANY_PAYABLES: "Təchizatçılar üzrə borc uçotu",
   REPORTS: "Hesabatlar və panel",
   CASH: "Kassa və bank",
   EXPENSES: "Xərclər və büdcə",
@@ -109,7 +109,7 @@ export const JOB_TITLE_PERMISSIONS: Record<import("./types").JobTitle, import(".
 export const PLAN_MODULE_LABEL: Record<import("./types").PlanModule, string> = {
   CUSTOMER_DEBTS: "Müştəri borcları",
   COMPANY_RECEIVABLES: "Şirkətin bizə borcu",
-  COMPANY_PAYABLES: "Bizim şirkətə borcumuz",
+  COMPANY_PAYABLES: "Təchizatçılar üzrə borc uçotu",
   REPORTS: "Panel, gəlir və mənfəət, hesabatlar",
   SALES: "Satış və kassa terminalı",
   INVENTORY: "Anbar, sayım, barkod",

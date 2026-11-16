@@ -56,7 +56,8 @@ jobs:
       - name: Warn when no release key is set
         if: env.ANDROID_KEYSTORE_BASE64 == ''
         run: echo "::warning::ANDROID_KEYSTORE_BASE64 secret is missing - the APK is signed with a temporary debug key and will not install over older versions"
-      - run: flutter build apk --release --dart-define=API_URL=https://borcdefderi.onrender.com
+      # every build gets a higher version (0.2.<run>), so a new APK installs over the old one and the site can show it
+      - run: flutter build apk --release --build-name=0.2.${{ github.run_number }} --build-number=${{ github.run_number }} --dart-define=API_URL=https://borcdefderi.onrender.com
       - run: cp build/app/outputs/flutter-apk/app-release.apk HesabPro.apk
       - uses: actions/upload-artifact@v4
         with:
@@ -66,7 +67,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: mobile-latest
-          name: HesabPro APK (son versiya)
+          name: HesabPro APK v0.2.${{ github.run_number }}
           prerelease: true
           files: mobile/HesabPro.apk
-          body: "Avtomatik yığılıb: ${{ github.ref_name }} @ ${{ github.sha }}"
+          body: "Versiya 0.2.${{ github.run_number }} — avtomatik yığılıb: ${{ github.ref_name }} @ ${{ github.sha }}"

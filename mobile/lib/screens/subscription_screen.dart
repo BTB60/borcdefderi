@@ -236,16 +236,11 @@ class PlanCard extends StatelessWidget {
             if (plan.maxCustomers != null) Text('•  ${plan.maxCustomers} müştəriyə qədər', style: TextStyle(color: fg.withValues(alpha: 0.8))),
             if (plan.maxProducts != null) Text('•  ${plan.maxProducts} məhsula qədər', style: TextStyle(color: fg.withValues(alpha: 0.8))),
             if (plan.modules != null)
-              for (final m in planModuleLabels.entries)
+              // only the sections the package includes; what it leaves out is simply not listed
+              for (final m in planModuleLabels.entries.where((e) => plan.modules!.contains(e.key)))
                 Padding(
                   padding: const EdgeInsets.only(top: 3),
-                  child: Text(
-                    '${plan.modules!.contains(m.key) ? '✓' : '✕'}  ${m.value}',
-                    style: TextStyle(
-                      color: plan.modules!.contains(m.key) ? fg : fg.withValues(alpha: 0.45),
-                      decoration: plan.modules!.contains(m.key) ? null : TextDecoration.lineThrough,
-                    ),
-                  ),
+                  child: Text('✓  ${m.value}', style: TextStyle(color: fg)),
                 ),
             const SizedBox(height: 12),
             SizedBox(

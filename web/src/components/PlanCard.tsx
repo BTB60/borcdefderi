@@ -108,9 +108,10 @@ export function PlanCard({
           {plan.maxProducts != null && (
             <li className="flex gap-2 opacity-80"><span aria-hidden="true">•</span>{plan.maxProducts} məhsula qədər</li>
           )}
-          {plan.modules != null && (Object.keys(PLAN_MODULE_LABEL) as PlanModule[]).map((m) => (
-            <li key={m} className={`flex gap-2 ${plan.modules!.includes(m) ? "" : "opacity-45 line-through"}`}>
-              <span aria-hidden="true" className="mt-0.5 font-bold" style={{ color: plan.modules!.includes(m) ? plan.secondaryColor : undefined }}>{plan.modules!.includes(m) ? "✓" : "✕"}</span>
+          {/* only the sections the package includes; what it leaves out is simply not listed */}
+          {plan.modules != null && (Object.keys(PLAN_MODULE_LABEL) as PlanModule[]).filter((m) => plan.modules!.includes(m)).map((m) => (
+            <li key={m} className="flex gap-2">
+              <span aria-hidden="true" className="mt-0.5 font-bold" style={{ color: plan.secondaryColor }}>✓</span>
               <span>{PLAN_MODULE_LABEL[m]}</span>
             </li>
           ))}

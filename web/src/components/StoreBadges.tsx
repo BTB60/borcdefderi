@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Modal } from "@/components/ui";
 
-/** Android app download (the latest signed APK) and App Store (not published yet: "Tezliklə"). */
+/** Android app download (the latest signed APK) and iPhone install (the web app added to the Home Screen from Safari,
+ * until the App Store version is published). */
 export const ANDROID_APK_URL = "https://github.com/BTB60/borcdefderi/releases/download/mobile-latest/HesabPro.apk";
 const APK_RELEASE_API = "https://api.github.com/repos/BTB60/borcdefderi/releases/tags/mobile-latest";
 const APK_INFO_KEY = "hp_apk_release";
@@ -50,35 +52,118 @@ function AppleIcon() {
   );
 }
 
+type Platform = "ios" | "android" | "other";
+
+/** Which phone the page is open on, and whether it already runs as an installed (home-screen) app. */
+function usePlatform(): { platform: Platform; installed: boolean; safari: boolean } {
+  const [state, setState] = useState<{ platform: Platform; installed: boolean; safari: boolean }>({ platform: "other", installed: false, safari: false });
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    // iPadOS reports itself as a Mac; a touch screen gives it away
+    const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    const android = /Android/.test(ua);
+    const installed = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    const safari = ios && !/CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser|GSA|Instagram|FBAN|FBAV|Telegram|WhatsApp/.test(ua);
+    setState({ platform: ios ? "ios" : android ? "android" : "other", installed, safari });
+  }, []);
+  return state;
+}
+
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="inline h-5 w-5 align-[-4px] text-sky-600" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3v12M7.5 7.5 12 3l4.5 4.5" />
+      <path d="M8 11H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-2" />
+    </svg>
+  );
+}
+
+function AddBoxIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="inline h-5 w-5 align-[-4px] text-slate-700" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="4" />
+      <path d="M12 8v8M8 12h8" />
+    </svg>
+  );
+}
+
+/** Step-by-step: install HesabPro on an iPhone from Safari (Share → Add to Home Screen). */
+function IosInstallModal({ open, onClose, platform, safari }: { open: boolean; onClose: () => void; platform: Platform; safari: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const url = typeof window !== "undefined" ? `${window.location.origin}/login` : "https://hesabpro.cloud/login";
+  const step = "flex gap-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700";
+  const num = "flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-navy-800 text-xs font-semibold text-white";
+  return (
+    <Modal open={open} onClose={onClose} title="iPhone-a quraşdırın">
+      {platform !== "ios" ? (
+        <div className="space-y-3 text-sm text-slate-600">
+          <p>Bu səhifəni <b>iPhone-da Safari</b> ilə açın və <b>“iPhone üçün quraşdır”</b> düyməsinə toxunun.</p>
+          <p className="break-all rounded-xl bg-slate-50 p-3 font-mono text-navy-800">{url}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {!safari && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              Quraşdırma yalnız <b>Safari</b>-də işləyir. Linki kopyalayıb Safari-də açın.
+              <button
+                type="button"
+                className="mt-2 block w-full rounded-lg bg-amber-600 py-2 font-semibold text-white"
+                onClick={() => { void navigator.clipboard?.writeText(url).then(() => setCopied(true)); }}
+              >
+                {copied ? "Kopyalandı ✓" : "Linki kopyala"}
+              </button>
+            </div>
+          )}
+          <div className={step}><span className={num}>1</span><span>Aşağıdakı <b>Paylaş</b> <ShareIcon /> düyməsinə toxunun (iPad-də yuxarı sağda).</span></div>
+          <div className={step}><span className={num}>2</span><span>Siyahını aşağı sürüşdürüb <b>“Ana ekrana əlavə et”</b> <AddBoxIcon /> seçin <span className="text-slate-400">(“На экран «Домой»” / “Add to Home Screen”)</span>.</span></div>
+          <div className={step}><span className={num}>3</span><span>Yuxarı sağda <b>“Əlavə et”</b> düyməsinə toxunun.</span></div>
+          <p className="pt-1 text-sm text-slate-500">Ana ekranda <b>HesabPro</b> ikonu yaranacaq — tətbiq kimi tam ekranda açılır, yeniləmələr avtomatik gəlir.</p>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 export function StoreBadges({ className = "" }: { className?: string }) {
   const badge = "flex items-center gap-3 rounded-xl border border-white/20 bg-black/80 px-4 py-2.5 text-left text-white transition";
   const apk = useLatestApk();
+  const { platform, installed, safari } = usePlatform();
+  const [iosHelp, setIosHelp] = useState(false);
   const d = apk?.date ? new Date(apk.date) : null;
   const built = d ? `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}` : null;
+  // already opened from the Home Screen icon: nothing to install
+  if (installed && platform === "ios") return null;
+  const androidBadge = (
+    <div>
+      {(apk?.version || built) && (
+        <p className="mb-1.5 inline-flex items-center gap-1.5 rounded-full bg-gold-500 px-2.5 py-0.5 text-[11px] font-semibold text-navy-900">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+          Yeni versiya{apk?.version ? ` ${apk.version}` : ""}{built ? ` · ${built}` : ""}
+        </p>
+      )}
+      <a href={ANDROID_APK_URL} className={`${badge} hover:border-white/50 hover:bg-black`} title="Android tətbiqini yüklə (APK)">
+        <PlayIcon />
+        <span className="leading-tight">
+          <span className="block text-[10px] uppercase tracking-wider text-white/70">Android üçün yüklə</span>
+          <span className="block text-lg font-semibold">Google Play</span>
+        </span>
+      </a>
+    </div>
+  );
+  const iosBadge = (
+    <button type="button" onClick={() => setIosHelp(true)} className={`${badge} hover:border-white/50 hover:bg-black`} title="iPhone-a quraşdır (Safari → Ana ekrana əlavə et)">
+      <AppleIcon />
+      <span className="leading-tight">
+        <span className="block text-[10px] uppercase tracking-wider text-white/70">iPhone üçün quraşdır</span>
+        <span className="block text-lg font-semibold">App Store</span>
+      </span>
+    </button>
+  );
   return (
     <div className={`flex flex-wrap items-end gap-3 ${className}`}>
-      <div>
-        {(apk?.version || built) && (
-          <p className="mb-1.5 inline-flex items-center gap-1.5 rounded-full bg-gold-500 px-2.5 py-0.5 text-[11px] font-semibold text-navy-900">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-            Yeni versiya{apk?.version ? ` ${apk.version}` : ""}{built ? ` · ${built}` : ""}
-          </p>
-        )}
-        <a href={ANDROID_APK_URL} className={`${badge} hover:border-white/50 hover:bg-black`} title="Android tətbiqini yüklə (APK)">
-          <PlayIcon />
-          <span className="leading-tight">
-            <span className="block text-[10px] uppercase tracking-wider text-white/70">Android üçün yüklə</span>
-            <span className="block text-lg font-semibold">Google Play</span>
-          </span>
-        </a>
-      </div>
-      <div className={`${badge} cursor-default opacity-80`} title="iPhone tətbiqi tezliklə App Store-da" aria-disabled>
-        <AppleIcon />
-        <span className="leading-tight">
-          <span className="block text-[10px] uppercase tracking-wider text-white/70">Tezliklə</span>
-          <span className="block text-lg font-semibold">App Store</span>
-        </span>
-      </div>
+      {/* the button for the phone in hand comes first; on a computer both are shown */}
+      {platform === "ios" ? <>{iosBadge}{androidBadge}</> : <>{androidBadge}{iosBadge}</>}
+      <IosInstallModal open={iosHelp} onClose={() => setIosHelp(false)} platform={platform} safari={safari} />
     </div>
   );
 }

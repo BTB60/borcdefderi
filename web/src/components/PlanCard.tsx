@@ -91,7 +91,7 @@ export function PlanCard({
         <p className="mt-5 text-sm opacity-60">Qiymət əlavə edilməyib</p>
       )}
 
-      {(plan.features.length > 0 || plan.maxEmployees != null || plan.maxCustomers != null || plan.maxProducts != null || plan.modules != null) && (
+      {(plan.features.length > 0 || plan.maxEmployees != null || plan.maxCustomers != null || plan.maxProducts != null || Object.keys(PLAN_MODULE_LABEL).length > 0) && (
         <ul className="mt-5 space-y-2 text-sm">
           {plan.features.map((f, i) => (
             <li key={i} className="flex gap-2">
@@ -108,8 +108,8 @@ export function PlanCard({
           {plan.maxProducts != null && (
             <li className="flex gap-2 opacity-80"><span aria-hidden="true">•</span>{plan.maxProducts} məhsula qədər</li>
           )}
-          {/* only the sections the package includes; what it leaves out is simply not listed */}
-          {plan.modules != null && (Object.keys(PLAN_MODULE_LABEL) as PlanModule[]).filter((m) => plan.modules!.includes(m)).map((m) => (
+          {/* only the sections the package includes (no list = all of them); what it leaves out is simply not listed */}
+          {(Object.keys(PLAN_MODULE_LABEL) as PlanModule[]).filter((m) => plan.modules == null || plan.modules.includes(m)).map((m) => (
             <li key={m} className="flex gap-2">
               <span aria-hidden="true" className="mt-0.5 font-bold" style={{ color: plan.secondaryColor }}>✓</span>
               <span>{PLAN_MODULE_LABEL[m]}</span>

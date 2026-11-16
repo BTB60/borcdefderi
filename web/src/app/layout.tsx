@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   },
   description: "Mağazalar üçün borc, ödəniş və mühasibat idarəetmə platforması.",
   applicationName: "HesabPro",
+  // iPhone: "Ana ekrana əlavə et" opens HesabPro full-screen like an app, with its own name and icon
+  appleWebApp: { capable: true, title: "HesabPro", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
   robots: { index: false, follow: false },
 };
 

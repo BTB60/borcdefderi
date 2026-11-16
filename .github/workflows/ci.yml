@@ -21,6 +21,19 @@ jobs:
           cache: maven
       - name: Run tests (embedded PostgreSQL binaries, no Docker needed)
         run: mvn -B verify
+      # logs need a GitHub sign-in; annotations are public, so the first failures are printed as annotations
+      - name: Show test failures as annotations
+        if: failure()
+        run: |
+          for f in target/surefire-reports/*.txt; do
+            [ -f "$f" ] || continue
+            if grep -qE "FAILURE|ERROR" "$f"; then
+              msg=$(grep -m 3 -E "(Exception|Error|expected)" "$f" | tr '
+' ' ' | cut -c1-400)
+              echo "::error title=$(basename "$f" .txt)::$msg"
+            fi
+          done
+          grep -h -m 5 -E "APPLICATION FAILED|Caused by|initdb|postgres" target/surefire-reports/*-output.txt 2>/dev/null | head -10 | while read -r l; do echo "::warning::${l:0:300}"; done || true
 
   web:
     name: Web build (Next.js)

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
 import { PosTerminal } from "@/components/sales/PosTerminal";
+import { ShiftBar, ShiftList } from "@/components/sales/Shift";
 import { ApiError, api, openProtected } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDate, formatDateTime, formatMoney, todayBaku } from "@/lib/format";
@@ -12,7 +13,7 @@ const num = (s: string) => (s.trim() === "" ? 0 : Number(s.replace(",", ".")));
 
 /** Satış: the point-of-sale terminal and the sales list with receipt, returns and cancel. */
 export default function SalesPage() {
-  const [tab, setTab] = useState<"new" | "list">("new");
+  const [tab, setTab] = useState<"new" | "list" | "shifts">("new");
   return (
     <>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -21,12 +22,12 @@ export default function SalesPage() {
           <p className="text-sm text-slate-500">Kassa terminalı: məhsulu seçin və ya barkodu oxudun, ödənişi qəbul edin</p>
         </div>
         <div className="inline-flex rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200" role="tablist">
-          {([["new", "Kassa"], ["list", "Satışlar"]] as const).map(([k, l]) => (
+          {([["new", "Kassa"], ["list", "Satışlar"], ["shifts", "Növbələr"]] as const).map(([k, l]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === k ? "bg-navy-800 text-white shadow" : "text-slate-600"}`}>{l}</button>
           ))}
         </div>
       </div>
-      {tab === "new" ? <PosTerminal /> : <SalesList />}
+      {tab === "new" ? <><ShiftBar /><PosTerminal /></> : tab === "list" ? <SalesList /> : <ShiftList />}
     </>
   );
 }

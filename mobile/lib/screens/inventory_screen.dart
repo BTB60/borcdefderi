@@ -16,6 +16,7 @@ import 'common.dart';
 import 'label_print_sheet.dart';
 import 'purchase_screen.dart';
 import 'stock_count_screen.dart';
+import 'stock_tools.dart';
 
 double _n(Object? v) => (v as num?)?.toDouble() ?? 0;
 String _q(Object? v) {
@@ -226,6 +227,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
     }
   }
 
+  Future<void> _bulkPrice() async {
+    try {
+      final msg = await bulkPriceSheet(context, widget.session);
+      if (msg == null || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      _reload();
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
   /// Excel import: pick a file, send it, show what was created / updated or the wrong rows.
   Future<void> _import() async {
     final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['xlsx', 'xls']);
@@ -330,7 +342,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
         if (_manage)
           PopupMenuButton<String>(
             tooltip: 'Export / import',
-            onSelected: (v) => v == 'labels'
+            onSelected: (v) => v == 'reorder'
+                ? Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReorderScreen(session: widget.session)))
+                : v == 'bulk'
+                ? _bulkPrice()
+                : v == 'labels'
                 ? showLabelPrintSheet(context, widget.session)
                 : v == 'import'
                 ? _import()
@@ -338,6 +354,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     ? _share('/api/products/import-template', 'mehsul-import-sablonu.xlsx', _xlsx)
                     : _share('/api/products/export?format=$v', 'mehsullar.$v', v == 'pdf' ? 'application/pdf' : _xlsx),
             itemBuilder: (_) => const [
+              PopupMenuItem(value: 'reorder', child: ListTile(leading: Icon(Icons.local_shipping_outlined), title: Text('Sifariş siyahısı'))),
+              PopupMenuItem(value: 'bulk', child: ListTile(leading: Icon(Icons.price_change_outlined), title: Text('Qiymətləri toplu dəyiş'))),
               PopupMenuItem(value: 'pdf', child: ListTile(leading: Icon(Icons.picture_as_pdf_outlined), title: Text('Bütün məhsullar — PDF'))),
               PopupMenuItem(value: 'xlsx', child: ListTile(leading: Icon(Icons.table_chart_outlined), title: Text('Bütün məhsullar — Excel'))),
               PopupMenuItem(value: 'labels', child: ListTile(leading: Icon(Icons.print_outlined), title: Text('Bütün barkodları çap et'))),

@@ -6,6 +6,7 @@ import '../theme.dart';
 import 'barcode_scanner.dart';
 import 'cash_screen.dart' show newRequestId;
 import 'common.dart';
+import 'stock_tools.dart';
 
 double _n(Object? v) => v is num ? v.toDouble() : double.tryParse('${v ?? ''}'.replaceAll(',', '.')) ?? 0;
 double _r2(double v) => (v * 100).roundToDouble() / 100;
@@ -73,6 +74,21 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             _total('Ödənildi', _n(p['paid']), Colors.green.shade700),
             if (_n(p['unpaid']) > 0) _total('Borca yazıldı', _n(p['unpaid']), Colors.red.shade700),
             if (p['note'] != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('${p['note']}')),
+            if (_n(p['returnedAmount']) > 0) _total('Tədarükçüyə qaytarılıb', _n(p['returnedAmount']), Colors.orange.shade800),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade700),
+              onPressed: () async {
+                final updated = await returnToSupplier(ctx, widget.session, p);
+                if (updated == null || !ctx.mounted) return;
+                Navigator.pop(ctx);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${updated['number']}: mallar tədarükçüyə qaytarıldı')));
+                _reload();
+              },
+              icon: const Icon(Icons.undo),
+              label: const Text('Tədarükçüyə qaytar / ləğv et'),
+            ),
           ],
         ),
       );

@@ -144,6 +144,12 @@ class InventorySalesTest extends IntegrationTestBase {
         String id = s.get("id").asText();
         String line = s.get("items").get(0).get("id").asText();
         assertEquals(180.0, s.get("creditAmount").asDouble());
+        // a receipt link the customer opens without signing in; a wrong token is "not found"
+        String url = body(get(owner, "/api/sales/" + id + "/share-link")).get("url").asText();
+        String path = url.substring(url.indexOf("/api/public/"));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)).andExpect(status().isOk());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path.substring(0, path.length() - 3) + "abc"))
+                .andExpect(status().isNotFound());
         get(owner, "/api/cash/movements?kind=SALE").andExpect(jsonPath("$[0].saleId", is(id)))
                 .andExpect(jsonPath("$[0].saleCancelled", is(false)));
         assertEquals(2.0, stock(owner, p));

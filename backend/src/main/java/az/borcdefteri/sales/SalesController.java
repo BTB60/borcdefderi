@@ -19,8 +19,11 @@ public class SalesController {
     private final SalesService sales;
     private final SaleReceiptService receipts;
     private final ProfitService profit;
+    private final az.borcdefteri.payments.ReceiptLinks links;
 
-    public SalesController(SalesService sales, SaleReceiptService receipts, ProfitService profit) {
+    public SalesController(SalesService sales, SaleReceiptService receipts, ProfitService profit,
+                           az.borcdefteri.payments.ReceiptLinks links) {
+        this.links = links;
         this.sales = sales;
         this.receipts = receipts;
         this.profit = profit;
@@ -57,6 +60,20 @@ public class SalesController {
     @PostMapping("/sales/{id}/cancel")
     public SalesService.Sale cancel(@PathVariable UUID id, @Valid @RequestBody(required = false) SalesService.CancelRequest req) {
         return sales.cancel(id, req);
+    }
+
+    /** A link to this sale's receipt that the customer can open without signing in (sent over WhatsApp / SMS). */
+    @GetMapping("/sales/{id}/share-link")
+    public java.util.Map<String, String> shareLink(@PathVariable UUID id) {
+        sales.get(id); // access check: the caller's store and the SALES permission
+        return java.util.Map.of("url", links.saleUrl(id));
+    }
+
+    @GetMapping("/public/sales/{id}/{token}")
+    public ResponseEntity<byte[]> sharedReceipt(@PathVariable UUID id, @PathVariable String token) {
+        if (!links.isValidSale(id, token)) throw az.borcdefteri.common.ApiException.notFound("Çek tapılmadı");
+        ExportFile f = receipts.sharedReceipt(id);
+        return FileResponses.inline(f.content(), f.contentType(), f.fileName());
     }
 
     @GetMapping("/sales/{id}/receipt")

@@ -354,13 +354,13 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
     }
   }
 
-  void _add(Map<String, dynamic> p) {
+  void _add(Map<String, dynamic> p, [double qty = 1]) {
     setState(() {
       final i = _cart.indexWhere((l) => l.product['id'] == p['id']);
       if (i >= 0) {
-        _cart[i].qty += 1;
+        _cart[i].qty += qty;
       } else {
-        _cart.add(_Line(p, wholesale: _wholesale));
+        _cart.add(_Line(p, wholesale: _wholesale)..qty = qty);
       }
       _results = [];
       _search.clear();
@@ -381,6 +381,24 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
             } catch (e) {
               if (!OfflineSales.isOffline(e)) rethrow;
               p = await OfflineSales.of(widget.session).byCode(code);
+            }
+            // scale label (tərəzi barkodu): 2X PPPPP WWWWW C — product code (PLU) and weight in grams
+            final scale = RegExp(r'^2\d(\d{5})(\d{5})\d$').firstMatch(code);
+            if (p == null && scale != null) {
+              final plu = scale.group(1)!;
+              final kg = int.parse(scale.group(2)!) / 1000;
+              Map<String, dynamic>? w;
+              try {
+                w = await productByBarcode(widget.session, plu);
+              } catch (e) {
+                if (!OfflineSales.isOffline(e)) rethrow;
+                w = await OfflineSales.of(widget.session).byCode(plu);
+              }
+              if (w != null && kg > 0) {
+                if (!mounted) return null;
+                _add(w, kg);
+                return '✓ ${w['name']} — ${kg.toStringAsFixed(3)} kq · cəmi ${formatMoney(_subtotal)}';
+              }
             }
             if (p == null) return 'Tapılmadı: $code';
             if (!mounted) return null;

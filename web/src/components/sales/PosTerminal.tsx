@@ -6,6 +6,7 @@ import { API_URL, ApiError, api, getToken, openProtected } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { desktop, isNetworkError, receiptHtml } from "@/lib/desktop";
 import { formatMoney } from "@/lib/format";
+import { waLink } from "@/lib/whatsapp";
 import type { Party, Product, Sale } from "@/lib/types";
 
 const PRODUCTS_CACHE = "pos_cache_products";
@@ -187,6 +188,20 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
     if (!offline) void printReceipt(sale.id);
   }, [me?.storeName]);
 
+  /** Sends the customer a link to this sale's receipt (opens without signing in) over WhatsApp. */
+  async function shareReceipt(sale: Sale) {
+    try {
+      const { url } = await api<{ url: string }>(`/api/sales/${sale.id}/share-link`);
+      const phone = customers.find((c) => c.id === sale.customerId)?.phone ?? null;
+      const text = `${me?.storeName ?? "Mağaza"} — çekiniz ${sale.number}: ${formatMoney(sale.total)}
+${url}
+Təşəkkür edirik!`;
+      window.open(waLink(phone, text) ?? `https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Çek linki alınmadı");
+    }
+  }
+
   const categories = useMemo(() => {
     const m = new Map<string, string>();
     (products ?? []).forEach((p) => p.categoryId && p.categoryName && m.set(p.categoryId, p.categoryName));
@@ -233,6 +248,14 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
     if (!q) return;
     const exact = (products ?? []).find((p) => p.barcode === q || p.code.toLowerCase() === q.toLowerCase());
     if (exact) { add(exact); setSearch(""); return; }
+    // scale label (tərəzi barkodu): 2X PPPPP WWWWW C — product code (PLU) and weight in grams
+    const weighed = /^2\d(\d{5})(\d{5})\d$/.exec(q);
+    if (weighed) {
+      const plu = weighed[1];
+      const p = (products ?? []).find((x) => x.code === plu || x.barcode === plu || x.code.replace(/\D/g, "").replace(/^0+/, "") === plu.replace(/^0+/, ""));
+      const kg = Number(weighed[2]) / 1000;
+      if (p && kg > 0) { add(p, kg); setSearch(""); return; }
+    }
     try {
       add(await api<Product>(`/api/products/by-code/${encodeURIComponent(q)}`));
       setSearch("");
@@ -766,6 +789,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
       {done && (
         <Modal open title="Satış tamamlandı" onClose={() => { setDone(null); searchRef.current?.focus(); }}
           footer={<>
+            {!done.offline && <Button variant="outline" onClick={() => void shareReceipt(done.sale)}>WhatsApp-a çek</Button>}
             <Button variant="outline" onClick={() => printSale(done.sale, done.change, done.offline)}>{autoPrint ? "Çeki yenidən çap et" : "Çeki çap et"}</Button>
             <Button variant="gold" autoFocus data-pos-next onClick={() => { setDone(null); setTimeout(() => searchRef.current?.focus(), 0); }}>Yeni satış <Kbd>Boşluq</Kbd></Button>
           </>}>

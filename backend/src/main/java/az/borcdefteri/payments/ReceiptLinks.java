@@ -48,6 +48,27 @@ public class ReceiptLinks {
         }
     }
 
+    /** Token of a sale receipt (signed apart from payments, so one can never stand in for the other). */
+    public String saleToken(UUID saleId) {
+        return token(UUID.nameUUIDFromBytes(("sale:" + saleId).getBytes(StandardCharsets.UTF_8)));
+    }
+
+    public boolean isValidSale(UUID saleId, String token) {
+        return token != null && token.length() == TOKEN_CHARS && MessageDigest.isEqual(
+                saleToken(saleId).getBytes(StandardCharsets.US_ASCII), token.getBytes(StandardCharsets.US_ASCII));
+    }
+
+    /** Public link to a sale receipt (çek) the store can send to its customer. */
+    public String saleUrl(UUID saleId) {
+        if (RequestContextHolder.getRequestAttributes() == null) {
+            return null;
+        }
+        return ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/api/public/sales/{id}/{token}")
+                .buildAndExpand(saleId, saleToken(saleId))
+                .toUriString();
+    }
+
     /** Constant-time comparison. */
     public boolean isValid(UUID paymentId, String token) {
         if (token == null || token.length() != TOKEN_CHARS) {

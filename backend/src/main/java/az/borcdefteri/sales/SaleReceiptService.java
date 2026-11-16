@@ -39,7 +39,18 @@ public class SaleReceiptService {
     }
 
     public ExportFile receipt(UUID saleId) {
-        Sale s = sales.get(saleId);
+        return render(sales.get(saleId));
+    }
+
+    /** For the public link sent to the customer (the link's token was checked by the caller). */
+    public ExportFile sharedReceipt(UUID saleId) {
+        UUID storeId = jdbc.sql("SELECT store_id FROM sales WHERE id = :id").param("id", saleId).query(UUID.class).optional()
+                .orElseThrow(() -> az.borcdefteri.common.ApiException.notFound("Çek tapılmadı"));
+        return render(sales.load(storeId, saleId));
+    }
+
+    private ExportFile render(Sale s) {
+        UUID saleId = s.id();
         record Store(String name, String phone, String address) {}
         Store store = jdbc.sql("SELECT st.name, st.phone, st.address FROM stores st JOIN sales s ON s.store_id = st.id WHERE s.id = :id")
                 .param("id", saleId).query((rs, n) -> new Store(rs.getString("name"), rs.getString("phone"), rs.getString("address"))).single();

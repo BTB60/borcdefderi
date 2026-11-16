@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
 import { API_URL, ApiError, api, download, getToken, openProtected } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { BulkPriceModal } from "@/components/BulkPriceModal";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import type { InventorySummary, Party, Product, ProductCategory, StockMovement } from "@/lib/types";
 
@@ -25,6 +26,7 @@ export default function InventoryPage() {
   const [stockOf, setStockOf] = useState<Product | null>(null);
   const [historyOf, setHistoryOf] = useState<Product | null>(null);
   const [importing, setImporting] = useState(false);
+  const [bulk, setBulk] = useState(false);
   const [labelsFor, setLabelsFor] = useState<Product | "all" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -68,6 +70,7 @@ export default function InventoryPage() {
           <Button variant="outline" onClick={() => exportAs("xlsx")}>Excel</Button>
           <Button variant="outline" onClick={() => exportAs("pdf")}>PDF</Button>
           <Button variant="outline" onClick={() => setImporting(true)}>Excel-dən import</Button>
+          <Button variant="outline" onClick={() => setBulk(true)}>Qiymətləri dəyiş</Button>
           <Button variant="outline" onClick={() => setLabelsFor("all")}>Barkodları çap et</Button>
           <Link href="/anbar/qebul" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Mal qəbulu</Link>
           <Link href="/anbar/sifaris" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Sifariş siyahısı</Link>
@@ -129,6 +132,7 @@ export default function InventoryPage() {
           </Table>
         )}
       </Card>
+      {bulk && <BulkPriceModal categories={categories} suppliers={suppliers} onClose={() => setBulk(false)} onDone={(m) => { setBulk(false); setNotice(m); load(); }} />}
       {editing && <ProductModal product={editing === "new" ? null : editing} categories={categories} suppliers={suppliers}
         onCategory={(c) => setCategories((x) => [...x, c])} onClose={() => setEditing(null)} onSaved={(m) => { setEditing(null); setNotice(m); load(); }} />}
       {stockOf && <StockModal product={stockOf} onClose={() => setStockOf(null)} onSaved={(m) => { setStockOf(null); setNotice(m); load(); }} />}

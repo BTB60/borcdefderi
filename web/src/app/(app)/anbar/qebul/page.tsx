@@ -76,7 +76,7 @@ export default function PurchasesPage() {
             <thead><tr><Th>Məhsul</Th><Th className="text-right">Miqdar</Th><Th className="text-right">Qiymət</Th><Th className="text-right">Cəmi</Th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {viewing.items.map((i) => (
-                <tr key={i.id}><Td>{i.name}</Td><Td className="text-right tabular-nums">{Number(i.quantity)}</Td>
+                <tr key={i.id}><Td>{i.name}{i.returnedQty ? <div className="text-xs text-rose-600">qaytarılıb: {Number(i.returnedQty)}</div> : null}</Td><Td className="text-right tabular-nums">{Number(i.quantity)}</Td>
                   <Td className="text-right tabular-nums">{formatMoney(i.unitCost)}</Td><Td className="text-right font-semibold tabular-nums">{formatMoney(i.lineTotal)}</Td></tr>
               ))}
             </tbody>
@@ -85,11 +85,74 @@ export default function PurchasesPage() {
             <Badge tone="navy">Cəmi {formatMoney(viewing.total)}</Badge>
             <Badge tone="emerald">Ödənildi {formatMoney(viewing.paid)}</Badge>
             {viewing.unpaid > 0 && <Badge tone="rose">Borc {formatMoney(viewing.unpaid)}</Badge>}
+            {!!viewing.returnedAmount && <Badge tone="amber">Qaytarılıb {formatMoney(viewing.returnedAmount)}</Badge>}
           </div>
           {viewing.note && <p className="mt-3 text-sm text-slate-500">{viewing.note}</p>}
+          <ReturnToSupplier purchase={viewing} onDone={(p, msg) => { setViewing(p); setNotice(msg); load(); }} />
         </Modal>
       )}
     </>
+  );
+}
+
+/** Send some or all goods of a receipt back to the supplier (or cancel the whole receipt). */
+function ReturnToSupplier({ purchase, onDone }: { purchase: Purchase; onDone: (p: Purchase, msg: string) => void }) {
+  const left = purchase.items.map((i) => ({ ...i, left: Number(i.quantity) - Number(i.returnedQty ?? 0) })).filter((i) => i.left > 0);
+  const [open, setOpen] = useState(false);
+  const [qty, setQty] = useState<Record<string, string>>({});
+  const [refund, setRefund] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (left.length === 0) return <p className="mt-4 text-sm font-medium text-rose-700">Bütün mallar təchizatçıya qaytarılıb.</p>;
+
+  async function send(all: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      const items = all ? [] : left.map((i) => ({ itemId: i.id, quantity: Number((qty[i.id] ?? "").replace(",", ".")) })).filter((i) => i.quantity > 0);
+      if (!all && items.length === 0) { setError("Qaytarılan miqdarı yazın"); setBusy(false); return; }
+      const p = await api<Purchase>(`/api/purchases/${purchase.id}/returns`, { method: "POST", json: { items, refundToCash: refund } });
+      setOpen(false);
+      onDone(p, all ? `${p.number} ləğv edildi: mallar təchizatçıya qaytarıldı` : `${p.number}: mallar təchizatçıya qaytarıldı`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Alınmadı");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="mt-4 flex justify-end">
+        <Button variant="outline" className="border-rose-300 text-rose-700" onClick={() => setOpen(true)}>Təchizatçıya qaytar / ləğv et</Button>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-4 rounded-2xl bg-rose-50/60 p-4 ring-1 ring-rose-200">
+      <p className="mb-2 text-sm font-semibold text-navy-800">Təchizatçıya qaytarılan mallar</p>
+      {error && <div className="mb-2"><Alert>{error}</Alert></div>}
+      <div className="space-y-2">
+        {left.map((i) => (
+          <label key={i.id} className="flex items-center justify-between gap-3 text-sm">
+            <span>{i.name} <span className="text-xs text-slate-500">(qalıb {i.left})</span></span>
+            <Input className="h-8 w-24 text-right" inputMode="decimal" placeholder="0" value={qty[i.id] ?? ""} onChange={(e) => setQty({ ...qty, [i.id]: e.target.value })} />
+          </label>
+        ))}
+      </div>
+      {purchase.companyId && (
+        <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={refund} onChange={(e) => setRefund(e.target.checked)} />
+          Borcdan artıq qalan (əvvəl ödənmiş) pulu təchizatçı geri verdi — kassaya yaz
+        </label>
+      )}
+      <p className="mt-2 text-xs text-slate-500">Mal anbardan çıxılır, dəyəri təchizatçıya borcunuzdan çıxılır.</p>
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <Button variant="ghost" onClick={() => setOpen(false)}>Bağla</Button>
+        <Button variant="outline" disabled={busy} onClick={() => send(false)}>Seçilənləri qaytar</Button>
+        <Button variant="danger" disabled={busy} onClick={() => send(true)}>Hamısını qaytar (ləğv et)</Button>
+      </div>
+    </div>
   );
 }
 

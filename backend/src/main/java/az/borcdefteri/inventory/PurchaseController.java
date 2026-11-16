@@ -35,6 +35,11 @@ public class PurchaseController {
         return purchases.list(from, to, companyId, limit);
     }
 
+    @PostMapping("/{id}/returns")
+    public PurchaseService.Purchase returnItems(@PathVariable UUID id, @Valid @RequestBody(required = false) PurchaseService.ReturnRequest req) {
+        return purchases.returnItems(id, req);
+    }
+
     @GetMapping("/{id}")
     public PurchaseService.Purchase get(@PathVariable UUID id) {
         return purchases.get(id);

@@ -57,11 +57,18 @@ public class PurchaseService {
             @Size(max = 500) String note,
             UUID clientRequestId) {}
 
-    public record Item(UUID id, UUID productId, String name, BigDecimal quantity, BigDecimal unitCost, BigDecimal lineTotal) {}
+    public record Item(UUID id, UUID productId, String name, BigDecimal quantity, BigDecimal unitCost, BigDecimal lineTotal,
+                       BigDecimal returnedQty) {}
 
     public record Purchase(UUID id, String number, UUID companyId, String companyName, String supplierInvoice,
                            BigDecimal total, BigDecimal paid, BigDecimal unpaid, UUID debtId, LocalDate receivedOn, String note,
-                           String createdByName, OffsetDateTime createdAt, List<Item> items) {}
+                           String createdByName, OffsetDateTime createdAt, List<Item> items, BigDecimal returnedAmount) {}
+
+    public record ReturnItem(@NotNull UUID itemId,
+                             @NotNull @DecimalMin("0.001") @Digits(integer = 11, fraction = 3) BigDecimal quantity) {}
+
+    /** Goods sent back to the supplier. Empty items = everything not returned yet (cancel the receipt). */
+    public record ReturnRequest(List<@Valid ReturnItem> items, Boolean refundToCash, @Size(max = 500) String reason) {}
 
     private final JdbcClient jdbc;
     private final TenantService tenant;
@@ -69,9 +76,11 @@ public class PurchaseService {
     private final CashService cash;
     private final PartyAccountService accounts;
     private final AuditService audit;
+    private final az.borcdefteri.debts.DebtService debts;
 
     public PurchaseService(JdbcClient jdbc, TenantService tenant, InventoryService inventory, CashService cash,
-                           PartyAccountService accounts, AuditService audit) {
+                           PartyAccountService accounts, AuditService audit, az.borcdefteri.debts.DebtService debts) {
+        this.debts = debts;
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.inventory = inventory;
@@ -159,6 +168,64 @@ public class PurchaseService {
         return load(m.storeId(), id);
     }
 
+    /**
+     * Returns goods to the supplier: stock goes down (ISSUE), the supplier debt of this receipt is lowered by their
+     * value, and whatever is left over (already paid) comes back to the till when {@code refundToCash} (always
+     * without a supplier).
+     */
+    @Transactional
+    public Purchase returnItems(UUID id, ReturnRequest req) {
+        CurrentMember m = inventory.requireInventory();
+        jdbc.sql("SELECT id FROM purchases WHERE id = :id AND store_id = :s FOR UPDATE").param("id", id).param("s", m.storeId())
+                .query(UUID.class).optional().orElseThrow(() -> ApiException.notFound("Alış tapılmadı"));
+        Purchase p = load(m.storeId(), id);
+        Map<UUID, BigDecimal> wanted = new LinkedHashMap<>();
+        if (req == null || req.items() == null || req.items().isEmpty()) {
+            for (Item it : p.items()) {
+                BigDecimal left = it.quantity().subtract(it.returnedQty());
+                if (left.signum() > 0) wanted.put(it.id(), left);
+            }
+        } else {
+            for (ReturnItem r : req.items()) wanted.merge(r.itemId(), r.quantity().setScale(3, RoundingMode.HALF_UP), BigDecimal::add);
+        }
+        if (wanted.isEmpty()) throw ApiException.conflict("NOTHING_TO_RETURN", "Bu alışda qaytarılacaq mal qalmayıb");
+        BigDecimal amount = Money.zero();
+        for (var e : wanted.entrySet()) {
+            Item it = p.items().stream().filter(x -> x.id().equals(e.getKey())).findFirst()
+                    .orElseThrow(() -> ApiException.badRequest("INVALID_ITEM", "Bu alışda belə məhsul yoxdur"));
+            if (e.getValue().compareTo(it.quantity().subtract(it.returnedQty())) > 0) {
+                throw ApiException.badRequest("RETURN_EXCEEDS", "“" + it.name() + "”: alınandan çox qaytarmaq olmaz");
+            }
+            if (it.productId() != null) {
+                inventory.lockProduct(m.storeId(), it.productId());
+                inventory.move(m, it.productId(), "ISSUE", e.getValue().negate(), it.unitCost(), null, p.number() + " təchizatçıya qaytarıldı");
+            }
+            jdbc.sql("UPDATE purchase_items SET returned_qty = returned_qty + :q WHERE id = :id").param("q", e.getValue()).param("id", it.id()).update();
+            amount = amount.add(Money.of(e.getValue().multiply(it.unitCost())));
+        }
+        amount = Money.of(amount);
+        BigDecimal debtLowered = Money.zero();
+        if (p.companyId() != null && p.debtId() != null) {
+            try {
+                var d = debts.lockAndLoad(m, p.debtId());
+                debtLowered = Money.of(amount.min(d.remainingAmount()).max(BigDecimal.ZERO));
+                if (debtLowered.signum() > 0) debts.decreaseLocked(m, d, debtLowered, p.number() + " təchizatçıya qaytarma");
+            } catch (ApiException e) {
+                if (!"DEBT_CANCELLED".equals(e.getCode())) throw e;
+            }
+        }
+        BigDecimal refund = Money.of(amount.subtract(debtLowered));
+        boolean toCash = p.companyId() == null || (req != null && Boolean.TRUE.equals(req.refundToCash()));
+        if (refund.signum() > 0 && toCash) {
+            UUID acc = cash.accountFor(m.storeId(), "CASH", null, m.userId());
+            cash.post(m.storeId(), acc, "IN", refund, "PURCHASE", tenant.today(), null, null, p.number() + " qaytarma: pul geri alındı", m.userId());
+        }
+        jdbc.sql("UPDATE purchases SET returned_amount = returned_amount + :a WHERE id = :id").param("a", amount).param("id", id).update();
+        audit.log(m.storeId(), m.userId(), "PURCHASE_RETURNED", "PURCHASE", id.toString(),
+                p.number() + ": " + amount + " AZN (borcdan " + debtLowered + ", kassaya " + (toCash ? refund : Money.zero()) + ")");
+        return load(m.storeId(), id);
+    }
+
     public List<Purchase> list(LocalDate from, LocalDate to, UUID companyId, int limit) {
         CurrentMember m = inventory.requireInventory();
         StringBuilder where = new StringBuilder(" WHERE p.store_id = :s");
@@ -178,11 +245,11 @@ public class PurchaseService {
 
     private Purchase load(UUID storeId, UUID id) {
         List<Item> items = jdbc.sql("""
-                SELECT id, product_id, name, quantity, unit_cost, line_total FROM purchase_items
+                SELECT id, product_id, name, quantity, unit_cost, line_total, returned_qty FROM purchase_items
                 WHERE purchase_id = :id ORDER BY name""").param("id", id)
                 .query((rs, n) -> new Item(rs.getObject("id", UUID.class), rs.getObject("product_id", UUID.class),
                         rs.getString("name"), rs.getBigDecimal("quantity"), Money.of(rs.getBigDecimal("unit_cost")),
-                        Money.of(rs.getBigDecimal("line_total")))).list();
+                        Money.of(rs.getBigDecimal("line_total")), rs.getBigDecimal("returned_qty"))).list();
         return jdbc.sql(SELECT + " WHERE p.store_id = :s AND p.id = :id").param("s", storeId).param("id", id)
                 .query((rs, n) -> map(rs, items)).optional()
                 .orElseThrow(() -> ApiException.notFound("Alış tapılmadı"));
@@ -190,7 +257,7 @@ public class PurchaseService {
 
     private static final String SELECT = """
             SELECT p.id, p.number, p.company_id, c.name AS company_name, p.supplier_invoice, p.total, p.paid, p.debt_id,
-                   p.received_on, p.note, u.full_name AS created_by_name, p.created_at
+                   p.received_on, p.note, u.full_name AS created_by_name, p.created_at, p.returned_amount
             FROM purchases p LEFT JOIN companies c ON c.id = p.company_id JOIN users u ON u.id = p.created_by""";
 
     private static Purchase map(java.sql.ResultSet rs, List<Item> items) throws java.sql.SQLException {
@@ -200,7 +267,8 @@ public class PurchaseService {
                 rs.getString("company_name"), rs.getString("supplier_invoice"), total, paid,
                 rs.getObject("company_id") != null ? Money.of(total.subtract(paid)) : Money.zero(),
                 rs.getObject("debt_id", UUID.class), rs.getObject("received_on", LocalDate.class), rs.getString("note"),
-                rs.getString("created_by_name"), rs.getObject("created_at", OffsetDateTime.class), items);
+                rs.getString("created_by_name"), rs.getObject("created_at", OffsetDateTime.class), items,
+                Money.of(rs.getBigDecimal("returned_amount")));
     }
 
     private static BigDecimal qty(ItemRequest it) {

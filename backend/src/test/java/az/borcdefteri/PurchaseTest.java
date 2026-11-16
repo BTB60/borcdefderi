@@ -92,4 +92,32 @@ class PurchaseTest extends IntegrationTestBase {
         assertEquals(5.0, cashBalance(owner));
         get(owner, "/api/cash/movements?kind=PURCHASE").andExpect(jsonPath("$[0].amount", is(15.0)));
     }
+
+    @Test
+    void goodsGoBackToTheSupplierAndLowerTheDebt() throws Exception {
+        String owner = register("Qaytarma Alış");
+        activateSubscription(owner, "MONTHLY");
+        String a = product(owner, "Düyü", "2.00", null);
+        UUID supplier = createCompany(owner, "Düyü MMC");
+        Map<String, Object> req = new HashMap<>();
+        req.put("companyId", supplier.toString());
+        req.put("items", List.of(Map.of("productId", a, "quantity", "10", "unitCost", "2.00")));
+        JsonNode p = body(post(owner, "/api/purchases", req).andExpect(status().isCreated()));
+        String item = p.get("items").get(0).get("id").asText();
+
+        // 4 back: debt 20 -> 12, stock 10 -> 6
+        post(owner, "/api/purchases/" + p.get("id").asText() + "/returns", Map.of("items", List.of(Map.of("itemId", item, "quantity", "4"))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.returnedAmount", is(8.0)))
+                .andExpect(jsonPath("$.items[0].returnedQty", is(4.0)));
+        assertEquals(6.0, productOf(owner, a).get("stockQty").asDouble());
+        get(owner, "/api/debts/" + p.get("debtId").asText()).andExpect(jsonPath("$.remainingAmount", is(12.0)));
+        post(owner, "/api/purchases/" + p.get("id").asText() + "/returns", Map.of("items", List.of(Map.of("itemId", item, "quantity", "7"))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error", is("RETURN_EXCEEDS")));
+
+        // cancel = the rest goes back
+        post(owner, "/api/purchases/" + p.get("id").asText() + "/returns", Map.of()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.returnedAmount", is(20.0)));
+        assertEquals(0.0, productOf(owner, a).get("stockQty").asDouble());
+        get(owner, "/api/debts/" + p.get("debtId").asText()).andExpect(jsonPath("$.remainingAmount", is(0.0)));
+    }
 }

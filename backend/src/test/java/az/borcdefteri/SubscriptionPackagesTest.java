@@ -123,6 +123,8 @@ class SubscriptionPackagesTest extends IntegrationTestBase {
         }
         post(requested, "/api/subscriptions/request", Map.of("planCode", "SEMI_ANNUAL")).andExpect(status().isCreated());
         LocalDate today = LocalDate.now(clock);
+        // other tests may change the YEARLY package (order differs between Windows and Linux): fix the end dates here
+        setEndDate(storeIdOf(fresh), today.plusDays(365));
         setEndDate(storeIdOf(expiring), today.plusDays(3));
         setEndDate(storeIdOf(expired), today.minusDays(1));
 

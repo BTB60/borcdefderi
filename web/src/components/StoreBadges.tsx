@@ -53,7 +53,8 @@ function AppleIcon() {
 export function StoreBadges({ className = "" }: { className?: string }) {
   const badge = "flex items-center gap-3 rounded-xl border border-white/20 bg-black/80 px-4 py-2.5 text-left text-white transition";
   const apk = useLatestApk();
-  const built = apk?.date ? new Date(apk.date).toLocaleDateString("az-AZ", { day: "2-digit", month: "2-digit", year: "numeric" }) : null;
+  const d = apk?.date ? new Date(apk.date) : null;
+  const built = d ? `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}` : null;
   return (
     <div className={`flex flex-wrap items-end gap-3 ${className}`}>
       <div>

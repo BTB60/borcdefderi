@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Avatar } from "@/components/Avatar";
 import { Alert, Button, Card, Field, Input, PageHeader, Spinner, useConfirm } from "@/components/ui";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, download } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { AuthResponse, Profile } from "@/lib/types";
 
@@ -44,6 +44,7 @@ export default function SettingsPage() {
           <PersonalCard profile={profile} onChange={updated} />
           {profile.role === "STORE_OWNER" && <StoreCard profile={profile} onChange={updated} />}
           {profile.role === "STORE_OWNER" && <BonusCard />}
+          {profile.role === "STORE_OWNER" && <BackupCard />}
           <PasswordCard isAdmin={profile.platformRole === "SUPER_ADMIN"} />
           <SecurityCard profile={profile} onChange={updated} />
         </div>
@@ -225,6 +226,32 @@ function StoreCard({ profile, onChange }: { profile: Profile; onChange: (p: Prof
         </Field>
         <Button type="submit" variant="primary" disabled={busy}>{busy ? "Saxlanılır…" : "Yadda saxla"}</Button>
       </form>
+    </Card>
+  );
+}
+
+/** Ehtiyat nüsxəsi: the whole store in one Excel file. */
+function BackupCard() {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<Msg>(null);
+  async function get() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await download("/api/backup", "hesabpro-ehtiyat.xlsx");
+      setMsg({ kind: "success", text: "Ehtiyat nüsxəsi yükləndi" });
+    } catch (err) {
+      setMsg({ kind: "error", text: errorText(err, "Yüklənmədi") });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card>
+      <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Ehtiyat nüsxəsi</h2>
+      <p className="mb-5 text-sm text-slate-500">Mağazanın bütün məlumatları — müştərilər, şirkətlər, borclar, ödənişlər, məhsullar, satışlar, kassa, xərclər və mal qəbulu — bir Excel faylında. Ayda bir dəfə yükləyib saxlamağı tövsiyə edirik.</p>
+      {msg && <div className="mb-4"><Alert kind={msg.kind}>{msg.text}</Alert></div>}
+      <Button variant="primary" disabled={busy} onClick={get}>{busy ? "Hazırlanır…" : "Bütün məlumatları Excel-ə yüklə"}</Button>
     </Card>
   );
 }

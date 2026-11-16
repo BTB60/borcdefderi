@@ -19,9 +19,11 @@ public class ReportController {
     private final ReportService reports;
     private final PaymentReportService paymentReports;
     private final az.borcdefteri.payments.ReceiptLinks links;
+    private final BackupService backups;
 
     public ReportController(ReportService reports, PaymentReportService paymentReports,
-                            az.borcdefteri.payments.ReceiptLinks links) {
+                            az.borcdefteri.payments.ReceiptLinks links, BackupService backups) {
+        this.backups = backups;
         this.reports = reports;
         this.paymentReports = paymentReports;
         this.links = links;
@@ -64,6 +66,12 @@ public class ReportController {
         }
         ExportFile file = paymentReports.sharedReceiptPdf(id);
         return FileResponses.inline(file.content(), file.contentType(), file.fileName());
+    }
+
+    /** Ehtiyat nüsxəsi: the whole store in one Excel file (owner only). */
+    @GetMapping("/api/backup")
+    public ResponseEntity<byte[]> backup() {
+        return send(backups.export());
     }
 
     private static ResponseEntity<byte[]> send(ExportFile file) {

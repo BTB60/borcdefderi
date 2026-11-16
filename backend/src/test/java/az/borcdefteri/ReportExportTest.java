@@ -41,4 +41,16 @@ class ReportExportTest extends IntegrationTestBase {
                         .header("Authorization", "Bearer " + owner))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    void theOwnerDownloadsTheWholeStoreAsExcel() throws Exception {
+        String owner = register("Ehtiyat Mağaza");
+        activateSubscription(owner, "MONTHLY");
+        createCustomer(owner, "Ehtiyat Müştəri", "+994501300001");
+        byte[] xlsx = get(owner, "/api/backup").andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        try (var wb = org.apache.poi.ss.usermodel.WorkbookFactory.create(new java.io.ByteArrayInputStream(xlsx))) {
+            org.junit.jupiter.api.Assertions.assertTrue(wb.getNumberOfSheets() >= 9);
+            org.junit.jupiter.api.Assertions.assertEquals("Ehtiyat Müştəri", wb.getSheet("Müştərilər").getRow(1).getCell(1).getStringCellValue());
+        }
+    }
 }

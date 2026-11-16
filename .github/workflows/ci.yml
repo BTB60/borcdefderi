@@ -28,7 +28,8 @@ jobs:
           for f in target/surefire-reports/*.txt; do
             [ -f "$f" ] || continue
             if grep -qE "FAILURE|ERROR" "$f"; then
-              msg=$(grep -m 3 -E "(Exception|Error|expected)" "$f" | tr '\n' ' ' | cut -c1-400)
+              # the failing test, its message (often on the next lines) and the test's own line number
+              msg=$(grep -A6 -E "<<< (FAILURE|ERROR)" "$f" | grep -vE "^\s+at (org|java|jdk|sun)\." | head -12 | tr '\n' ' ' | tr -s ' ' | cut -c1-900)
               echo "::error title=$(basename "$f" .txt)::$msg"
             fi
           done

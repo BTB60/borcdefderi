@@ -142,7 +142,7 @@ export default function PartyProfilePage() {
           </div>
         ) : (
           <div className="mt-6 grid gap-3 md:grid-cols-2">
-            {([["COMPANY_RECEIVABLE", "Şirkətin bizə borcu", data.receivable, "bg-emerald-500/20", "alacaq"], ["COMPANY_PAYABLE", "Təchizatçılar üzrə borc uçotu", data.payable, "bg-rose-500/20", "borcumuz"]] as const)
+            {([["COMPANY_RECEIVABLE", "Tədarükçünün bizə borcu", data.receivable, "bg-emerald-500/20", "alacaq"], ["COMPANY_PAYABLE", "Bizim tədarükçüyə borcumuz", data.payable, "bg-rose-500/20", "borcumuz"]] as const)
               .filter(([type]) => can(type === "COMPANY_RECEIVABLE" ? "COMPANY_RECEIVABLES" : "COMPANY_PAYABLES"))
               .map(([type, title, t, tone, file]) => (
                 <div key={type} className={`rounded-2xl ${tone} p-4`}>

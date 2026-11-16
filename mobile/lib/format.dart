@@ -12,8 +12,8 @@ String formatDateTime(DateTime date) => _dateTime.format(date.toLocal());
 
 const debtSectionTitles = {
   'CUSTOMER_DEBT': 'Müştəri borcları',
-  'COMPANY_RECEIVABLE': 'Şirkətin bizə borcu',
-  'COMPANY_PAYABLE': 'Təchizatçılar üzrə borc uçotu',
+  'COMPANY_RECEIVABLE': 'Tədarükçünün bizə borcu',
+  'COMPANY_PAYABLE': 'Bizim tədarükçüyə borcumuz',
 };
 
 const debtStatusLabels = {
@@ -31,8 +31,8 @@ const methodLabels = {
 
 const permissionLabels = {
   'CUSTOMER_DEBTS': 'Müştəri borcları',
-  'COMPANY_RECEIVABLES': 'Şirkətin bizə borcu',
-  'COMPANY_PAYABLES': 'Təchizatçılar üzrə borc uçotu',
+  'COMPANY_RECEIVABLES': 'Tədarükçünün bizə borcu',
+  'COMPANY_PAYABLES': 'Bizim tədarükçüyə borcumuz',
   'REPORTS': 'Hesabatlar',
   'CASH': 'Kassa və bank',
   'EXPENSES': 'Xərclər və büdcə',
@@ -43,8 +43,8 @@ const permissionLabels = {
 /// Sections a package may include (every menu section except the subscription page), in menu order.
 const planModuleLabels = {
   'CUSTOMER_DEBTS': 'Müştəri borcları',
-  'COMPANY_RECEIVABLES': 'Şirkətin bizə borcu',
-  'COMPANY_PAYABLES': 'Təchizatçılar üzrə borc uçotu',
+  'COMPANY_RECEIVABLES': 'Tədarükçünün bizə borcu',
+  'COMPANY_PAYABLES': 'Bizim tədarükçüyə borcumuz',
   'REPORTS': 'Panel, gəlir və mənfəət, hesabatlar',
   'SALES': 'Satış və kassa',
   'INVENTORY': 'Anbar, sayım, barkod',

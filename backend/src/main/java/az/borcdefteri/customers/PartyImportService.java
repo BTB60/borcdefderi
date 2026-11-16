@@ -121,10 +121,10 @@ public class PartyImportService {
         if (!customers) {
             for (Parsed r : rows) {
                 if (r.owesUs() != null && r.owesUs().signum() > 0 && !m.has(DebtType.COMPANY_RECEIVABLE.permission())) {
-                    errors.add(new RowError(r.row(), "“Şirkətin bizə borcu” bölməsinə icazəniz yoxdur"));
+                    errors.add(new RowError(r.row(), "“Tədarükçünün bizə borcu” bölməsinə icazəniz yoxdur"));
                 }
                 if (r.weOwe() != null && r.weOwe().signum() > 0 && !m.has(DebtType.COMPANY_PAYABLE.permission())) {
-                    errors.add(new RowError(r.row(), "“Təchizatçılar üzrə borc uçotu” bölməsinə icazəniz yoxdur"));
+                    errors.add(new RowError(r.row(), "“Bizim tədarükçüyə borcumuz” bölməsinə icazəniz yoxdur"));
                 }
             }
         }

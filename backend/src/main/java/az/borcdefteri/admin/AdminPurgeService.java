@@ -348,8 +348,8 @@ public class AdminPurgeService {
     private static String typeLabel(String debtType) {
         return switch (debtType) {
             case "CUSTOMER_DEBT" -> "müştəri";
-            case "COMPANY_RECEIVABLE" -> "şirkətin bizə borcu";
-            default -> "təchizatçılar üzrə borc uçotu";
+            case "COMPANY_RECEIVABLE" -> "tədarükçünün bizə borcu";
+            default -> "bizim tədarükçüyə borcumuz";
         };
     }
 }

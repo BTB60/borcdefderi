@@ -149,8 +149,8 @@ public class StatementService {
             doc.add(top);
 
             Paragraph t = new Paragraph(customer || types.size() != 1 ? "Borc çıxarışı"
-                    : DebtType.valueOf(types.get(0)) == DebtType.COMPANY_RECEIVABLE ? "Şirkətin bizə borcu — çıxarış"
-                    : "Təchizatçılar üzrə borc uçotu — çıxarış", title);
+                    : DebtType.valueOf(types.get(0)) == DebtType.COMPANY_RECEIVABLE ? "Tədarükçünün bizə borcu — çıxarış"
+                    : "Bizim tədarükçüyə borcumuz — çıxarış", title);
             t.setSpacingBefore(10);
             doc.add(t);
             doc.add(new Paragraph((customer ? "Müştəri: " : "Şirkət: ") + nz(name)

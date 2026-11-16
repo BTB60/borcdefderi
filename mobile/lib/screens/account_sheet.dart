@@ -16,8 +16,8 @@ const _sectionPermission = {
 
 const directionLabels = {
   'CUSTOMER_DEBT': 'Müştəri borcu',
-  'COMPANY_RECEIVABLE': 'Şirkətin bizə borcu',
-  'COMPANY_PAYABLE': 'Təchizatçılar üzrə borc uçotu',
+  'COMPANY_RECEIVABLE': 'Tədarükçünün bizə borcu',
+  'COMPANY_PAYABLE': 'Bizim tədarükçüyə borcumuz',
 };
 
 enum AccountMode { charge, pay }

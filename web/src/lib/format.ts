@@ -20,8 +20,8 @@ export function formatDateTime(value: string | null | undefined): string {
 
 export const DEBT_TYPE_LABEL: Record<DebtType, string> = {
   CUSTOMER_DEBT: "Müştəri borcları",
-  COMPANY_RECEIVABLE: "Şirkətin bizə borcu",
-  COMPANY_PAYABLE: "Təchizatçılar üzrə borc uçotu",
+  COMPANY_RECEIVABLE: "Tədarükçünün bizə borcu",
+  COMPANY_PAYABLE: "Bizim tədarükçüyə borcumuz",
 };
 
 export const DEBT_SECTION_SLUG: Record<string, DebtType> = {
@@ -57,8 +57,8 @@ export function todayBaku(): string {
 
 export const PERMISSION_LABEL: Record<Permission, string> = {
   CUSTOMER_DEBTS: "Müştəri borcları",
-  COMPANY_RECEIVABLES: "Şirkətin bizə borcu",
-  COMPANY_PAYABLES: "Təchizatçılar üzrə borc uçotu",
+  COMPANY_RECEIVABLES: "Tədarükçünün bizə borcu",
+  COMPANY_PAYABLES: "Bizim tədarükçüyə borcumuz",
   REPORTS: "Hesabatlar və panel",
   CASH: "Kassa və bank",
   EXPENSES: "Xərclər və büdcə",
@@ -108,8 +108,8 @@ export const JOB_TITLE_PERMISSIONS: Record<import("./types").JobTitle, import(".
 /** Sections a package can include, in menu order; names as on the package card. */
 export const PLAN_MODULE_LABEL: Record<import("./types").PlanModule, string> = {
   CUSTOMER_DEBTS: "Müştəri borcları",
-  COMPANY_RECEIVABLES: "Şirkətin bizə borcu",
-  COMPANY_PAYABLES: "Təchizatçılar üzrə borc uçotu",
+  COMPANY_RECEIVABLES: "Tədarükçünün bizə borcu",
+  COMPANY_PAYABLES: "Bizim tədarükçüyə borcumuz",
   REPORTS: "Panel, gəlir və mənfəət, hesabatlar",
   SALES: "Satış və kassa terminalı",
   INVENTORY: "Anbar, sayım, barkod",

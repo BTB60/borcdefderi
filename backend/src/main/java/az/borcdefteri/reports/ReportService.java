@@ -195,8 +195,8 @@ public class ReportService {
     static String title(DebtType type) {
         return switch (type) {
             case CUSTOMER_DEBT -> "Müştəri borcları";
-            case COMPANY_RECEIVABLE -> "Şirkətin bizə borcu";
-            case COMPANY_PAYABLE -> "Təchizatçılar üzrə borc uçotu";
+            case COMPANY_RECEIVABLE -> "Tədarükçünün bizə borcu";
+            case COMPANY_PAYABLE -> "Bizim tədarükçüyə borcumuz";
         };
     }
 

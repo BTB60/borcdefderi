@@ -34,7 +34,7 @@ import java.util.UUID;
 /**
  * Mal qəbulu: goods bought from a supplier in one document. Each line raises stock (RECEIPT) and moves the product's
  * purchase price to the weighted average of old and new stock. With a supplier the whole amount goes onto
- * "Təchizatçılar üzrə borc uçotu" and the part paid now is paid off it at once; without one the paid part leaves the till.
+ * "Bizim tədarükçüyə borcumuz" and the part paid now is paid off it at once; without one the paid part leaves the till.
  */
 @Service
 public class PurchaseService {

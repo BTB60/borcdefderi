@@ -17,8 +17,8 @@ const PERM: Record<DebtType, "CUSTOMER_DEBTS" | "COMPANY_RECEIVABLES" | "COMPANY
 };
 export const DIRECTION_LABEL: Record<DebtType, string> = {
   CUSTOMER_DEBT: "Müştəri borcu",
-  COMPANY_RECEIVABLE: "Şirkətin bizə borcu",
-  COMPANY_PAYABLE: "Təchizatçılar üzrə borc uçotu",
+  COMPANY_RECEIVABLE: "Tədarükçünün bizə borcu",
+  COMPANY_PAYABLE: "Bizim tədarükçüyə borcumuz",
 };
 const MONEY = /^\d+(\.\d{1,2})?$/;
 

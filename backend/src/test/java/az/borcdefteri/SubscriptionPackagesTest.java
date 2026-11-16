@@ -20,7 +20,9 @@ class SubscriptionPackagesTest extends IntegrationTestBase {
     @Test
     void onlyMonthlySemiAnnualAndYearlyPackagesAreSold() throws Exception {
         get(null, "/api/public/plans").andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].code", containsInAnyOrder("MONTHLY", "SEMI_ANNUAL", "YEARLY")))
+                // packages other tests create may be on sale too (test order differs on Linux); the standard ones must be
+                .andExpect(jsonPath("$[*].code", hasItems("MONTHLY", "SEMI_ANNUAL", "YEARLY")))
+                .andExpect(jsonPath("$[*].code", not(hasItem("QUARTERLY"))))
                 .andExpect(jsonPath("$[?(@.code=='SEMI_ANNUAL')].durationMonths", contains(6)));
     }
 

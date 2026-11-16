@@ -297,6 +297,7 @@ class _AdminStoresScreenState extends State<AdminStoresScreen> {
       'none' => s['subscriptionState'] == 'NONE',
       'pending' => s['pendingPlanCode'] != null,
       'suspended' => s['status'] != 'ACTIVE',
+      'idle' => s['idle'] == true,
       _ => true,
     };
   }
@@ -323,6 +324,7 @@ class _AdminStoresScreenState extends State<AdminStoresScreen> {
                 ('pending', 'Sorğu var'),
                 ('none', 'Abunəsiz'),
                 ('suspended', 'Dayandırılıb'),
+                ('idle', 'Ödəyir, istifadə etmir'),
               ])
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
@@ -371,8 +373,19 @@ class _AdminStoresScreenState extends State<AdminStoresScreen> {
                                   child: Text('${s['name']}'.isEmpty ? '?' : '${s['name']}'.characters.first.toUpperCase()),
                                 ),
                                 title: Text('${s['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                                subtitle: Text([s['ownerName'], s['ownerPhone'] ?? s['phone'] ?? s['ownerEmail']].whereType<String>().join(' · '),
-                                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                                subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Text([s['ownerName'], s['ownerPhone'] ?? s['phone'] ?? s['ownerEmail']].whereType<String>().join(' · '),
+                                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                                  Text(
+                                    'Son giriş: ${s['lastLoginAt'] == null ? '—' : formatDateTime(DateTime.parse('${s['lastLoginAt']}').toLocal())}'
+                                    ' · bu ay ${s['salesThisMonth'] ?? 0} satış',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                  ),
+                                  if (s['idle'] == true)
+                                    Text('Ödəyir, amma istifadə etmir', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.red.shade700)),
+                                  if (s['onTrial'] == true)
+                                    Text('Pulsuz sınaqda', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.blue.shade700)),
+                                ]),
                                 trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

@@ -23,6 +23,9 @@ import java.util.UUID;
 @Service
 public class AdminService {
 
+    /** Days without any activity after which a paying store counts as "not using". */
+    static final int IDLE_DAYS = 14;
+
     private final JdbcClient jdbc;
     private final TenantService tenant;
     private final AuditService audit;
@@ -57,7 +60,19 @@ public class AdminService {
                          WHERE sb.store_id = s.id AND sb.status IN ('ACTIVE', 'EXPIRED')) AS subscription_end,
                        pend.code AS pending_plan_code, pend.name AS pending_plan_name, pend.requested_at AS pending_at,
                        (SELECT MAX(a.created_at) FROM audit_logs a
-                         WHERE a.store_id = s.id AND a.action = 'SUBSCRIPTION_REMINDED') AS last_reminded_at
+                         WHERE a.store_id = s.id AND a.action = 'SUBSCRIPTION_REMINDED') AS last_reminded_at,
+                       (SELECT MAX(a.created_at) FROM audit_logs a
+                         WHERE a.store_id = s.id AND a.action = 'LOGIN') AS last_login_at,
+                       (SELECT MAX(a.created_at) FROM audit_logs a JOIN store_members am
+                           ON am.store_id = a.store_id AND am.user_id = a.actor_id
+                         WHERE a.store_id = s.id) AS last_activity_at,
+                       (SELECT COUNT(*) FROM sales sa WHERE sa.store_id = s.id AND sa.status = 'COMPLETED'
+                           AND sa.sold_on >= :monthStart) AS sales_month,
+                       (SELECT COALESCE(SUM(sa.total), 0) FROM sales sa WHERE sa.store_id = s.id
+                           AND sa.status = 'COMPLETED' AND sa.sold_on >= :monthStart) AS sales_month_total,
+                       (SELECT sb.trial FROM subscriptions sb WHERE sb.store_id = s.id AND sb.status = 'ACTIVE'
+                           AND sb.start_date <= :today AND sb.end_date >= :today
+                         ORDER BY sb.start_date LIMIT 1) AS on_trial
                 FROM stores s
                 LEFT JOIN store_members m ON m.store_id = s.id AND m.role = 'STORE_OWNER'
                 LEFT JOIN users u ON u.id = m.user_id
@@ -69,7 +84,7 @@ public class AdminService {
                 WHERE LOWER(s.name) LIKE LOWER(:q) OR LOWER(COALESCE(u.email, '')) LIKE LOWER(:q)
                 ORDER BY s.created_at DESC
                 """)
-                .param("q", like).param("today", today)
+                .param("q", like).param("today", today).param("monthStart", today.withDayOfMonth(1))
                 .query((rs, n) -> {
                     LocalDate end = rs.getObject("subscription_end", LocalDate.class);
                     String activePlan = rs.getString("active_plan");
@@ -97,6 +112,19 @@ public class AdminService {
                     row.put("pendingAt", rs.getObject("pending_at", OffsetDateTime.class));
                     row.put("lastRemindedAt", rs.getObject("last_reminded_at", OffsetDateTime.class));
                     row.put("createdAt", rs.getObject("created_at", OffsetDateTime.class));
+                    OffsetDateTime lastActivity = rs.getObject("last_activity_at", OffsetDateTime.class);
+                    boolean trial = rs.getBoolean("on_trial");
+                    row.put("lastLoginAt", rs.getObject("last_login_at", OffsetDateTime.class));
+                    row.put("lastActivityAt", lastActivity);
+                    row.put("salesThisMonth", rs.getLong("sales_month"));
+                    row.put("salesTotalThisMonth", Money.of(rs.getBigDecimal("sales_month_total")));
+                    row.put("onTrial", trial);
+                    // "Ödəyir, amma istifadə etmir": a paid, active package and nobody of the store did anything
+                    // for 14 days (and the store is older than that)
+                    OffsetDateTime idleSince = OffsetDateTime.now().minusDays(IDLE_DAYS);
+                    OffsetDateTime created = rs.getObject("created_at", OffsetDateTime.class);
+                    row.put("idle", "ACTIVE".equals(state) && !trial && created != null && created.isBefore(idleSince)
+                            && (lastActivity == null || lastActivity.isBefore(idleSince)));
                     return row;
                 })
                 .list();
@@ -171,7 +199,62 @@ public class AdminService {
         result.put("pendingRequests", pending);
         result.put("expiredSubscriptions", expired);
         result.put("perPlan", perPlan);
+        result.put("monthly", monthly());
+        result.put("trialStores", jdbc.sql("""
+                SELECT COUNT(DISTINCT store_id) FROM subscriptions
+                WHERE status = 'ACTIVE' AND trial AND start_date <= :today AND end_date >= :today
+                """).param("today", tenant.today()).query(Long.class).single());
         return result;
+    }
+
+    /**
+     * The last 12 months: subscription income (approved payments, by approval date), paying stores (a paid package
+     * active at some point of the month), new paying stores and churn: stores paying at the start of the month whose
+     * paid access ended during the month with no later paid period (in % of the stores paying at the start).
+     */
+    private List<Map<String, Object>> monthly() {
+        LocalDate today = tenant.today();
+        LocalDate first = today.withDayOfMonth(1).minusMonths(11);
+        return jdbc.sql("""
+                WITH months AS (
+                    SELECT CAST(m AS date) AS ms,
+                           LEAST(CAST(m + INTERVAL '1 month' - INTERVAL '1 day' AS date), CAST(:today AS date)) AS me
+                    FROM generate_series(CAST(:first AS date), CAST(:today AS date), INTERVAL '1 month') m
+                ), paid AS (
+                    SELECT store_id, start_date, end_date FROM subscriptions
+                    WHERE status IN ('ACTIVE', 'EXPIRED') AND NOT trial AND amount > 0 AND start_date IS NOT NULL
+                ), last_end AS (
+                    SELECT store_id, MAX(end_date) AS end_date FROM paid GROUP BY store_id
+                )
+                SELECT mo.ms,
+                       (SELECT COALESCE(SUM(s.amount), 0) FROM subscriptions s
+                         WHERE s.status IN ('ACTIVE', 'EXPIRED') AND s.reviewed_at IS NOT NULL
+                           AND CAST(s.reviewed_at AT TIME ZONE 'Asia/Baku' AS date) BETWEEN mo.ms AND mo.me) AS revenue,
+                       (SELECT COUNT(DISTINCT p.store_id) FROM paid p
+                         WHERE p.start_date <= mo.me AND p.end_date >= mo.ms) AS paying,
+                       (SELECT COUNT(DISTINCT p.store_id) FROM paid p WHERE p.start_date BETWEEN mo.ms AND mo.me
+                           AND NOT EXISTS (SELECT 1 FROM paid q WHERE q.store_id = p.store_id AND q.start_date < mo.ms)) AS new_paying,
+                       (SELECT COUNT(DISTINCT p.store_id) FROM paid p
+                         WHERE p.start_date < mo.ms AND p.end_date >= mo.ms) AS at_start,
+                       (SELECT COUNT(DISTINCT p.store_id) FROM paid p JOIN last_end le ON le.store_id = p.store_id
+                         WHERE p.start_date < mo.ms AND p.end_date >= mo.ms AND le.end_date < mo.me) AS churned
+                FROM months mo ORDER BY mo.ms
+                """)
+                .param("first", first).param("today", today)
+                .query((rs, n) -> {
+                    long atStart = rs.getLong("at_start");
+                    long churned = rs.getLong("churned");
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("month", rs.getObject("ms", LocalDate.class).toString().substring(0, 7));
+                    m.put("revenue", Money.of(rs.getBigDecimal("revenue")));
+                    m.put("payingStores", rs.getLong("paying"));
+                    m.put("newPayingStores", rs.getLong("new_paying"));
+                    m.put("payingAtStart", atStart);
+                    m.put("churnedStores", churned);
+                    m.put("churnRate", atStart == 0 ? BigDecimal.ZERO
+                            : BigDecimal.valueOf(churned * 100.0 / atStart).setScale(1, java.math.RoundingMode.HALF_UP));
+                    return m;
+                }).list();
     }
 
     public List<Map<String, Object>> users(String q) {

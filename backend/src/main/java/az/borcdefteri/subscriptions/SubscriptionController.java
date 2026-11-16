@@ -20,8 +20,11 @@ public class SubscriptionController {
     private final SubscriptionService subscriptions;
     private final PlanService plans;
     private final TenantService tenant;
+    private final PromoService promos;
 
-    public SubscriptionController(SubscriptionService subscriptions, PlanService plans, TenantService tenant) {
+    public SubscriptionController(SubscriptionService subscriptions, PlanService plans, TenantService tenant,
+                                  PromoService promos) {
+        this.promos = promos;
         this.subscriptions = subscriptions;
         this.plans = plans;
         this.tenant = tenant;
@@ -48,14 +51,15 @@ public class SubscriptionController {
                              String period, String paymentMethod,
                              @jakarta.validation.constraints.Size(max = 120) String payerName,
                              java.math.BigDecimal paidAmount, java.time.LocalDate paymentDate,
-                             @jakarta.validation.constraints.Size(max = 500) String note) {}
+                             @jakarta.validation.constraints.Size(max = 500) String note,
+                             @jakarta.validation.constraints.Size(max = 40) String promoCode) {}
 
     /** "Ödəniş etdim" without a file. Creates or updates the store's pending payment request. */
     @PostMapping("/api/subscriptions/request")
     @ResponseStatus(HttpStatus.CREATED)
     public SubscriptionView request(@jakarta.validation.Valid @RequestBody PlanChoice req) {
         return subscriptions.request(new PaymentClaim(req.planCode(), req.period(), req.paymentMethod(),
-                req.payerName(), req.paidAmount(), req.paymentDate(), req.note(), req.payerReference()), null);
+                req.payerName(), req.paidAmount(), req.paymentDate(), req.note(), req.payerReference(), req.promoCode()), null);
     }
 
     /** "Ödəniş etdim" with an optional receipt image (PNG/JPG/PDF, max 5 MB, checked by content). */
@@ -69,9 +73,27 @@ public class SubscriptionController {
                                    @RequestParam(required = false) java.math.BigDecimal paidAmount,
                                    @RequestParam(required = false) java.time.LocalDate paymentDate,
                                    @RequestParam(required = false) String note,
+                                   @RequestParam(required = false) String promoCode,
                                    @RequestParam(value = "receipt", required = false) MultipartFile receipt) {
         return subscriptions.request(new PaymentClaim(planCode, period, paymentMethod, payerName, paidAmount,
-                paymentDate, note, payerReference), receipt);
+                paymentDate, note, payerReference, promoCode), receipt);
+    }
+
+    public record PromoCheck(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 40) String code,
+                             @jakarta.validation.constraints.NotBlank String planCode, String period) {}
+
+    /** "Promo-kodu yoxla": the discounted price of the chosen package and period, or a clear error. */
+    @PostMapping("/api/subscriptions/promo-check")
+    public PromoService.Applied promoCheck(@jakarta.validation.Valid @RequestBody PromoCheck req) {
+        var member = tenant.requireMember();
+        PlanView plan = plans.byCode(req.planCode()).filter(p -> p.active() && !p.archived())
+                .orElseThrow(() -> az.borcdefteri.common.ApiException.badRequest("INVALID_PLAN", "Seçilmiş plan mövcud deyil"));
+        var option = (req.period() == null || req.period().isBlank()) ? plan.options().stream().findFirst()
+                : plan.option(PlanService.Period.parse(req.period()));
+        var price = option.orElseThrow(() -> az.borcdefteri.common.ApiException.badRequest("INVALID_PERIOD",
+                "Bu paket seçilmiş müddətə satılmır")).price();
+        UUID pending = null;
+        return promos.apply(req.code(), member.storeId(), price, pending);
     }
 
     @GetMapping("/api/subscriptions/{id}/receipt")

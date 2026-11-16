@@ -399,6 +399,48 @@ export interface AdminStore {
   /** When the admin last sent a renewal reminder (WhatsApp / call / e-mail); absent when never. */
   lastRemindedAt?: string | null;
   createdAt: string;
+  /** Activity: last sign-in, last action of anyone in the store, completed sales this month. */
+  lastLoginAt?: string | null;
+  lastActivityAt?: string | null;
+  salesThisMonth?: number;
+  salesTotalThisMonth?: number;
+  /** The current period is the free trial. */
+  onTrial?: boolean;
+  /** "Ödəyir, amma istifadə etmir": paid package, no activity for 14 days. */
+  idle?: boolean;
+}
+
+export interface MonthlyRevenue {
+  month: string;
+  revenue: number;
+  payingStores: number;
+  newPayingStores: number;
+  payingAtStart: number;
+  churnedStores: number;
+  churnRate: number;
+}
+
+export interface PromoCode {
+  id: string;
+  code: string;
+  percentOff?: number | null;
+  amountOff?: number | null;
+  maxUses?: number | null;
+  validUntil?: string | null;
+  active: boolean;
+  note?: string | null;
+  usedCount: number;
+  createdAt: string;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  body: string;
+  level: "INFO" | "WARNING" | "SUCCESS";
+  active: boolean;
+  endsOn?: string | null;
+  createdAt: string;
 }
 
 export interface AdminRevenue {
@@ -410,6 +452,8 @@ export interface AdminRevenue {
   pendingRequests: number;
   expiredSubscriptions: number;
   perPlan: { code: string; name: string; approvedCount: number; revenue: number }[];
+  monthly?: MonthlyRevenue[];
+  trialStores?: number;
 }
 
 export interface AuditEntry {

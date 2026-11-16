@@ -17,5 +17,7 @@ public record SubscriptionSummary(
         LocalDate endDate,
         long daysRemaining,
         boolean renewalReminder,
-        OffsetDateTime expiresAt
+        OffsetDateTime expiresAt,
+        /** The current period is the free trial. */
+        boolean trial
 ) {}

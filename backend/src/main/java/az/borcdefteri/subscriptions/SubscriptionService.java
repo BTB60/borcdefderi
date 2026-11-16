@@ -42,7 +42,7 @@ public class SubscriptionService {
                                    String paymentMethod, String payerName, BigDecimal declaredAmount,
                                    LocalDate paymentDate, String note,
                                    String ownerName, String ownerEmail, String ownerPhone, String storePhone,
-                                   String reviewedByName) {
+                                   String reviewedByName, String promoCode, BigDecimal discount, boolean trial) {
 
         /** PENDING / APPROVED / REJECTED, as the payment request status (ACTIVE and EXPIRED were approved). */
         @com.fasterxml.jackson.annotation.JsonProperty("requestStatus")
@@ -56,7 +56,14 @@ public class SubscriptionService {
 
     /** What the store sends with "Ödəniş etdim". Everything except the package is optional. */
     public record PaymentClaim(String planCode, String period, String paymentMethod, String payerName,
-                               BigDecimal declaredAmount, LocalDate paymentDate, String note, String payerReference) {}
+                               BigDecimal declaredAmount, LocalDate paymentDate, String note, String payerReference,
+                               String promoCode) {
+
+        public PaymentClaim(String planCode, String period, String paymentMethod, String payerName,
+                            BigDecimal declaredAmount, LocalDate paymentDate, String note, String payerReference) {
+            this(planCode, period, paymentMethod, payerName, declaredAmount, paymentDate, note, payerReference, null);
+        }
+    }
 
     public record ReceiptFile(byte[] content, String contentType, String fileName) {}
 
@@ -67,7 +74,7 @@ public class SubscriptionService {
                    s.requested_at, s.reviewed_at, s.period_code, s.period_months, s.period_days,
                    s.payment_method, s.payer_name, s.declared_amount, s.payment_date, s.note,
                    ow.full_name AS owner_name, ow.email AS owner_email, ow.phone AS owner_phone,
-                   rv.full_name AS reviewed_by_name,
+                   rv.full_name AS reviewed_by_name, pc.code AS promo_code, s.discount, s.trial,
                    EXISTS (SELECT 1 FROM subscription_receipts r WHERE r.subscription_id = s.id) AS has_receipt
             FROM subscriptions s
             JOIN subscription_plans p ON p.id = s.plan_id
@@ -77,6 +84,7 @@ public class SubscriptionService {
                 WHERE m.store_id = s.store_id AND m.role = 'STORE_OWNER' ORDER BY m.created_at LIMIT 1
             ) ow ON TRUE
             LEFT JOIN users rv ON rv.id = s.reviewed_by
+            LEFT JOIN promo_codes pc ON pc.id = s.promo_code_id
             """;
 
     private static final DateTimeFormatter AZ_DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy");
@@ -88,9 +96,12 @@ public class SubscriptionService {
     private final AppProperties props;
     private final PlanService plans;
     private final NotificationService notifications;
+    private final PromoService promos;
 
     public SubscriptionService(JdbcClient jdbc, TenantService tenant, ReceiptStorage receipts, AuditService audit,
-                               AppProperties props, PlanService plans, NotificationService notifications) {
+                               AppProperties props, PlanService plans, NotificationService notifications,
+                               PromoService promos) {
+        this.promos = promos;
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.receipts = receipts;
@@ -117,7 +128,7 @@ public class SubscriptionService {
                     .param("s", storeId).query(LocalDate.class).single();
             long days = ChronoUnit.DAYS.between(today, end);
             return new SubscriptionSummary(true, "ACTIVE", active.planCode(), active.planName(),
-                    active.startDate(), end, days, days <= reminderDays, expiresAt(end));
+                    active.startDate(), end, days, days <= reminderDays, expiresAt(end), active.trial());
         }
         SubscriptionView latest = jdbc.sql(SELECT_SUB + """
                 WHERE s.store_id = :storeId ORDER BY s.requested_at DESC LIMIT 1
@@ -125,11 +136,11 @@ public class SubscriptionService {
                 .param("storeId", storeId)
                 .query(this::mapSub).optional().orElse(null);
         if (latest == null) {
-            return new SubscriptionSummary(false, "NONE", null, null, null, null, 0, false, null);
+            return new SubscriptionSummary(false, "NONE", null, null, null, null, 0, false, null, false);
         }
         String status = "ACTIVE".equals(latest.status()) ? "EXPIRED" : latest.status();
         return new SubscriptionSummary(false, status, latest.planCode(), latest.planName(),
-                latest.startDate(), latest.endDate(), 0, false, expiresAt(latest.endDate()));
+                latest.startDate(), latest.endDate(), 0, false, expiresAt(latest.endDate()), latest.trial());
     }
 
     /** Access ends at the start of the day after the (inclusive) end date, in the business time zone. */
@@ -191,11 +202,13 @@ public class SubscriptionService {
             throw ApiException.badRequest("INVALID_PAYMENT_DATE", "Ödəniş tarixi düzgün deyil");
         }
         ReceiptStorage.Stored stored = (receipt == null || receipt.isEmpty()) ? null : receipts.store(receipt);
-        BigDecimal amount = option.price(); // server-side price, the declared amount is only shown to the admin
-
         lockStore(member.storeId()); // serialises concurrent requests of the same store
         UUID pendingId = jdbc.sql("SELECT id FROM subscriptions WHERE store_id = :s AND status = 'PENDING' ORDER BY requested_at DESC LIMIT 1")
                 .param("s", member.storeId()).query(UUID.class).optional().orElse(null);
+        // server-side price (minus a valid promo code); the declared amount is only shown to the admin
+        PromoService.Applied promo = claim.promoCode() == null || claim.promoCode().isBlank() ? null
+                : promos.apply(claim.promoCode(), member.storeId(), option.price(), pendingId);
+        BigDecimal amount = promo != null ? promo.total() : option.price();
         UUID subId = pendingId != null ? pendingId : UUID.randomUUID();
         if (pendingId == null) {
             jdbc.sql("""
@@ -213,9 +226,12 @@ public class SubscriptionService {
                        payer_name = COALESCE(:payer, payer_name),
                        declared_amount = COALESCE(:declared, declared_amount),
                        payment_date = COALESCE(:paymentDate, payment_date),
-                       note = COALESCE(:note, note)
+                       note = COALESCE(:note, note),
+                       promo_code_id = :promoId, discount = :discount
                 WHERE id = :id
                 """)
+                .param("promoId", promo == null ? null : promo.promoId())
+                .param("discount", promo == null ? BigDecimal.ZERO : promo.discount())
                 .param("planId", plan.id()).param("amount", amount).param("period", option.period())
                 .param("months", option.months()).param("days", option.days()).param("ref", reference)
                 .param("method", method).param("payer", payerName)
@@ -237,7 +253,8 @@ public class SubscriptionService {
         }
         audit.log(member.storeId(), member.userId(), "SUBSCRIPTION_REQUESTED", "SUBSCRIPTION", subId.toString(),
                 "Paket: " + plan.name() + " (" + periodLabel(option.period(), option.months(), option.days())
-                        + "), məbləğ: " + amount + (method != null ? ", üsul: " + method : "")
+                        + "), məbləğ: " + amount + (promo != null ? ", promo-kod " + promo.code() + " (-" + promo.discount() + ")" : "")
+                        + (method != null ? ", üsul: " + method : "")
                         + (declared != null ? ", bildirilən: " + Money.of(declared) : "")
                         + (reference != null ? ", istinad: " + reference : "") + (stored != null ? ", qəbz yükləndi" : ""));
         return getView(subId);
@@ -502,7 +519,10 @@ public class SubscriptionService {
                 rs.getString("owner_email"),
                 rs.getString("owner_phone"),
                 rs.getString("store_phone"),
-                rs.getString("reviewed_by_name"));
+                rs.getString("reviewed_by_name"),
+                rs.getString("promo_code"),
+                Money.of(rs.getBigDecimal("discount")),
+                rs.getBoolean("trial"));
     }
 
     private static String check(String value, int max, String code, String message) {

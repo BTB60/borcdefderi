@@ -127,9 +127,14 @@ public abstract class IntegrationTestBase {
 
     private static String adminToken;
 
+    @Autowired
+    protected org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
+
     @BeforeEach
     void resetClock() {
         clock.reset();
+        // the free trial is switched off in tests (TrialPromoTest switches it on for itself)
+        jdbcClient.sql("UPDATE platform_settings SET value = '0' WHERE key = 'trial_days'").update();
     }
 
     // ---------- HTTP helpers ----------

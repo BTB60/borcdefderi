@@ -11,11 +11,12 @@ import { PaymentRequestsTab } from "@/components/admin/PaymentRequestsTab";
 import { ExpiringTab } from "@/components/admin/ExpiringTab";
 import { OverviewTab } from "@/components/admin/OverviewTab";
 import { StoreDrawer } from "@/components/admin/StoreDrawer";
+import { GrowthTab } from "@/components/admin/GrowthTab";
 import { optionLabel } from "@/lib/plans";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { AdminRevenue, AdminStore, AuditEntry, Plan } from "@/lib/types";
 
-type Tab = "overview" | "stores" | "expiring" | "subscriptions" | "plans" | "revenue" | "users" | "audit" | "settings";
+type Tab = "overview" | "stores" | "expiring" | "subscriptions" | "plans" | "revenue" | "growth" | "users" | "audit" | "settings";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "İcmal" },
@@ -24,6 +25,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "subscriptions", label: "Ödəniş sorğuları" },
   { key: "plans", label: "Abunəlik paketləri" },
   { key: "revenue", label: "Gəlir" },
+  { key: "growth", label: "Promo, sınaq və elanlar" },
   { key: "users", label: "İstifadəçilər" },
   { key: "audit", label: "Audit jurnalı" },
   { key: "settings", label: "Ödəniş və əlaqə" },
@@ -67,6 +69,7 @@ export default function AdminPage() {
       {tab === "subscriptions" && <PaymentRequestsTab onError={setError} onNotice={setNotice} />}
       {tab === "plans" && <PlansTab onError={setError} onNotice={setNotice} />}
       {tab === "revenue" && <RevenueTab onError={setError} />}
+      {tab === "growth" && <GrowthTab onError={setError} onNotice={setNotice} />}
       {tab === "users" && <UsersTab onError={setError} />}
       {tab === "audit" && <AuditTab onError={setError} />}
       {tab === "settings" && <PaymentSettingsTab onError={setError} onNotice={setNotice} />}
@@ -80,7 +83,7 @@ function errorText(e: unknown, fallback: string) {
   return e instanceof ApiError ? e.message : fallback;
 }
 
-type StoreFilter = "attention" | "new" | "all" | "active" | "expired" | "none";
+type StoreFilter = "attention" | "new" | "all" | "active" | "expired" | "none" | "idle";
 
 /** Human-readable names for audit actions (store activity history). */
 const ACTION_LABEL: Record<string, string> = {
@@ -228,6 +231,7 @@ function StoresTab({ onError, onNotice }: TabProps) {
         case "active": return s.subscriptionState === "ACTIVE";
         case "expired": return s.subscriptionState === "EXPIRED";
         case "none": return s.subscriptionState === "NONE";
+        case "idle": return !!s.idle;
         case "new": return now - new Date(s.createdAt).getTime() < NEW_DAYS * 86_400_000;
         default: return true;
       }
@@ -240,6 +244,7 @@ function StoresTab({ onError, onNotice }: TabProps) {
     { key: "expired", label: "Vaxtı bitib" },
     { key: "new", label: `Yeni qeydiyyatlar (${NEW_DAYS} gün)` },
     { key: "none", label: "Gözləmədə (abunəsiz)" },
+    { key: "idle", label: `Ödəyir, amma istifadə etmir (${all.filter((s) => s.idle).length})` },
     { key: "all", label: "Hamısı" },
   ];
 
@@ -273,7 +278,7 @@ function StoresTab({ onError, onNotice }: TabProps) {
         {!items ? <Spinner /> : visible.length === 0 ? <EmptyState title={filter === "attention" ? "Diqqət tələb edən mağaza yoxdur" : "Mağaza tapılmadı"} /> : (
           <Table>
             <thead className="bg-slate-50/70">
-              <tr><Th>Mağaza</Th><Th>Sahib</Th><Th>Paket</Th><Th>Sayğac</Th><Th>Sorğu</Th><Th>Status</Th><Th className="text-right">Əməliyyat</Th></tr>
+              <tr><Th>Mağaza</Th><Th>Sahib</Th><Th>Paket</Th><Th>Sayğac</Th><Th>Aktivlik</Th><Th>Sorğu</Th><Th>Status</Th><Th className="text-right">Əməliyyat</Th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {visible.map((s) => {
@@ -291,9 +296,15 @@ function StoresTab({ onError, onNotice }: TabProps) {
                     </Td>
                     <Td>
                       {s.activePlan ?? <span className="text-slate-400">Yoxdur</span>}
+                      {s.onTrial && <span className="ml-1"><Badge tone="sky">Sınaq</Badge></span>}
                       {s.subscriptionEnd && <div className="text-xs text-slate-400">Bitmə: {formatDate(s.subscriptionEnd)}</div>}
                     </Td>
                     <Td><Countdown expiresAt={s.subscriptionState === "NONE" ? null : s.expiresAt} now={now} emptyText="Abunə olmayıb" /></Td>
+                    <Td>
+                      <div className="text-xs text-slate-500">Son giriş: {s.lastLoginAt ? formatDateTime(s.lastLoginAt) : "—"}</div>
+                      <div className="text-xs text-slate-500">Bu ay: {s.salesThisMonth ?? 0} satış · {formatMoney(s.salesTotalThisMonth ?? 0)}</div>
+                      {s.idle && <span className="mt-1 inline-block"><Badge tone="rose">Ödəyir, istifadə etmir</Badge></span>}
+                    </Td>
                     <Td>
                       {s.pendingPlanCode ? (
                         <div><Badge tone="amber">{s.pendingPlanName}</Badge><div className="mt-1 text-xs text-slate-400">{formatDateTime(s.pendingAt)}</div></div>
@@ -511,6 +522,7 @@ function RevenueTab({ onError }: { onError: (m: string | null) => void }) {
         <StatCard label="Bu il" value={formatMoney(data.yearRevenue)} tone="navy" />
         <StatCard label="Aktiv mağaza" value={`${data.activeStores} / ${data.totalStores}`} tone="sky" hint={`Gözləyən sorğu: ${data.pendingRequests}`} />
       </section>
+      {data.monthly && data.monthly.length > 0 && <MonthlyRevenueCard rows={data.monthly} trialStores={data.trialStores ?? 0} />}
       <Card className="mt-6">
         <h2 className="mb-4 font-serif text-lg font-semibold text-navy-800">Plan üzrə</h2>
         <Table>
@@ -527,6 +539,55 @@ function RevenueTab({ onError }: { onError: (m: string | null) => void }) {
         </Table>
       </Card>
     </>
+  );
+}
+
+const MONTHS = ["Yan", "Fev", "Mar", "Apr", "May", "İyn", "İyl", "Avq", "Sen", "Okt", "Noy", "Dek"];
+
+/** Last 12 months: income bars, paying stores, new ones and the churn rate. */
+function MonthlyRevenueCard({ rows, trialStores }: { rows: NonNullable<AdminRevenue["monthly"]>; trialStores: number }) {
+  const max = Math.max(1, ...rows.map((r) => r.revenue));
+  const label = (m: string) => `${MONTHS[Number(m.slice(5, 7)) - 1]} ${m.slice(2, 4)}`;
+  const last = rows[rows.length - 1];
+  const churn12 = rows.reduce((a, r) => a + r.churnedStores, 0);
+  return (
+    <Card className="mt-6">
+      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-serif text-lg font-semibold text-navy-800">Aylar üzrə gəlir</h2>
+        <p className="text-xs text-slate-500">
+          Ödəyən mağaza: <b className="text-navy-800">{last.payingStores}</b> · Pulsuz sınaqda: <b className="text-navy-800">{trialStores}</b> · Bu ay ayrılma: <b className={last.churnRate > 0 ? "text-rose-600" : "text-emerald-600"}>{last.churnRate}%</b> · 12 ayda ayrılan: <b className="text-navy-800">{churn12}</b>
+        </p>
+      </div>
+      <div className="flex h-40 items-end gap-1.5" role="img" aria-label="Son 12 ayın gəliri">
+        {rows.map((r) => (
+          <div key={r.month} className="flex h-full flex-1 flex-col items-center justify-end gap-1" title={`${label(r.month)}: ${formatMoney(r.revenue)}`}>
+            <span className="text-[10px] tabular-nums text-slate-500">{r.revenue > 0 ? Math.round(r.revenue) : ""}</span>
+            <div className="w-full rounded-t-md bg-gold-500" style={{ height: `${Math.max(2, (r.revenue / max) * 100)}%` }} />
+            <span className="text-[10px] text-slate-500">{label(r.month)}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-5">
+        <Table>
+          <thead className="bg-slate-50/70">
+            <tr><Th>Ay</Th><Th className="text-right">Gəlir</Th><Th className="text-right">Ödəyən mağaza</Th><Th className="text-right">Yeni</Th><Th className="text-right">Ayrılan</Th><Th className="text-right">Ayrılma faizi</Th></tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {[...rows].reverse().map((r) => (
+              <tr key={r.month}>
+                <Td className="font-medium text-navy-800">{label(r.month)}</Td>
+                <Td className="text-right tabular-nums">{formatMoney(r.revenue)}</Td>
+                <Td className="text-right tabular-nums">{r.payingStores}</Td>
+                <Td className="text-right tabular-nums text-emerald-700">{r.newPayingStores > 0 ? `+${r.newPayingStores}` : "—"}</Td>
+                <Td className="text-right tabular-nums text-rose-600">{r.churnedStores > 0 ? r.churnedStores : "—"}</Td>
+                <Td className="text-right tabular-nums">{r.payingAtStart > 0 ? `${r.churnRate}%` : "—"}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+        <p className="mt-2 text-xs text-slate-400">Ayrılma faizi: ayın əvvəlində ödəyən mağazalardan neçə faizinin abunəliyi bitib və yenilənməyib.</p>
+      </div>
+    </Card>
   );
 }
 

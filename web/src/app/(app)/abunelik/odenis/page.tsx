@@ -31,6 +31,10 @@ function Payment() {
   const [error, setError] = useState<string | null>(null);
   const [method, setMethod] = useState<Method>("M10");
   const [copied, setCopied] = useState<string | null>(null);
+  const [promoInput, setPromoInput] = useState("");
+  const [promo, setPromo] = useState<{ code: string; discount: number; total: number; key: string } | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoBusy, setPromoBusy] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -49,6 +53,28 @@ function Payment() {
 
   const plan = plans?.find((p) => p.code === params.get("plan"));
   const option = plan ? findOption(plan, params.get("period")) : undefined;
+  // a checked promo code only counts for the package and period it was checked with
+  const optionKey = `${plan?.code}:${option?.period}`;
+  const applied = promo && promo.key === optionKey ? promo : null;
+  const price = applied ? applied.total : option?.price ?? 0;
+
+  async function checkPromo() {
+    if (!plan || !option || !promoInput.trim()) return;
+    setPromoBusy(true);
+    setPromoError(null);
+    try {
+      const r = await api<{ code: string; discount: number; total: number }>("/api/subscriptions/promo-check", {
+        method: "POST",
+        json: { code: promoInput.trim(), planCode: plan.code, period: option.period },
+      });
+      setPromo({ ...r, key: optionKey });
+    } catch (e) {
+      setPromo(null);
+      setPromoError(e instanceof ApiError ? e.message : "Promo-kod yoxlanmadı");
+    } finally {
+      setPromoBusy(false);
+    }
+  }
 
   async function copy(value: string, key: string) {
     try {
@@ -66,10 +92,10 @@ function Payment() {
       store: me?.storeName ?? "",
       plan: plan.name,
       period: periodText(option),
-      amount: option.price,
+      amount: price,
     });
     return `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(text)}`;
-  }, [contact, plan, option, me?.storeName]);
+  }, [contact, plan, option, price, me?.storeName]);
 
   if (error) return <Alert>{error}</Alert>;
   if (!plans || !contact) return <Spinner />;
@@ -99,7 +125,10 @@ function Payment() {
             <p className="text-xs font-semibold uppercase tracking-widest opacity-70">Seçilmiş paket</p>
             <div className="mt-1 flex flex-wrap items-baseline justify-between gap-3">
               <p className="font-serif text-2xl font-semibold">{plan.name}</p>
-              <p className="font-serif text-3xl font-semibold">{formatMoney(option.price)}</p>
+              <p className="font-serif text-3xl font-semibold">
+                {applied && <span className="mr-2 text-lg line-through opacity-50">{formatMoney(option.price)}</span>}
+                {formatMoney(price)}
+              </p>
             </div>
             <p className="mt-1 text-sm opacity-80">Müddət: {optionLabel(option)} — {periodText(option)}</p>
             {plan.options.length > 1 && (
@@ -119,6 +148,16 @@ function Payment() {
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
+            <p className="mb-2 text-sm font-medium text-slate-700">Promo-kodunuz var?</p>
+            <div className="flex gap-2">
+              <Input value={promoInput} onChange={(e) => setPromoInput(e.target.value)} placeholder="Məs. YAZ2026" className="uppercase" aria-label="Promo-kod" />
+              <Button type="button" variant="outline" onClick={checkPromo} disabled={promoBusy || !promoInput.trim()}>Tətbiq et</Button>
+            </div>
+            {applied && <p className="mt-2 text-sm text-emerald-700">{applied.code}: −{formatMoney(applied.discount)} endirim. Ödəyəcəyiniz məbləğ: <b>{formatMoney(applied.total)}</b></p>}
+            {promoError && <p className="mt-2 text-sm text-rose-600">{promoError}</p>}
           </div>
 
           {contact.paymentInstructions && <Alert kind="info"><span className="whitespace-pre-line">{contact.paymentInstructions}</span></Alert>}
@@ -149,7 +188,7 @@ function Payment() {
                     rows={[
                       { label: "M10 nömrəsi", value: contact.m10Account!, copyKey: "m10", mono: true },
                       { label: "Hesab sahibi", value: contact.m10Recipient },
-                      { label: "Məbləğ", value: formatMoney(option.price), copyValue: option.price.toFixed(2), copyKey: "amount" },
+                      { label: "Məbləğ", value: formatMoney(price), copyValue: price.toFixed(2), copyKey: "amount" },
                     ]}
                     note={contact.paymentNote}
                     copied={copied}
@@ -162,7 +201,7 @@ function Payment() {
                       { label: "Kart nömrəsi", value: formatCard(contact.cardNumber), copyValue: contact.cardNumber!.replace(/\D/g, ""), copyKey: "card", mono: true },
                       { label: "Kart sahibi", value: contact.cardHolder },
                       { label: "Bank", value: contact.cardBank },
-                      { label: "Məbləğ", value: formatMoney(option.price), copyValue: option.price.toFixed(2), copyKey: "amount" },
+                      { label: "Məbləğ", value: formatMoney(price), copyValue: price.toFixed(2), copyKey: "amount" },
                     ]}
                     note={contact.cardNote}
                     copied={copied}
@@ -176,7 +215,7 @@ function Payment() {
           <Card>
             <h2 className="mb-3 font-serif text-lg font-semibold text-navy-800">2. “Ödəniş etdim” — təsdiq sorğusu</h2>
             {isOwner ? (
-              <ClaimForm plan={plan} period={option.period} amount={option.price} method={method} pending={pending} afterText={contact.afterPaymentText} />
+              <ClaimForm plan={plan} period={option.period} amount={price} promoCode={applied?.code ?? null} method={method} pending={pending} afterText={contact.afterPaymentText} />
             ) : (
               <Alert kind="info">Ödəniş sorğusunu yalnız mağaza sahibi göndərə bilər.</Alert>
             )}
@@ -232,10 +271,11 @@ function PayDetails({ rows, note, copied, onCopy }: {
   );
 }
 
-function ClaimForm({ plan, period, amount, method, pending, afterText }: {
+function ClaimForm({ plan, period, amount, promoCode, method, pending, afterText }: {
   plan: Plan;
   period: string;
   amount: number;
+  promoCode: string | null;
   method: Method;
   pending: SubscriptionRecord | null;
   afterText: string | null;
@@ -264,6 +304,7 @@ function ClaimForm({ plan, period, amount, method, pending, afterText }: {
     form.append("planCode", plan.code);
     form.append("period", period);
     form.append("paymentMethod", method);
+    if (promoCode) form.append("promoCode", promoCode);
     if (payerName.trim()) form.append("payerName", payerName.trim());
     if (paid.trim()) form.append("paidAmount", paid.trim().replace(",", "."));
     if (date) form.append("paymentDate", date);

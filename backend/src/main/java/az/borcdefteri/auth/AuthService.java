@@ -28,10 +28,13 @@ public class AuthService {
     private final TenantService tenant;
     private final SubscriptionService subscriptions;
     private final TwoFactorService twoFactor;
+    private final az.borcdefteri.subscriptions.PromoService promos;
 
     public AuthService(JdbcClient jdbc, PasswordEncoder passwordEncoder, JwtService jwtService,
-                       AuditService audit, TenantService tenant, SubscriptionService subscriptions, TwoFactorService twoFactor) {
+                       AuditService audit, TenantService tenant, SubscriptionService subscriptions, TwoFactorService twoFactor,
+                       az.borcdefteri.subscriptions.PromoService promos) {
         this.twoFactor = twoFactor;
+        this.promos = promos;
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -73,6 +76,7 @@ public class AuthService {
                 .update();
 
         audit.log(storeId, userId, "STORE_REGISTERED", "STORE", storeId.toString(), "Mağaza qeydiyyatı: " + req.storeName());
+        promos.startTrial(storeId, userId); // free trial, if the admin has it switched on
         return new AuthResponse(jwtService.issue(userId, "USER"), jwtService.expiresInSeconds(), me(userId));
     }
 

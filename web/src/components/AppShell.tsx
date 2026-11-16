@@ -1,4 +1,5 @@
 "use client";
+import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 import Image from "next/image";
 
 import Link from "next/link";
@@ -228,7 +229,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8">{children}</main>
+        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8">{!isSuperAdmin && <AnnouncementBanner />}{children}</main>
       </div>
     </div>
   );

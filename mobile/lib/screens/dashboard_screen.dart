@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'cash_screen.dart';
+import 'announcements.dart';
 import 'common.dart';
 import 'swipe_actions.dart';
 import 'expenses_screen.dart';
@@ -83,6 +84,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                AnnouncementBanner(session: widget.session),
                 _QuickActions(session: widget.session),
                 // Cib pulu is the owner's own money: employees don't see it
                 if (widget.session.me?.isOwner ?? false) PocketCard(key: _pocket, session: widget.session),

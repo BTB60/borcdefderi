@@ -283,6 +283,32 @@ class _PaymentScreenState extends State<PaymentScreen> {
   XFile? _receipt;
   bool _sending = false;
   bool _sent = false;
+  final _promoCode = TextEditingController();
+  Map<String, dynamic>? _promo; // the checked promo code: code, discount, total
+  String? _promoError;
+
+  double get _price => (_promo?['total'] as num?)?.toDouble() ?? widget.option.price;
+
+  Future<void> _checkPromo() async {
+    final code = _promoCode.text.trim();
+    if (code.isEmpty) return;
+    FocusScope.of(context).unfocus();
+    try {
+      final r = await widget.session.api.post('/api/subscriptions/promo-check', {
+        'code': code,
+        'planCode': widget.plan.code,
+        if (widget.option.period != 'LEGACY') 'period': widget.option.period,
+      }) as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _promo = r;
+        _promoError = null;
+        _amount.text = _price.toStringAsFixed(2);
+      });
+    } catch (e) {
+      if (mounted) setState(() { _promo = null; _promoError = errorMessage(e); _amount.text = _price.toStringAsFixed(2); });
+    }
+  }
 
   @override
   void initState() {
@@ -294,6 +320,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   void dispose() {
     _payer.dispose();
     _amount.dispose();
+    _promoCode.dispose();
     _reference.dispose();
     _note.dispose();
     super.dispose();
@@ -324,6 +351,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       'planCode': widget.plan.code,
       'period': ?period,
       'paymentMethod': _method,
+      if (_promo != null) 'promoCode': '${_promo!['code']}',
       if (_payer.text.trim().isNotEmpty) 'payerName': _payer.text.trim(),
       if (_amount.text.trim().isNotEmpty) 'paidAmount': _amount.text.trim().replaceAll(',', '.'),
       'paymentDate': _iso(_date),
@@ -382,7 +410,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         store: widget.session.me?.storeName ?? '',
                         plan: plan.name,
                         period: option.durationText,
-                        amount: formatMoney(option.price)),
+                        amount: formatMoney(_price)),
                   });
             return ListView(padding: const EdgeInsets.all(16), children: [
               Container(
@@ -393,9 +421,35 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   Text(plan.name, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: fg)),
                   Text('Müddət: ${option.label} — ${option.durationText}', style: TextStyle(color: fg.withValues(alpha: 0.8))),
                   const SizedBox(height: 6),
-                  Text(formatMoney(option.price), style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: fg)),
+                  Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    if (_promo != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8, bottom: 4),
+                        child: Text(formatMoney(option.price),
+                            style: TextStyle(fontSize: 16, color: fg.withValues(alpha: 0.5), decoration: TextDecoration.lineThrough)),
+                      ),
+                    Text(formatMoney(_price), style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: fg)),
+                  ]),
                 ]),
               ),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: _promoCode,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: InputDecoration(labelText: 'Promo-kod (varsa)', isDense: true, errorText: _promoError),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(onPressed: _checkPromo, child: const Text('Tətbiq et')),
+              ]),
+              if (_promo != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text('${_promo!['code']}: −${formatMoney((_promo!['discount'] as num).toDouble())} endirim',
+                      style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.w600)),
+                ),
               if (c.paymentInstructions != null) ...[
                 const SizedBox(height: 12),
                 Text(c.paymentInstructions!, style: TextStyle(color: Colors.blueGrey.shade700)),
@@ -422,13 +476,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     ? [
                         ('M10 nömrəsi', c.m10Account, c.m10Account),
                         ('Hesab sahibi', c.m10Recipient, null),
-                        ('Məbləğ', formatMoney(option.price), option.price.toStringAsFixed(2)),
+                        ('Məbləğ', formatMoney(_price), _price.toStringAsFixed(2)),
                       ]
                     : [
                         ('Kart nömrəsi', _formatCard(c.cardNumber), c.cardNumber?.replaceAll(RegExp(r'\D'), '')),
                         ('Kart sahibi', c.cardHolder, null),
                         ('Bank', c.cardBank, null),
-                        ('Məbləğ', formatMoney(option.price), option.price.toStringAsFixed(2)),
+                        ('Məbləğ', formatMoney(_price), _price.toStringAsFixed(2)),
                       ], note: _method == 'M10' ? c.paymentNote : c.cardNote, onCopy: _copy),
               ],
               const SizedBox(height: 12),
@@ -459,7 +513,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 TextField(
                   controller: _amount,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(labelText: 'Ödəniş məbləği (₼)', helperText: 'Paketin qiyməti: ${formatMoney(option.price)}'),
+                  decoration: InputDecoration(labelText: 'Ödəniş məbləği (₼)', helperText: 'Ödəniləcək məbləğ: ${formatMoney(_price)}'),
                 ),
                 const SizedBox(height: 8),
                 ListTile(

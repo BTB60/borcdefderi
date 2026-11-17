@@ -10,6 +10,13 @@ contextBridge.exposeInMainWorld("hesabDesktop", {
   queueSale: (sale) => ipcRenderer.invoke("queue-sale", sale),
   pending: () => ipcRenderer.invoke("pending"),
   syncNow: () => ipcRenderer.invoke("sync-now"),
+  updateStatus: () => ipcRenderer.invoke("update-status"),
+  installUpdate: () => ipcRenderer.invoke("install-update"),
+  onUpdate: (cb) => {
+    const listener = (_e, status) => cb(status);
+    ipcRenderer.on("update-status", listener);
+    return () => ipcRenderer.removeListener("update-status", listener);
+  },
   onPendingChange: (cb) => {
     const listener = (_e, count) => cb(count);
     ipcRenderer.on("pending-changed", listener);

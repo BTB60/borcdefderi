@@ -84,6 +84,33 @@ async function siteHandler(request) {
   }
 }
 
+// ---------- app updates ----------
+// A new version downloads by itself in the background; when it is ready the till shows a "Yenilə" button
+// (state goes to the page through "update-status"). Checked at start and every 4 hours.
+
+let updater = null;
+let updateStatus = { state: "idle", version: null, percent: 0 };
+function setUpdate(next) {
+  updateStatus = { ...updateStatus, ...next };
+  win?.webContents.send("update-status", updateStatus);
+}
+function startUpdater() {
+  try {
+    ({ autoUpdater: updater } = require("electron-updater"));
+  } catch {
+    return; // not packaged (development)
+  }
+  updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = true;
+  updater.on("update-available", (i) => setUpdate({ state: "downloading", version: i.version, percent: 0 }));
+  updater.on("download-progress", (p) => setUpdate({ state: "downloading", percent: Math.round(p.percent) }));
+  updater.on("update-downloaded", (i) => setUpdate({ state: "ready", version: i.version, percent: 100 }));
+  updater.on("error", () => { if (updateStatus.state !== "ready") setUpdate({ state: "idle" }); });
+  const check = () => updater.checkForUpdates().catch(() => undefined);
+  check();
+  setInterval(check, 4 * 60 * 60 * 1000);
+}
+
 // ---------- sales made without internet ----------
 
 const queue = () => readJson(QUEUE_FILE, []);
@@ -227,6 +254,15 @@ if (!app.requestSingleInstanceLock()) {
     failed: queue().filter((q) => q.error).map((q) => ({ total: q.total, error: q.error, savedAt: q.savedAt })),
   }));
   ipcMain.handle("sync-now", () => sync());
+  ipcMain.handle("update-status", () => updateStatus);
+  ipcMain.handle("install-update", () => {
+    if (updateStatus.state === "ready" && updater) {
+      // closes the app, installs the new version quietly and opens it again
+      setImmediate(() => updater.quitAndInstall(true, true));
+      return true;
+    }
+    return false;
+  });
 
   app.whenReady().then(() => {
     protocol.handle("https", siteHandler);
@@ -234,12 +270,7 @@ if (!app.requestSingleInstanceLock()) {
     setInterval(sync, 30_000);
     setTimeout(sync, 5_000);
     // the Microsoft Store version is updated by the Store itself
-    if (!process.windowsStore) {
-      try {
-        const { autoUpdater } = require("electron-updater");
-        autoUpdater.checkForUpdatesAndNotify().catch(() => undefined);
-      } catch { /* not packaged */ }
-    }
+    if (!process.windowsStore) startUpdater();
   });
   app.on("window-all-closed", () => app.quit());
 }

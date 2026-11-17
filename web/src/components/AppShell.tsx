@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { ADMIN_GROUPS, SUPPORT_GROUPS, adminHref, adminTabFrom } from "@/lib/adminNav";
+import { desktop, type UpdateStatus } from "@/lib/desktop";
 import { useAuth } from "@/lib/auth";
 import { api, openProtected } from "@/lib/api";
 import { JOB_TITLE_LABEL } from "@/lib/format";
@@ -122,6 +123,14 @@ function KioskHeader({ store, name, role, onSignOut }: { store: string; name: st
   const MONTHS = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avqust", "sentyabr", "oktyabr", "noyabr", "dekabr"];
   const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   const date = `${WEEKDAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
+  // a new version of the Windows app downloads by itself; when ready a "Yenilə" button appears
+  const [update, setUpdate] = useState<UpdateStatus | null>(null);
+  useEffect(() => {
+    const app = desktop();
+    if (!app?.onUpdate || !app.updateStatus) return;
+    app.updateStatus().then(setUpdate).catch(() => undefined);
+    return app.onUpdate(setUpdate);
+  }, []);
   const initials = name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
   return (
     <header className="relative flex h-16 shrink-0 items-center justify-between gap-4 bg-gradient-to-r from-navy-900 via-navy-800 to-navy-700 px-5 text-white shadow-lg">
@@ -137,6 +146,20 @@ function KioskHeader({ store, name, role, onSignOut }: { store: string; name: st
         <p className="mt-1 text-[11px] text-white/55">{date}</p>
       </div>
       <div className="flex items-center gap-3">
+        {update?.state === "downloading" && (
+          <span className="hidden items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 sm:inline-flex" title="Yeni versiya yüklənir">
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-gold-400" />
+            Yeniləmə yüklənir{update.percent ? ` ${update.percent}%` : "…"}
+          </span>
+        )}
+        {update?.state === "ready" && (
+          <button onClick={() => { void desktop()?.installUpdate?.(); }}
+            title={`Yeni versiya ${update.version ?? ""} hazırdır — proqram bağlanıb yenidən açılacaq`}
+            className="flex h-10 items-center gap-2 rounded-xl bg-gold-500 px-4 text-sm font-semibold text-navy-900 shadow-glow transition hover:bg-gold-400">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.2} aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5" /></svg>
+            Yenilə{update.version ? ` (v${update.version})` : ""}
+          </button>
+        )}
         <span className={cx("hidden items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium sm:inline-flex",
           online ? "bg-emerald-400/15 text-emerald-300" : "bg-rose-500/20 text-rose-200")}>
           <span className={cx("h-2 w-2 rounded-full", online ? "bg-emerald-400" : "animate-pulse bg-rose-400")} />

@@ -17,7 +17,13 @@ export interface DesktopBridge {
   pending(): Promise<{ count: number; failed: { total: number; error: string; savedAt: string }[] }>;
   syncNow(): Promise<number>;
   onPendingChange(cb: (count: number) => void): () => void;
+  /** App updates (missing in app versions older than this): download by themselves, then "Yenilə". */
+  updateStatus?(): Promise<UpdateStatus>;
+  installUpdate?(): Promise<boolean>;
+  onUpdate?(cb: (s: UpdateStatus) => void): () => void;
 }
+
+export type UpdateStatus = { state: "idle" | "downloading" | "ready"; version: string | null; percent: number };
 
 declare global {
   interface Window {

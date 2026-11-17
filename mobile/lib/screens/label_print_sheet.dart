@@ -160,6 +160,25 @@ class _LabelSheetState extends State<_LabelSheet> {
 
   bool get _single => _product != null;
 
+  static bool _hasDiscount(Map<String, dynamic> p) => p['oldPrice'] != null && _num(p['oldPrice']) > _num(p['salePrice']);
+
+  /// The "Endirim" part only prints a struck-through old price when the product has one: ticking it on a product
+  /// without a discount asks for the price before the discount right away.
+  Future<void> _toggleDiscount(bool on) async {
+    if (!on) return setState(() => _show.remove('old'));
+    setState(() => _show..add('old')..add('price'));
+    if (!_single || _hasDiscount(_product!)) return;
+    final saved = await editProductPrice(context, widget.session, _product!);
+    if (!mounted) return;
+    if (saved != null) {
+      setState(() => _product = saved);
+    }
+    if (!_hasDiscount(_product!)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Endirim üçün köhnə qiyməti (endirimdən əvvəlki) yazın — o, etiketdə xətli çıxacaq')));
+    }
+  }
+
   static int _stockCount(Map<String, dynamic> p) => ((p['stockQty'] as num?)?.toDouble() ?? 0).ceil();
 
   int get _total => _single ? (_ownCount ? _copies : _stockCount(_product!).clamp(1, 500)) : _counts.values.fold(0, (a, b) => a + b);
@@ -390,9 +409,24 @@ class _LabelSheetState extends State<_LabelSheet> {
           FilterChip(
             label: Text(title),
             selected: _show.contains(key),
-            onSelected: (v) => setState(() => v ? _show.add(key) : _show.remove(key)),
+            onSelected: (v) => key == 'old' ? _toggleDiscount(v) : setState(() => v ? _show.add(key) : _show.remove(key)),
           ),
       ]),
+      if (_show.contains('old') && (_single ? !_hasDiscount(_product!) : (_all != null && !_all!.any(_hasDiscount))))
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            _single
+                ? 'Bu məhsulda endirim yoxdur: yuxarıda "Dəyiş" ilə köhnə qiyməti yazın, etiketdə xətli çıxacaq.'
+                : 'Heç bir məhsulda köhnə qiymət yazılmayıb. Endirim yalnız köhnə qiyməti olan məhsulların etiketində xətli çıxır.',
+            style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
+          ),
+        ),
+      if (_show.contains('old') && !_show.contains('price'))
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text('Endirim görünməsi üçün "Qiymət" də seçilməlidir.', style: TextStyle(fontSize: 12, color: Colors.orange.shade800)),
+        ),
 
       _section('Neçə etiket'),
       if (_single) ...[

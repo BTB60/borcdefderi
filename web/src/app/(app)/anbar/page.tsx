@@ -481,10 +481,22 @@ function LabelModal({ product, onClose }: { product: Product | null; onClose: ()
           <div className="mt-3 flex flex-wrap gap-2">
             {LABEL_PARTS.map(([k, t]) => (
               <label key={k} className="flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1 text-sm">
-                <input type="checkbox" checked={d.show.includes(k)} onChange={(e) => setD({ ...d, show: e.target.checked ? [...d.show, k] : d.show.filter((x) => x !== k) })} />{t}
+                <input type="checkbox" checked={d.show.includes(k)} onChange={(e) => {
+                  const on = e.target.checked;
+                  // the struck-through old price sits next to the price, so "Endirim" also switches the price on
+                  const show = on ? [...new Set([...d.show, k, ...(k === "old" ? ["price"] : [])])] : d.show.filter((x) => x !== k);
+                  setD({ ...d, show });
+                }} />{t}
               </label>
             ))}
           </div>
+          {d.show.includes("old") && (product ? !(product.oldPrice && product.oldPrice > product.salePrice) : all != null && !all.some((p) => p.oldPrice && p.oldPrice > p.salePrice)) && (
+            <p className="mt-2 text-xs text-amber-700">
+              {product
+                ? "Bu məhsulda endirim yoxdur. Məhsulu redaktə edib “Endirimdən əvvəlki qiymət” yazın — etiketdə xətli çıxacaq."
+                : "Heç bir məhsulda köhnə qiymət yazılmayıb. Endirim yalnız “Endirimdən əvvəlki qiymət” yazılmış məhsulların etiketində xətli çıxır."}
+            </p>
+          )}
           <p className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wider text-slate-500">Neçə etiket</p>
           {product ? (
             <>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, Spinner, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
+import { TodayPanel } from "@/components/admin/TodayPanel";
 
 export type AdminOverview = {
   stores: { total: number; active: number; expired: number; neverPaid: number; suspended: number; new7: number; new30: number; expiring: number };
@@ -75,6 +76,8 @@ export function OverviewTab({ onError, go }: { onError: (m: string | null) => vo
         <Kpi tone="gold" label="Bu ayın gəliri" value={formatMoney(data.monthRevenue)} hint={`Aylıq təkrarlanan: ~${formatMoney(data.monthlyRecurring)}`} />
         <Kpi tone={data.pendingRequests > 0 ? "amber" : "sky"} label="Gözləyən ödəniş" value={String(data.pendingRequests)} hint={data.pendingRequests > 0 ? "Təsdiq gözləyir — baxın" : "Hamısı baxılıb"} onClick={() => go("subscriptions")} />
       </section>
+
+      <TodayPanel pending={data.pendingRequests} go={go} />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[

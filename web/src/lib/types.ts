@@ -408,6 +408,9 @@ export interface AdminStore {
   onTrial?: boolean;
   /** "Ödəyir, amma istifadə etmir": paid package, no activity for 14 days. */
   idle?: boolean;
+  /** Admin's own tags (VIP, Problemli, ...) and the next open follow-up date. */
+  tags?: string[];
+  nextFollowUp?: string | null;
 }
 
 export interface MonthlyRevenue {

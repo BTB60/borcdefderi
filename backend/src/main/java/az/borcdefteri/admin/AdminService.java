@@ -72,7 +72,10 @@ public class AdminService {
                            AND sa.status = 'COMPLETED' AND sa.sold_on >= :monthStart) AS sales_month_total,
                        (SELECT sb.trial FROM subscriptions sb WHERE sb.store_id = s.id AND sb.status = 'ACTIVE'
                            AND sb.start_date <= :today AND sb.end_date >= :today
-                         ORDER BY sb.start_date LIMIT 1) AS on_trial
+                         ORDER BY sb.start_date LIMIT 1) AS on_trial,
+                       s.admin_tags,
+                       (SELECT MIN(n.follow_up_on) FROM admin_store_notes n
+                         WHERE n.store_id = s.id AND n.done_at IS NULL) AS next_follow_up
                 FROM stores s
                 LEFT JOIN store_members m ON m.store_id = s.id AND m.role = 'STORE_OWNER'
                 LEFT JOIN users u ON u.id = m.user_id
@@ -119,6 +122,8 @@ public class AdminService {
                     row.put("salesThisMonth", rs.getLong("sales_month"));
                     row.put("salesTotalThisMonth", Money.of(rs.getBigDecimal("sales_month_total")));
                     row.put("onTrial", trial);
+                    row.put("tags", AdminCrmService.parseTags(rs.getString("admin_tags")));
+                    row.put("nextFollowUp", rs.getObject("next_follow_up", LocalDate.class));
                     // "Ödəyir, amma istifadə etmir": a paid, active package and nobody of the store did anything
                     // for 14 days (and the store is older than that)
                     OffsetDateTime idleSince = OffsetDateTime.now().minusDays(IDLE_DAYS);

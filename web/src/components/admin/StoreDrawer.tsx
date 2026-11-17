@@ -8,6 +8,7 @@ import { JOB_TITLE_LABEL, formatDate, formatDateTime, formatMoney } from "@/lib/
 import { periodText } from "@/lib/plans";
 import { waLink } from "@/lib/whatsapp";
 import type { AdminStore, AuditEntry, JobTitle, SubscriptionRecord } from "@/lib/types";
+import { StoreNotes, tagTone } from "@/components/admin/StoreNotes";
 
 type StoreCard = {
   id: string; name: string; phone: string | null; address: string | null; status: "ACTIVE" | "SUSPENDED"; createdAt: string;
@@ -17,7 +18,7 @@ type StoreCard = {
   employees: { fullName: string; email: string; active: boolean; jobTitle: JobTitle | null }[];
 };
 
-type Section = "info" | "subscription" | "operations" | "activity" | "danger";
+type Section = "info" | "notes" | "subscription" | "operations" | "activity" | "danger";
 
 type Operation = { type: "SALE" | "DEBT" | "PAYMENT"; id: string; number: string | null; party: string | null; amount: number; at: string; label: string };
 
@@ -69,6 +70,7 @@ export function StoreDrawer({ store, onClose, onActivate, onExtend, onChanged, a
   actionLabels: Record<string, string>;
 }) {
   const [section, setSection] = useState<Section>("info");
+  const [tags, setTags] = useState<string[]>(store.tags ?? []);
   const [card, setCard] = useState<StoreCard | null>(null);
   const [subs, setSubs] = useState<SubscriptionRecord[] | null>(null);
   const [log, setLog] = useState<AuditEntry[] | null>(null);
@@ -183,6 +185,7 @@ export function StoreDrawer({ store, onClose, onActivate, onExtend, onChanged, a
   const status = card?.status ?? store.status;
   const SECTIONS: { key: Section; label: string }[] = [
     { key: "info", label: "Ümumi" },
+    { key: "notes", label: "Qeydlər və etiketlər" },
     { key: "subscription", label: `Abunəlik${subs ? ` (${subs.length})` : ""}` },
     { key: "operations", label: "Əməliyyatlar" },
     { key: "activity", label: "Fəaliyyət" },
@@ -199,6 +202,7 @@ export function StoreDrawer({ store, onClose, onActivate, onExtend, onChanged, a
             <Badge tone={status === "ACTIVE" ? "emerald" : "rose"}>{status === "ACTIVE" ? "Aktiv" : "Dayandırılıb"}</Badge>
             {store.activePlan ? <Badge tone="gold">{store.activePlan}</Badge> : <Badge tone="slate">Abunə yoxdur</Badge>}
             {store.pendingPlanName && <Badge tone="amber">Sorğu: {store.pendingPlanName}</Badge>}
+            {tags.map((t) => <Badge key={t} tone={tagTone(t)}>{t}</Badge>)}
           </div>
           <p className="mt-1 text-xs text-white/60">Qeydiyyat: {formatDate(store.createdAt)}{card?.lastLogin ? ` · son giriş ${formatDateTime(card.lastLogin)}` : ""}</p>
         </div>
@@ -220,6 +224,8 @@ export function StoreDrawer({ store, onClose, onActivate, onExtend, onChanged, a
         ))}
       </div>
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
+
+      {section === "notes" && <StoreNotes storeId={store.id} tags={tags} onTags={setTags} />}
 
       {section === "info" && (!card ? <Spinner /> : (
         <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">

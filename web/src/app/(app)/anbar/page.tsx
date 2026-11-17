@@ -1,5 +1,6 @@
 "use client";
 
+import { PriceListModal } from "@/components/inventory/PriceListModal";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
@@ -26,6 +27,7 @@ export default function InventoryPage() {
   const [stockOf, setStockOf] = useState<Product | null>(null);
   const [historyOf, setHistoryOf] = useState<Product | null>(null);
   const [importing, setImporting] = useState(false);
+  const [priceList, setPriceList] = useState(false);
   const [bulk, setBulk] = useState(false);
   const [labelsFor, setLabelsFor] = useState<Product | "all" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +72,7 @@ export default function InventoryPage() {
           <Button variant="outline" onClick={() => exportAs("xlsx")}>Excel</Button>
           <Button variant="outline" onClick={() => exportAs("pdf")}>PDF</Button>
           <Button variant="outline" onClick={() => setImporting(true)}>Excel-dən import</Button>
+          <Button variant="outline" onClick={() => setPriceList(true)}>Qiymət siyahısı</Button>
           <Button variant="outline" onClick={() => setBulk(true)}>Qiymətləri dəyiş</Button>
           <Button variant="outline" onClick={() => setLabelsFor("all")}>Barkodları çap et</Button>
           <Link href="/anbar/qebul" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Mal qəbulu</Link>
@@ -140,6 +143,7 @@ export default function InventoryPage() {
       {stockOf && <StockModal product={stockOf} onClose={() => setStockOf(null)} onSaved={(m) => { setStockOf(null); setNotice(m); load(); }} />}
       {historyOf && <HistoryModal product={historyOf} onClose={() => setHistoryOf(null)} />}
       {labelsFor && <LabelModal product={labelsFor === "all" ? null : labelsFor} onClose={() => setLabelsFor(null)} />}
+      {priceList && <PriceListModal onClose={() => setPriceList(false)} onDone={(m) => { setPriceList(false); setNotice(m); load(); }} />}
       {importing && <ImportModal onClose={() => setImporting(false)} onDone={(m) => { setImporting(false); setNotice(m); load(); }} />}
       {confirmDialog}
     </>

@@ -239,6 +239,53 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   /// Excel import: pick a file, send it, show what was created / updated or the wrong rows.
+  /// Tədarükçünün qiymət siyahısı: preview the purchase price changes of the supplier's Excel file, then apply.
+  Future<void> _priceList() async {
+    final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['xlsx', 'xls']);
+    if (picked.isEmpty || !mounted) return;
+    final file = picked.first;
+    try {
+      final bytes = await file.readAsBytes();
+      Future<Map<String, dynamic>> send(bool apply) async => await widget.session.api.upload(
+          '/api/products/price-list', 'file', bytes, file.name, _xlsx,
+          fields: {'apply': '$apply', 'keepMargin': 'true'}) as Map<String, dynamic>;
+      final r = await send(false);
+      if (!mounted) return;
+      final lines = (r['lines'] as List).cast<Map<String, dynamic>>().where((l) => l['status'] == 'CHANGED').toList();
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Qiymət siyahısı'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(shrinkWrap: true, children: [
+              Text('${r['changed']} dəyişir · ${r['same']} eynidir · ${r['notFound']} tapılmadı',
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+              const Text('Satış qiyməti də eyni faizlə dəyişəcək.', style: TextStyle(fontSize: 12)),
+              const Divider(),
+              for (final l in lines)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Text('${l['productName']}: ${formatMoney(_n(l['oldPrice']))} → ${formatMoney(_n(l['newPrice']))}'),
+                ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Bağla')),
+            if (lines.isNotEmpty) FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text('${lines.length} qiyməti yenilə')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      final done = await send(true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${done['changed']} məhsulun qiyməti yeniləndi')));
+      _reload();
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
   Future<void> _import() async {
     final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['xlsx', 'xls']);
     if (picked.isEmpty || !mounted) return;
@@ -348,6 +395,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 ? Navigator.of(context).push(MaterialPageRoute(builder: (_) => ExpiryScreen(session: widget.session)))
                 : v == 'idle'
                 ? Navigator.of(context).push(MaterialPageRoute(builder: (_) => IdleGoodsScreen(session: widget.session)))
+                : v == 'pricelist'
+                ? _priceList()
                 : v == 'bulk'
                 ? _bulkPrice()
                 : v == 'labels'
@@ -361,6 +410,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               PopupMenuItem(value: 'reorder', child: ListTile(leading: Icon(Icons.local_shipping_outlined), title: Text('Sifariş siyahısı'))),
               PopupMenuItem(value: 'expiry', child: ListTile(leading: Icon(Icons.event_busy_outlined), title: Text('Son istifadə tarixi'))),
               PopupMenuItem(value: 'idle', child: ListTile(leading: Icon(Icons.hourglass_bottom), title: Text('Yatmış mallar'))),
+              PopupMenuItem(value: 'pricelist', child: ListTile(leading: Icon(Icons.request_quote_outlined), title: Text('Tədarükçü qiymət siyahısı'))),
               PopupMenuItem(value: 'bulk', child: ListTile(leading: Icon(Icons.price_change_outlined), title: Text('Qiymətləri toplu dəyiş'))),
               PopupMenuItem(value: 'pdf', child: ListTile(leading: Icon(Icons.picture_as_pdf_outlined), title: Text('Bütün məhsullar — PDF'))),
               PopupMenuItem(value: 'xlsx', child: ListTile(leading: Icon(Icons.table_chart_outlined), title: Text('Bütün məhsullar — Excel'))),

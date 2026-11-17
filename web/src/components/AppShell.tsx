@@ -105,6 +105,60 @@ function AdminNav({ pending, onExport, exporting, limited }: { pending: number; 
   );
 }
 
+/** Top bar of the Windows kassa: store, live clock, internet state, cashier and sign-out. */
+function KioskHeader({ store, name, role, onSignOut }: { store: string; name: string; role: string; onSignOut: () => void }) {
+  const [now, setNow] = useState(() => new Date());
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    const on = () => setOnline(true), off = () => setOnline(false);
+    setOnline(navigator.onLine);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => { clearInterval(t); window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+  // written out by hand: many Windows / Chromium builds have no Azerbaijani date names
+  const WEEKDAYS = ["Bazar", "Bazar ertəsi", "Çərşənbə axşamı", "Çərşənbə", "Cümə axşamı", "Cümə", "Şənbə"];
+  const MONTHS = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avqust", "sentyabr", "oktyabr", "noyabr", "dekabr"];
+  const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const date = `${WEEKDAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
+  const initials = name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+  return (
+    <header className="relative flex h-16 shrink-0 items-center justify-between gap-4 bg-gradient-to-r from-navy-900 via-navy-800 to-navy-700 px-5 text-white shadow-lg">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white p-1.5 shadow"><Image src="/logo-mark.png" alt="" width={48} height={48} className="h-full w-full object-contain" /></div>
+        <div className="min-w-0">
+          <p className="font-serif text-lg font-semibold leading-tight">HesabPro <span className="text-gold-400">Kassa</span></p>
+          <p className="truncate text-xs text-white/55">{store}</p>
+        </div>
+      </div>
+      <div className="absolute left-1/2 hidden -translate-x-1/2 text-center md:block">
+        <p className="font-serif text-2xl font-semibold tabular-nums leading-none tracking-wide">{time}</p>
+        <p className="mt-1 text-[11px] text-white/55">{date}</p>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className={cx("hidden items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium sm:inline-flex",
+          online ? "bg-emerald-400/15 text-emerald-300" : "bg-rose-500/20 text-rose-200")}>
+          <span className={cx("h-2 w-2 rounded-full", online ? "bg-emerald-400" : "animate-pulse bg-rose-400")} />
+          {online ? "Onlayn" : "İnternet yoxdur — satış yadda saxlanır"}
+        </span>
+        <div className="flex items-center gap-2.5 rounded-xl bg-white/5 py-1 pl-1 pr-3 ring-1 ring-white/10">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gold-500 text-xs font-bold text-navy-900">{initials || "K"}</span>
+          <span className="hidden leading-tight lg:block">
+            <span className="block text-sm font-medium">{name}</span>
+            <span className="block text-[11px] text-white/55">{role}</span>
+          </span>
+        </div>
+        <button onClick={onSignOut} title="Çıxış" aria-label="Çıxış"
+          className="flex h-10 items-center gap-2 rounded-xl border border-white/15 px-3 text-sm text-white/80 transition hover:border-gold-500 hover:text-gold-400">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" /></svg>
+          <span className="hidden sm:inline">Çıxış</span>
+        </button>
+      </div>
+    </header>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { me, can, isLocked, isOwner, isPlatformAdmin: isSuperAdmin, isSupportAdmin, signOut } = useAuth();
   const pathname = usePathname();
@@ -170,20 +224,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const roleLabel = isSupportAdmin ? "Köməkçi admin" : isSuperAdmin ? "Platforma administratoru" : isOwner ? "Mağaza sahibi" : me?.jobTitle ? JOB_TITLE_LABEL[me.jobTitle] : "İşçi";
 
   if (kiosk) {
+    // HesabPro Kassa (Windows): one full-screen till, no page scroll; the till panels scroll inside
     return (
-      <div className="min-h-screen bg-canvas">
-        <header className="flex items-center justify-between gap-3 bg-navy-800 px-5 py-2.5 text-white">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1"><Image src="/logo-mark.png" alt="" width={48} height={48} className="h-full w-full object-contain" /></div>
-            <p className="font-serif text-base font-semibold">HesabPro Kassa</p>
-            <span className="text-xs text-white/50">{me?.storeName}</span>
-          </div>
-          <div className="flex items-center gap-4 text-sm">
-            <span className="text-white/70">{me?.fullName} · {roleLabel}</span>
-            <button onClick={signOut} className="rounded-lg border border-white/20 px-3 py-1 text-xs text-white/80 hover:border-gold-500 hover:text-gold-400">Çıxış</button>
-          </div>
-        </header>
-        <main className="p-4">{pathname === "/satis" ? children : null}</main>
+      <div className="flex h-screen flex-col overflow-hidden bg-[#EEF1F7]">
+        <KioskHeader store={me?.storeName ?? ""} name={me?.fullName ?? ""} role={roleLabel} onSignOut={signOut} />
+        <main className="min-h-0 flex-1 p-3 [&>*]:h-full">{pathname === "/satis" ? children : null}</main>
       </div>
     );
   }

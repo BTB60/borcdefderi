@@ -14,6 +14,27 @@ const num = (s: string) => (s.trim() === "" ? 0 : Number(s.replace(",", ".")));
 /** Satış: the point-of-sale terminal and the sales list with receipt, returns and cancel. */
 export default function SalesPage() {
   const [tab, setTab] = useState<"new" | "list" | "shifts">("new");
+  // the Windows kassa app: one screen, the till fills it
+  const [kiosk, setKiosk] = useState(false);
+  useEffect(() => setKiosk(!!window.hesabDesktop), []);
+  if (kiosk) {
+    return (
+      <div className="flex h-full flex-col gap-3">
+        <div className="flex shrink-0 flex-wrap items-center gap-3">
+          <div className="inline-flex rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200" role="tablist">
+            {([["new", "Kassa"], ["list", "Satışlar"], ["shifts", "Növbələr"]] as const).map(([k, l]) => (
+              <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+                className={`rounded-lg px-5 py-2 text-sm font-semibold transition ${tab === k ? "bg-navy-800 text-white shadow" : "text-slate-600 hover:text-navy-800"}`}>{l}</button>
+            ))}
+          </div>
+          <div className="min-w-0 flex-1 [&>div]:mb-0">{tab === "new" && <ShiftBar />}</div>
+        </div>
+        <div className="min-h-0 flex-1">
+          {tab === "new" ? <PosTerminal fill /> : <div className="h-full overflow-y-auto pr-1">{tab === "list" ? <SalesList /> : <ShiftList />}</div>}
+        </div>
+      </div>
+    );
+  }
   return (
     <>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">

@@ -114,7 +114,7 @@ function Kbd({ children }: { children: ReactNode }) {
  * Point-of-sale terminal: product catalogue (search, barcode, categories) on the left,
  * the receipt with customer, discount and payment (cash given → change, card, mixed, credit) on the right.
  */
-export function PosTerminal({ onSold }: { onSold?: () => void }) {
+export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /** fill the parent's height (Windows kassa) */ fill?: boolean }) {
   const [products, setProducts] = useState<Product[] | null>(null);
   const [customers, setCustomers] = useState<Party[]>([]);
   const [search, setSearch] = useState("");
@@ -451,9 +451,9 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
   }, [customers, customerQuery]);
 
   return (
-    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+    <div className={fill ? "grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_440px] lg:grid-rows-[minmax(0,1fr)]" : "grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]"}>
       {/* ---------------- catalogue ---------------- */}
-      <section className="min-w-0 rounded-2xl bg-white p-4 shadow-card ring-1 ring-slate-200/70 sm:p-5">
+      <section className={cx("min-w-0 rounded-2xl bg-white p-4 shadow-card ring-1 ring-slate-200/70 sm:p-5", fill && "flex min-h-0 flex-col")}>
         <form onSubmit={onSearchEnter} className="relative">
           <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path d="M3 5v14M7 5v14M11 5v14M14 5v14M18 5v14M21 5v14" /></svg>
           <input
@@ -479,7 +479,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
           </div>
         )}
 
-        <div className="mt-4">
+        <div className={fill ? "-mr-2 mt-4 min-h-0 flex-1 overflow-y-auto pr-2" : "mt-4"}>
           {!products ? (
             <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-44 animate-pulse rounded-2xl bg-slate-100" />)}</div>
           ) : visible.length === 0 ? (
@@ -520,7 +520,8 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
       </section>
 
       {/* ---------------- receipt ---------------- */}
-      <aside className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-slate-200/70 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)]">
+      <aside className={cx("flex flex-col overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-slate-200/70",
+        fill ? "min-h-0 lg:h-full" : "xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)]")}>
         <header className="flex items-center justify-between bg-navy-800 px-5 py-3.5 text-white">
           <div>
             <p className="font-serif text-lg font-semibold">Çek</p>

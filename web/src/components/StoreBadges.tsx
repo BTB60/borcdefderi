@@ -6,6 +6,8 @@ import { Modal } from "@/components/ui";
 /** Android app download (the latest signed APK) and iPhone install (the web app added to the Home Screen from Safari,
  * until the App Store version is published). */
 export const ANDROID_APK_URL = "https://github.com/BTB60/borcdefderi/releases/download/mobile-latest/HesabPro.apk";
+/** HesabPro Kassa for Windows (the till app): always the newest Setup. */
+export const WINDOWS_SETUP_URL = "https://github.com/BTB60/borcdefderi/releases/download/desktop-latest/HesabPro-Kassa-Setup.exe";
 const APK_RELEASE_API = "https://api.github.com/repos/BTB60/borcdefderi/releases/tags/mobile-latest";
 const APK_INFO_KEY = "hp_apk_release";
 
@@ -49,6 +51,37 @@ function AppleIcon() {
     <svg viewBox="0 0 24 28" className="h-7 w-7 shrink-0" fill="currentColor" aria-hidden>
       <path d="M19.7 14.9c0-3.3 2.7-4.9 2.8-5-1.5-2.2-3.9-2.5-4.7-2.6-2-.2-3.9 1.2-4.9 1.2-1 0-2.6-1.2-4.2-1.1-2.2 0-4.2 1.3-5.3 3.2-2.3 3.9-.6 9.7 1.6 12.9 1.1 1.6 2.4 3.3 4.1 3.2 1.6-.1 2.3-1 4.2-1 2 0 2.5 1 4.2 1 1.8 0 2.9-1.6 3.9-3.2 1.2-1.8 1.7-3.6 1.8-3.7-.1 0-3.4-1.3-3.5-5.2ZM16.5 5.2c.9-1.1 1.5-2.6 1.3-4.1-1.3.1-2.9.9-3.8 2-.8.9-1.6 2.5-1.4 4 1.5.1 3-.8 3.9-1.9Z" />
     </svg>
+  );
+}
+
+function WindowsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-7 w-7 shrink-0" aria-hidden>
+      <path d="M1 3.5 10 2.3v8.9H1V3.5Z" fill="#F25022" />
+      <path d="M11 2.1 23 .5v10.7H11V2.1Z" fill="#7FBA00" />
+      <path d="M1 12.4h9v8.9L1 20.1v-7.7Z" fill="#00A4EF" />
+      <path d="M11 12.4h12v10.7l-12-1.6v-9.1Z" fill="#FFB900" />
+    </svg>
+  );
+}
+
+/** After the Setup download starts: how to get past the Windows warning, and the Edge option. */
+function WindowsInstallModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const step = "flex gap-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700";
+  const num = "flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-navy-800 text-xs font-semibold text-white";
+  return (
+    <Modal open={open} onClose={onClose} title="HesabPro Kassa — Windows">
+      <div className="space-y-3">
+        <p className="text-sm text-slate-600">Yükləmə başladı. Kassa proqramı: tam ekran satış, internetsiz satış, çek printeri, pul qutusu, avtomatik yeniləmə.</p>
+        <div className={step}><span className={num}>1</span><span>Yüklənən <b>HesabPro-Kassa-Setup.exe</b> faylını açın.</span></div>
+        <div className={step}><span className={num}>2</span><span>Mavi <b>“Windows protected your PC”</b> pəncərəsi çıxsa: <b>More info → Run anyway</b>.</span></div>
+        <div className={step}><span className={num}>3</span><span>Masaüstündə <b>HesabPro Kassa</b> açılır — mağaza e-poçtu və şifrəsi ilə daxil olun.</span></div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Windows faylı ümumiyyətlə açmırsa (<b>Smart App Control</b>), proqramı <b>Microsoft Edge</b> ilə qurun:
+          bu saytı Edge-də açın → ünvan sətrində <b>“Tətbiqi quraşdır”</b> ikonu (və ya ⋯ → Tətbiqlər → Bu saytı tətbiq kimi quraşdır).
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -129,6 +162,7 @@ export function StoreBadges({ className = "" }: { className?: string }) {
   const apk = useLatestApk();
   const { platform, installed, safari } = usePlatform();
   const [iosHelp, setIosHelp] = useState(false);
+  const [winHelp, setWinHelp] = useState(false);
   const d = apk?.date ? new Date(apk.date) : null;
   const built = d ? `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}` : null;
   // already opened from the Home Screen icon: nothing to install
@@ -159,11 +193,23 @@ export function StoreBadges({ className = "" }: { className?: string }) {
       </span>
     </button>
   );
+  const windowsBadge = (
+    <a href={WINDOWS_SETUP_URL} onClick={() => setWinHelp(true)} className={`${badge} hover:border-white/50 hover:bg-black`} title="Windows üçün kassa proqramını yüklə">
+      <WindowsIcon />
+      <span className="leading-tight">
+        <span className="block text-[10px] uppercase tracking-wider text-white/70">Windows üçün yüklə</span>
+        <span className="block text-lg font-semibold">Kassa proqramı</span>
+      </span>
+    </a>
+  );
   return (
     <div className={`flex flex-wrap items-end gap-3 ${className}`}>
-      {/* the button for the phone in hand comes first; on a computer both are shown */}
-      {platform === "ios" ? <>{iosBadge}{androidBadge}</> : <>{androidBadge}{iosBadge}</>}
+      {/* the button for the device in hand comes first; on a computer the Windows till leads */}
+      {platform === "ios" ? <>{iosBadge}{androidBadge}{windowsBadge}</>
+        : platform === "android" ? <>{androidBadge}{iosBadge}{windowsBadge}</>
+          : <>{windowsBadge}{androidBadge}{iosBadge}</>}
       <IosInstallModal open={iosHelp} onClose={() => setIosHelp(false)} platform={platform} safari={safari} />
+      <WindowsInstallModal open={winHelp} onClose={() => setWinHelp(false)} />
     </div>
   );
 }

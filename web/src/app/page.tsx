@@ -159,8 +159,8 @@ export default function Home() {
 
       <section className="mx-auto grid max-w-6xl gap-10 px-4 py-16 md:grid-cols-2 md:py-20">
         <div className="rounded-3xl bg-navy-800 p-8 text-white">
-          <h2 className="font-serif text-2xl font-semibold">Telefonda da yanınızda</h2>
-          <p className="mt-2 text-white/70">Android tətbiqi ilə kamera ilə barkod oxudun, satış edin, borclara baxın. İnternet kəsiləndə də satış davam edir.</p>
+          <h2 className="font-serif text-2xl font-semibold">Telefonda və kompüterdə yanınızda</h2>
+          <p className="mt-2 text-white/70">Windows kassa proqramı ilə tam ekran satış, çek printeri və pul qutusu; telefon tətbiqi ilə kamera ilə barkod oxudun, satış edin, borclara baxın. İnternet kəsiləndə də satış davam edir.</p>
           <StoreBadges className="mt-6" />
         </div>
         <div>

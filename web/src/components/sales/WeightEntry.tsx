@@ -30,7 +30,8 @@ export function WeightEntry({ product, price, current, onDone, onClose }: {
   const reading = useScale();
   // changing a line keeps its weight until "Tərəzidən götür"
   const typed = useRef(!!current);
-  const scaleGrams = reading && !reading.error && reading.kg != null && reading.kg > 0 ? Math.round(reading.kg * 1000) : null;
+  // only a settled weight goes in, so a quick Enter never takes a swinging one
+  const scaleGrams = reading && !reading.error && reading.stable && reading.kg != null && reading.kg > 0 ? Math.round(reading.kg * 1000) : null;
   useEffect(() => {
     if (scaleGrams != null && !typed.current) {
       setMode("g");

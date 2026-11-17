@@ -816,8 +816,23 @@ class _StockSheetState extends State<_StockSheet> {
     }
   }
 
+  /// The latest copy of the product (prices / version may have changed in another sheet or by a receipt).
+  Future<void> _refreshProduct() async {
+    try {
+      final fresh = await widget.session.api.get('/api/products/${_product['id']}') as Map<String, dynamic>;
+      if (mounted) setState(() => _product = fresh);
+    } catch (_) {}
+  }
+
+  Future<void> _printLabels() async {
+    await showLabelPrintSheet(context, widget.session, product: _product);
+    await _refreshProduct(); // the price / discount can be changed in the label sheet
+  }
+
   /// Name, barcode, unit, minimum stock and all prices (Top 1 / Top 2 / alış) of this product.
   Future<void> _editProduct() async {
+    await _refreshProduct();
+    if (!mounted) return;
     final msg = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -829,10 +844,7 @@ class _StockSheetState extends State<_StockSheet> {
       ),
     );
     if (msg == null || !mounted) return;
-    try {
-      final fresh = await widget.session.api.get('/api/products/${_product['id']}') as Map<String, dynamic>;
-      if (mounted) setState(() => _product = fresh);
-    } catch (_) {}
+    await _refreshProduct();
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
@@ -849,7 +861,7 @@ class _StockSheetState extends State<_StockSheet> {
             label: Text(_product['hasImage'] == true ? 'Şəkli dəyiş' : 'Şəkil əlavə et'),
           ),
           TextButton.icon(
-            onPressed: () => showLabelPrintSheet(context, widget.session, product: _product),
+            onPressed: _printLabels,
             icon: const Icon(Icons.print_outlined),
             label: const Text('Barkod çap et'),
           ),

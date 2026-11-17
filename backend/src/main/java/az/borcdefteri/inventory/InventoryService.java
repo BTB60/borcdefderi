@@ -292,7 +292,7 @@ public class InventoryService {
         if (!s.contentType().startsWith("image/")) {
             throw ApiException.badRequest("INVALID_FILE_TYPE", "Yalnız PNG və ya JPG şəkil");
         }
-        jdbc.sql("UPDATE products SET image = :i, image_type = :t, version = version + 1 WHERE id = :id AND store_id = :s")
+        jdbc.sql("UPDATE products SET image = :i, image_type = :t WHERE id = :id AND store_id = :s")
                 .param("i", s.content()).param("t", s.contentType()).param("id", id).param("s", m.storeId()).update();
         return load(m.storeId(), id);
     }

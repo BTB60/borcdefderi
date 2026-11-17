@@ -153,6 +153,7 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
     wholesalePrice: product?.wholesalePrice != null ? String(product.wholesalePrice) : "",
   });
   const [newCat, setNewCat] = useState("");
+  const [version, setVersion] = useState(product?.version);
   const [image, setImage] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -178,7 +179,7 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
     setErrors({});
     const body = {
       ...form, code: form.code || null, barcode: form.barcode || null, categoryId: form.categoryId || null, supplierId: form.supplierId || null,
-      initialStock: product ? null : form.initialStock || null, version: product?.version,
+      initialStock: product ? null : form.initialStock || null, version,
       oldPrice: form.oldPrice ? form.oldPrice : (product?.oldPrice ? "0" : null),
       wholesalePrice: form.wholesalePrice ? form.wholesalePrice : (product?.wholesalePrice != null ? "0" : null),
     };
@@ -193,7 +194,16 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
       }
       onSaved(product ? "Məhsul yeniləndi" : `Məhsul əlavə edildi: ${saved.code}`);
     } catch (err) {
-      if (err instanceof ApiError) { setError(err.message); setErrors(err.fields ?? {}); } else setError("Saxlanmadı");
+      if (err instanceof ApiError && err.code === "VERSION_CONFLICT" && product) {
+        // changed elsewhere meanwhile (a goods receipt, a price change): take the latest version and keep the form
+        try {
+          const fresh = await api<Product>(`/api/products/${product.id}`);
+          setVersion(fresh.version);
+          setError("Məhsul bu arada başqa yerdə dəyişib (məs. mal qəbulu). Son məlumat yükləndi — yazdıqlarınızı yoxlayıb yenidən “Saxla” basın.");
+        } catch {
+          setError(err.message);
+        }
+      } else if (err instanceof ApiError) { setError(err.message); setErrors(err.fields ?? {}); } else setError("Saxlanmadı");
     } finally {
       setBusy(false);
     }

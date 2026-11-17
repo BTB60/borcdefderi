@@ -29,7 +29,14 @@ Future<void> showLabelPrintSheet(BuildContext context, Session session, {Map<Str
 double _num(Object? v) => (v as num?)?.toDouble() ?? 0;
 
 /// Dialog for the sale price and the price before a discount; saves the product and returns it (null = cancelled).
-Future<Map<String, dynamic>?> editProductPrice(BuildContext context, Session session, Map<String, dynamic> p) async {
+Future<Map<String, dynamic>?> editProductPrice(BuildContext context, Session session, Map<String, dynamic> product) async {
+  // always start from the latest copy: the product may have changed since this screen was opened
+  // (another price change, a goods receipt), and an old copy is refused as "changed by another user"
+  var p = product;
+  try {
+    p = await session.api.get('/api/products/${product['id']}') as Map<String, dynamic>;
+  } catch (_) {}
+  if (!context.mounted) return null;
   final sale = TextEditingController(text: _num(p['salePrice']).toStringAsFixed(2));
   final old = TextEditingController(text: p['oldPrice'] == null ? '' : _num(p['oldPrice']).toStringAsFixed(2));
   final ok = await showDialog<bool>(

@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { desktop, receiptSettings, saveReceiptSettings, type UpdateStatus } from "@/lib/desktop";
 import type { Product } from "@/lib/types";
 import { SetPinModal } from "@/components/sales/SetPin";
+import { ReceiptDesigner } from "@/components/sales/ReceiptDesigner";
 import { TillLabelsModal } from "@/components/sales/TillLabels";
 import { lockMinutes, setLockMinutes } from "@/components/sales/TillLock";
 
@@ -116,21 +117,13 @@ export function TillSettings() {
         <Row title="Printer" hint="Satış çeki və Z-hesabat buraya çıxır">
           <Select value={printer} onChange={(e) => { setPrinter(e.target.value); void app?.setPrinter(e.target.value || null); }} className="w-56">{printerOptions}</Select>
         </Row>
-        <Row title="Çek eni">
-          <Select value={paper} onChange={(e) => { const v = e.target.value as "80" | "58"; setPaper(v); saveReceiptSettings({ paper: v }); }} className="w-56">
-            <option value="80">80 mm (geniş)</option>
-            <option value="58">58 mm (dar)</option>
-          </Select>
-        </Row>
-        <Row title="Çekin sonundakı yazı">
-          <input value={footer} maxLength={120} onChange={(e) => { setFooter(e.target.value); saveReceiptSettings({ footer: e.target.value }); }}
-            placeholder="Təşəkkür edirik!" className="w-56 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-gold-500" />
-        </Row>
         <Row title="Satışdan sonra çeki avtomatik çap et">
           <Toggle label="Avtomatik çap" on={autoPrint} onChange={(v) => { setAutoPrint(v); store(AUTO_PRINT_KEY, String(v)); }} />
         </Row>
         <Row title="Printeri yoxla"><Button variant="outline" onClick={() => void testReceipt()}>Sınaq çeki çap et</Button></Row>
       </Section>
+
+      <ReceiptDesigner />
 
       <Section icon="🏷" title="Etiket printeri">
         <Row title="Printer" hint="Barkod etiketləri birbaşa bu printerə gedir">

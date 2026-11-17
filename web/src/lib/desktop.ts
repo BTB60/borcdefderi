@@ -55,50 +55,82 @@ export function isNetworkError(e: unknown): boolean {
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
-/** 80 mm receipt as HTML (the desktop app prints it silently). */
-/** Receipt paper: 80 mm (default) or 58 mm, and the line printed at the bottom of every receipt. */
-export type ReceiptSettings = { paper: "80" | "58"; footer: string };
+/** Çek dizaynı: everything the store can choose about its receipt (kept on this computer). */
+export type ReceiptSettings = {
+  paper: "80" | "58";
+  footer: string;
+  /** Extra lines under the store name: phone, address, VÖEN, Instagram… */
+  header: string;
+  /** Small picture on top (data URL), or null. */
+  logo: string | null;
+  fontSize: "s" | "m" | "l";
+  align: "center" | "left";
+  showCashier: boolean;
+  showCustomer: boolean;
+  showStoreName: boolean;
+  boldTotal: boolean;
+};
+
+const DESIGN_KEY = "hp_receipt_design";
+const DEFAULTS: ReceiptSettings = {
+  paper: "80", footer: "Təşəkkür edirik!", header: "", logo: null, fontSize: "m", align: "center",
+  showCashier: true, showCustomer: true, showStoreName: true, boldTotal: true,
+};
 
 export function receiptSettings(): ReceiptSettings {
   try {
+    const saved = JSON.parse(localStorage.getItem(DESIGN_KEY) ?? "null") as Partial<ReceiptSettings> | null;
+    // older keys (before the designer) still count
     const paper = localStorage.getItem("hp_paper") === "58" ? "58" : "80";
-    return { paper, footer: localStorage.getItem("hp_receipt_footer") ?? "Təşəkkür edirik!" };
+    const footer = localStorage.getItem("hp_receipt_footer");
+    return { ...DEFAULTS, paper, ...(footer !== null ? { footer } : {}), ...(saved ?? {}) };
   } catch {
-    return { paper: "80", footer: "Təşəkkür edirik!" };
+    return DEFAULTS;
   }
 }
 
 export function saveReceiptSettings(s: Partial<ReceiptSettings>) {
   try {
+    const next = { ...receiptSettings(), ...s };
+    localStorage.setItem(DESIGN_KEY, JSON.stringify(next));
     if (s.paper) localStorage.setItem("hp_paper", s.paper);
     if (s.footer !== undefined) localStorage.setItem("hp_receipt_footer", s.footer);
-  } catch { /* ignore */ }
+  } catch { /* storage full (big logo) or blocked */ }
 }
 
-/** Page CSS for the chosen paper width. */
-export function paperCss(): string {
-  const { paper } = receiptSettings();
-  return paper === "58"
-    ? "@page { size: 58mm auto; margin: 0 } body { width: 50mm; margin: 0 auto; padding: 3mm 0; font: 10.5px/1.3 'Segoe UI', Arial, sans-serif; color: #000 }"
-    : "@page { size: 80mm auto; margin: 0 } body { width: 72mm; margin: 0 auto; padding: 4mm 0; font: 12px/1.35 'Segoe UI', Arial, sans-serif; color: #000 }";
+/** Page CSS for the chosen paper width and text size. */
+export function paperCss(d: ReceiptSettings = receiptSettings()): string {
+  const base = d.paper === "58" ? { s: 9.5, m: 10.5, l: 12 } : { s: 11, m: 12, l: 13.5 };
+  const size = base[d.fontSize] ?? base.m;
+  return d.paper === "58"
+    ? `@page { size: 58mm auto; margin: 0 } body { width: 50mm; margin: 0 auto; padding: 3mm 0; font: ${size}px/1.3 'Segoe UI', Arial, sans-serif; color: #000 }`
+    : `@page { size: 80mm auto; margin: 0 } body { width: 72mm; margin: 0 auto; padding: 4mm 0; font: ${size}px/1.35 'Segoe UI', Arial, sans-serif; color: #000 }`;
 }
 
-export function receiptHtml(sale: Sale, store: { name: string | null }, opts: { change?: number; offline?: boolean } = {}): string {
+/** A sale receipt as HTML in the store's design (the desktop app prints it silently). */
+export function receiptHtml(sale: Sale, store: { name: string | null }, opts: { change?: number; offline?: boolean; design?: ReceiptSettings } = {}): string {
+  const d = opts.design ?? receiptSettings();
   const rows = sale.items.map((i) => `
     <tr><td colspan="2">${esc(i.name)}</td></tr>
     <tr><td class="m">${Number(i.quantity)} × ${formatMoney(i.unitPrice)}${i.discount > 0 ? ` −${formatMoney(i.discount)}` : ""}</td>
         <td class="r">${formatMoney(i.lineTotal)}</td></tr>`).join("");
   const line = (label: string, v: number, cls = "") => `<tr class="${cls}"><td>${label}</td><td class="r">${formatMoney(v)}</td></tr>`;
   const when = new Date(sale.createdAt || Date.now()).toLocaleString("az-AZ");
+  const head = d.header.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `<div class="h m">${esc(l)}</div>`).join("");
+  const who = [d.showCashier && sale.createdByName ? `Kassir: ${esc(sale.createdByName)}` : "", d.showCustomer && sale.customerName ? `Müştəri: ${esc(sale.customerName)}` : ""].filter(Boolean);
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-    ${paperCss()}
-    h1 { font-size: 16px; text-align: center; margin: 0 0 2px } .c { text-align: center } .m { color: #333 }
+    ${paperCss(d)}
+    h1 { font-size: 1.35em; margin: 0 0 2px } .h, h1, .logo { text-align: ${d.align} } .c { text-align: center } .m { color: #333 }
+    .logo img { max-width: 60%; max-height: 22mm; object-fit: contain; filter: grayscale(1) contrast(1.4) }
     table { width: 100%; border-collapse: collapse } td { padding: 1px 0; vertical-align: top } .r { text-align: right; white-space: nowrap }
-    hr { border: 0; border-top: 1px dashed #000; margin: 6px 0 } .big td { font-size: 15px; font-weight: 700 }
+    hr { border: 0; border-top: 1px dashed #000; margin: 6px 0 } .big td { font-size: 1.25em; ${d.boldTotal ? "font-weight: 800" : "font-weight: 600"} }
   </style></head><body>
-    <h1>${esc(store.name ?? "HesabPro")}</h1>
+    ${d.logo ? `<div class="logo"><img src="${d.logo}" alt=""></div>` : ""}
+    ${d.showStoreName ? `<h1>${esc(store.name ?? "HesabPro")}</h1>` : ""}
+    ${head}
     <div class="c">${sale.priceLevel === "WHOLESALE" ? "Topdan satış çeki" : "Satış çeki"} ${esc(sale.number)}</div>
-    <div class="c m">${esc(when)}${sale.customerName ? ` · ${esc(sale.customerName)}` : ""}</div>
+    <div class="c m">${esc(when)}</div>
+    ${who.length ? `<div class="c m">${who.join(" · ")}</div>` : ""}
     ${opts.offline ? '<div class="c"><b>İnternetsiz satış — sonra göndəriləcək</b></div>' : ""}
     <hr><table>${rows}</table><hr>
     <table>
@@ -109,6 +141,6 @@ export function receiptHtml(sale: Sale, store: { name: string | null }, opts: { 
       ${sale.creditAmount > 0 ? line("Borca", sale.creditAmount) : ""}
       ${opts.change && opts.change > 0 ? line("Qaytarılan", opts.change) : ""}
     </table>
-    <hr>${receiptSettings().footer.trim() ? `<div class="c">${esc(receiptSettings().footer.trim())}</div>` : ""}<div class="c m">HesabPro</div>
+    <hr>${d.footer.trim() ? d.footer.trim().split("\n").map((l) => `<div class="c">${esc(l)}</div>`).join("") : ""}<div class="c m">HesabPro</div>
   </body></html>`;
 }

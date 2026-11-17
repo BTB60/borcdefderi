@@ -111,6 +111,15 @@ async function printReceipt(saleId: string) {
 
 const AUTO_PRINT_KEY = "pos_auto_print";
 
+/** Gözlədilən çek: a receipt put aside (the customer went for money) — kept on this computer. */
+type Parked = {
+  id: string; at: string; total: number; by: string;
+  cart: Line[]; customer: Party | null; level: "RETAIL" | "WHOLESALE"; discount: string; percent: boolean; note: string;
+};
+const PARKED_KEY = "hp_parked";
+const readParked = (): Parked[] => { try { return JSON.parse(localStorage.getItem(PARKED_KEY) ?? "[]") as Parked[]; } catch { return []; } };
+const writeParked = (list: Parked[]) => { try { localStorage.setItem(PARKED_KEY, JSON.stringify(list)); } catch { /* storage full or blocked */ } };
+
 function Kbd({ children }: { children: ReactNode }) {
   return <kbd className="rounded border border-slate-300 bg-white px-1.5 py-0.5 font-sans text-[10px] font-semibold text-slate-500 shadow-sm">{children}</kbd>;
 }
@@ -366,6 +375,36 @@ Təşəkkür edirik!`;
   const needsCustomer = credit > 0.004 && !customer;
   const canSell = !busy && cart.length > 0 && !over && !needsCustomer && !stockProblem && total >= 0;
 
+  // Çeki gözlət: put the receipt aside, serve the next customer, open it again later (F3)
+  const [parked, setParked] = useState<Parked[]>([]);
+  useEffect(() => { setParked(readParked()); }, []);
+  const saveParked = (list: Parked[]) => { setParked(list); writeParked(list); };
+  const parkCurrent = (list: Parked[]): Parked[] => (cart.length === 0 ? list : [...list, {
+    id: crypto.randomUUID(), at: new Date().toISOString(), total, by: me?.fullName ?? "",
+    cart, customer, level, discount, percent, note,
+  }]);
+  const park = () => {
+    if (cart.length === 0) return;
+    saveParked(parkCurrent(parked));
+    reset();
+    setTimeout(() => searchRef.current?.focus(), 0);
+  };
+  const unpark = (id: string) => {
+    const p = parked.find((x) => x.id === id);
+    if (!p) return;
+    // the receipt on screen is put aside in its place, so nothing is lost
+    const rest = parkCurrent(parked.filter((x) => x.id !== id));
+    reset();
+    // fresh stock and prices of the goods, the cashier's own price / discount stay
+    const fresh = new Map((products ?? []).map((x) => [x.id, x]));
+    setCart(p.cart.map((l) => ({ ...l, product: fresh.get(l.product.id) ?? l.product })));
+    setCustomer(p.customer); setLevel(p.level); setDiscount(p.discount); setPercent(p.percent); setNote(p.note); setShowNote(!!p.note);
+    saveParked(rest);
+  };
+  const dropParked = (id: string) => {
+    if (window.confirm("Gözləyən çek silinsin?")) saveParked(parked.filter((x) => x.id !== id));
+  };
+
   const reset = () => {
     setCart([]); setDiscount(""); setBonusInput(""); setLevel("RETAIL"); setPercent(false); setGiven(""); setCash(""); setCard(""); setNote(""); setShowNote(false);
     setCustomer(null); setCustomerQuery(""); setMode("cash"); setEditing(null); setError(null); setRequestId(crypto.randomUUID());
@@ -452,6 +491,8 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
   submitRef.current = submit;
   const resetRef = useRef(reset);
   resetRef.current = reset;
+  const parkRef = useRef(park);
+  parkRef.current = park;
   const payRef = useRef({ payOpen, hasCart: cart.length > 0, done: !!done, search });
   payRef.current = { payOpen, hasCart: cart.length > 0, done: !!done, search };
   useEffect(() => {
@@ -481,6 +522,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
       }
       if (e.key === "F1") { e.preventDefault(); setShowKeys((v) => !v); }
       else if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); }
+      else if (e.key === "F3") { e.preventDefault(); if (!st.payOpen) parkRef.current(); }
       else if (e.key === "F4") { e.preventDefault(); if (!st.payOpen) openPay("card"); }
       else if (e.key === "F6") { e.preventDefault(); discountRef.current?.focus(); discountRef.current?.select(); }
       else if (e.key === "F7") { e.preventDefault(); customerRef.current?.focus(); }
@@ -538,7 +580,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
         </button>
         {showKeys && (
           <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-xl bg-slate-50 p-3 text-xs text-slate-600 ring-1 ring-slate-200 sm:grid-cols-4">
-            {([["Boşluq", "Ödəniş / sat"], ["F2", "Axtarış"], ["F4", "Kartla ödə"], ["F6", "Endirim"], ["F7", "Müştəri seç"], ["F8", "Çeki təmizlə"], ["Esc", "Axtarışı sil"], ["F1", "Bu siyahı"]] as const).map(([k, l]) => (
+            {([["Boşluq", "Ödəniş / sat"], ["F2", "Axtarış"], ["F3", "Çeki gözlət"], ["F4", "Kartla ödə"], ["F6", "Endirim"], ["F7", "Müştəri seç"], ["F8", "Çeki təmizlə"], ["Esc", "Axtarışı sil"], ["F1", "Bu siyahı"]] as const).map(([k, l]) => (
               <span key={k} className="flex items-center gap-2"><Kbd>{k}</Kbd>{l}</span>
             ))}
           </div>
@@ -613,9 +655,28 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
                 </button>
               ))}
             </div>
+            {cart.length > 0 && (
+              <button type="button" onClick={park} title="Çeki gözlət (F3) — müştəri qayıdanda yenidən açın"
+                className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-semibold text-white hover:bg-white/20">⏸ Gözlət</button>
+            )}
             {cart.length > 0 && <button type="button" onClick={reset} className="rounded-lg px-2.5 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white">Təmizlə</button>}
           </div>
         </header>
+        {parked.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto border-b border-amber-200 bg-amber-50 px-4 py-2">
+            <span className="shrink-0 self-center text-xs font-semibold text-amber-800">⏸ Gözləyən:</span>
+            {parked.map((p, i) => (
+              <span key={p.id} className="flex shrink-0 items-center overflow-hidden rounded-lg bg-white text-xs ring-1 ring-amber-300">
+                <button type="button" onClick={() => unpark(p.id)} title={`Aç — ${p.cart.length} məhsul${p.by ? ` · ${p.by}` : ""}`}
+                  className="px-2.5 py-1.5 text-left font-medium text-navy-800 hover:bg-amber-100">
+                  #{i + 1} · {new Date(p.at).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })} · <b>{formatMoney(p.total)}</b>
+                  {p.customer && <span className="text-slate-500"> · {p.customer.name}</span>}
+                </button>
+                <button type="button" onClick={() => dropParked(p.id)} aria-label="Gözləyən çeki sil" className="px-1.5 py-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600">×</button>
+              </span>
+            ))}
+          </div>
+        )}
         {level === "WHOLESALE" && (
           <p className="bg-gold-500/15 px-5 py-1.5 text-xs font-semibold text-gold-600">Topdan satış — Top 1 qiymətləri ilə</p>
         )}

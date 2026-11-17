@@ -5,6 +5,7 @@ import '../format.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import '../whatsapp.dart';
+import 'admin_notes.dart';
 import 'common.dart';
 
 double _num(Object? v) => (v as num?)?.toDouble() ?? 0;
@@ -98,6 +99,7 @@ class _AdminOverviewScreenState extends State<AdminOverviewScreen> {
                   ],
                 ),
                 const SizedBox(height: 10),
+                AdminFollowUpsCard(session: widget.session),
                 Row(children: [
                   for (final k in [
                     ('Az qalıb', s['expiring'], Colors.orange.shade800, 3),
@@ -383,6 +385,8 @@ class _AdminStoresScreenState extends State<AdminStoresScreen> {
                                   ),
                                   if (s['idle'] == true)
                                     Text('Ödəyir, amma istifadə etmir', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.red.shade700)),
+                                  if ((s['tags'] as List?)?.isNotEmpty ?? false)
+                                    Text((s['tags'] as List).join(' · '), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.amber.shade900)),
                                   if (s['onTrial'] == true)
                                     Text('Pulsuz sınaqda', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.blue.shade700)),
                                 ]),
@@ -686,12 +690,13 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
     final status = card?['status'] ?? _store['status'];
     final active = _store['activePlan'] != null;
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Scaffold(
         appBar: AppBar(
           title: Text('${_store['name']}'),
           bottom: const TabBar(isScrollable: true, tabs: [
             Tab(text: 'Ümumi'),
+            Tab(text: 'Qeydlər'),
             Tab(text: 'Abunəlik'),
             Tab(text: 'Əməliyyatlar'),
             Tab(text: 'Fəaliyyət'),
@@ -740,6 +745,8 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : TabBarView(children: [
                     _infoTab(card),
+                    AdminNotesTab(session: widget.session, storeId: _id,
+                        tags: ((_store['tags'] as List?) ?? const []).cast<String>()),
                     _subsTab(active),
                     _opsTab(),
                     _logTab(),

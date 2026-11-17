@@ -11,6 +11,8 @@ import { SetPinModal } from "@/components/sales/SetPin";
 import { TillLabelsModal } from "@/components/sales/TillLabels";
 import { lockMinutes, setLockMinutes } from "@/components/sales/TillLock";
 import type { Party, Product, Sale } from "@/lib/types";
+import { WeightEntry } from "@/components/sales/WeightEntry";
+import { isWeighed, qtyWithUnit, unitKind } from "@/lib/units";
 
 const PRODUCTS_CACHE = "pos_cache_products";
 const CUSTOMERS_CACHE = "pos_cache_customers";
@@ -124,6 +126,8 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
   const [category, setCategory] = useState("");
   const [cart, setCart] = useState<Line[]>([]);
   const [editing, setEditing] = useState<string | null>(null);
+  // çəki ilə satılan mal (kq / qram): the weight window; `line` = changing a line already in the receipt
+  const [weigh, setWeigh] = useState<{ product: Product; line?: boolean } | null>(null);
   const [customer, setCustomer] = useState<Party | null>(null);
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
@@ -257,6 +261,12 @@ Təşəkkür edirik!`;
     setError(null);
   }, [level, priceOf]);
 
+  /** A tap or a scan: goods sold by weight ask for the weight, the rest go in one by one. */
+  const pick = useCallback((p: Product) => {
+    if (isWeighed(p.unit)) setWeigh({ product: p });
+    else add(p);
+  }, [add]);
+
   // Onlayn sifariş → kassa: /satis?order=<id> puts the order's goods into the receipt; the sale closes the order
   const orderRef = useRef<{ id: string; number: string } | null>(null);
   useEffect(() => {
@@ -293,20 +303,20 @@ Təşəkkür edirik!`;
     const q = search.trim();
     if (!q) return;
     const exact = (products ?? []).find((p) => p.barcode === q || p.code.toLowerCase() === q.toLowerCase());
-    if (exact) { add(exact); setSearch(""); return; }
+    if (exact) { pick(exact); setSearch(""); return; }
     // scale label (tərəzi barkodu): 2X PPPPP WWWWW C — product code (PLU) and weight in grams
     const weighed = /^2\d(\d{5})(\d{5})\d$/.exec(q);
     if (weighed) {
       const plu = weighed[1];
       const p = (products ?? []).find((x) => x.code === plu || x.barcode === plu || x.code.replace(/\D/g, "").replace(/^0+/, "") === plu.replace(/^0+/, ""));
       const kg = Number(weighed[2]) / 1000;
-      if (p && kg > 0) { add(p, kg); setSearch(""); return; }
+      if (p && kg > 0) { add(p, unitKind(p.unit) === "g" ? kg * 1000 : kg); setSearch(""); return; }
     }
     try {
-      add(await api<Product>(`/api/products/by-code/${encodeURIComponent(q)}`));
+      pick(await api<Product>(`/api/products/by-code/${encodeURIComponent(q)}`));
       setSearch("");
     } catch {
-      if (visible.length === 1) { add(visible[0]); setSearch(""); }
+      if (visible.length === 1) { pick(visible[0]); setSearch(""); }
       else setError(`“${q}” tapılmadı`);
     }
   }
@@ -318,7 +328,8 @@ Təşəkkür edirik!`;
   const bonusAvailable = customer?.bonusBalance ?? 0;
   const bonusAmount = r2(Math.max(0, Math.min(num(bonusInput), bonusAvailable, subtotal - discountAmount)));
   const total = r2(Math.max(0, subtotal - discountAmount - bonusAmount));
-  const itemCount = lines.reduce((s, l) => s + num(l.quantity), 0);
+  // pieces only: 1,25 kq of tomatoes is one item, not 1,25
+  const itemCount = lines.reduce((s, l) => s + (isWeighed(l.product.unit) ? 1 : num(l.quantity)), 0);
 
   // Müştəri ekranı: a second window (second monitor) shows the customer what is being rung up
   useEffect(() => {
@@ -392,7 +403,7 @@ Təşəkkür edirik!`;
           returnedAmount: 0, costTotal: 0, debtId: null, soldOn: "", note: note || null, createdByName: me?.fullName ?? "",
           createdAt: new Date().toISOString(), returns: [], createdBy: null, priceLevel: level,
           items: lines.map((l) => ({ id: l.product.id, productId: l.product.id, name: l.product.name, quantity: num(l.quantity),
-            unitPrice: num(l.price), discount: num(l.discount), lineTotal: l.total, unitCost: 0, returnedQty: 0 })),
+            unitPrice: num(l.price), discount: num(l.discount), lineTotal: l.total, unitCost: 0, returnedQty: 0, unit: l.product.unit })),
         };
         // the stock on this computer goes down too, so the next offline sale sees it
         const left = (cached<Product[]>(PRODUCTS_CACHE) ?? []).map((p) => {
@@ -555,7 +566,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
                 const line = inCart(p.id);
                 const out = p.stockQty <= 0;
                 return (
-                  <button key={p.id} type="button" disabled={out} onClick={() => add(p)}
+                  <button key={p.id} type="button" disabled={out} onClick={() => pick(p)}
                     className={cx(
                       "group relative flex flex-col overflow-hidden rounded-2xl border bg-white text-left transition-all duration-150",
                       out ? "cursor-not-allowed border-slate-200 opacity-50" : "border-slate-200 hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-card active:scale-[0.98]",
@@ -590,7 +601,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
         <header className="flex items-center justify-between bg-navy-800 px-5 py-3.5 text-white">
           <div>
             <p className="font-serif text-lg font-semibold">Çek</p>
-            <p className="text-xs text-white/60">{cart.length === 0 ? "Səbət boşdur" : `${cart.length} məhsul · ${qtyText(itemCount)} ədəd`}</p>
+            <p className="text-xs text-white/60">{cart.length === 0 ? "Səbət boşdur" : `${cart.length} məhsul${itemCount > 0 ? ` · ${qtyText(itemCount)} ədəd` : ""}`}</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="inline-flex rounded-lg bg-white/10 p-0.5" role="group" aria-label="Qiymət növü">
@@ -661,24 +672,35 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
               {lines.map((l) => {
                 const id = l.product.id;
                 const short = num(l.quantity) > l.product.stockQty;
+                const weighed = isWeighed(l.product.unit);
                 return (
                   <li key={id} className="px-2 py-2.5">
                     <div className="flex items-start gap-3">
                       <button type="button" onClick={() => setEditing(editing === id ? null : id)} className="min-w-0 flex-1 text-left">
                         <p className="truncate text-sm font-medium text-navy-800">{l.product.name}</p>
                         <p className="text-xs text-slate-500">
-                          {formatMoney(num(l.price))} × {l.quantity || 0}
+                          {weighed ? `${formatMoney(num(l.price))} / ${unitKind(l.product.unit) === "g" ? "q" : "kq"} × ${qtyWithUnit(num(l.quantity), l.product.unit)}` : `${formatMoney(num(l.price))} × ${l.quantity || 0}`}
                           {num(l.discount) > 0 && <span className="text-rose-600"> · −{formatMoney(num(l.discount))}</span>}
-                          {short && <span className="text-rose-600"> · anbarda {qtyText(l.product.stockQty)}</span>}
+                          {short && <span className="text-rose-600"> · anbarda {weighed ? qtyWithUnit(l.product.stockQty, l.product.unit) : qtyText(l.product.stockQty)}</span>}
                         </p>
                       </button>
                       <span className="pt-0.5 text-sm font-semibold tabular-nums text-navy-800">{formatMoney(l.total)}</span>
                     </div>
                     <div className="mt-1.5 flex items-center gap-1.5">
-                      <button type="button" onClick={() => setQty(id, num(l.quantity) - 1)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-lg leading-none text-slate-600 hover:border-gold-500" aria-label="Azalt">−</button>
-                      <input value={l.quantity} onChange={(e) => patch(id, { quantity: e.target.value })} inputMode="decimal" aria-label="Miqdar"
-                        className="h-8 w-14 rounded-lg border border-slate-200 text-center text-sm font-semibold tabular-nums outline-none focus:border-gold-500" />
-                      <button type="button" onClick={() => setQty(id, num(l.quantity) + 1)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-lg leading-none text-slate-600 hover:border-gold-500" aria-label="Artır">+</button>
+                      {weighed ? (
+                        <button type="button" onClick={() => setWeigh({ product: l.product, line: true })}
+                          className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-semibold tabular-nums text-navy-800 hover:border-gold-500" aria-label="Çəkini dəyiş">
+                          ⚖ {qtyWithUnit(num(l.quantity), l.product.unit)}
+                        </button>
+                      ) : (
+                        <>
+                          <button type="button" onClick={() => setQty(id, num(l.quantity) - 1)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-lg leading-none text-slate-600 hover:border-gold-500" aria-label="Azalt">−</button>
+                          <input value={l.quantity} aria-label="Miqdar" inputMode={unitKind(l.product.unit) === "piece" ? "numeric" : "decimal"}
+                            onChange={(e) => patch(id, { quantity: unitKind(l.product.unit) === "piece" ? e.target.value.replace(/\D/g, "") : e.target.value })}
+                            className="h-8 w-14 rounded-lg border border-slate-200 text-center text-sm font-semibold tabular-nums outline-none focus:border-gold-500" />
+                          <button type="button" onClick={() => setQty(id, num(l.quantity) + 1)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-lg leading-none text-slate-600 hover:border-gold-500" aria-label="Artır">+</button>
+                        </>
+                      )}
                       <button type="button" onClick={() => setEditing(editing === id ? null : id)} className="ml-1 rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100">Qiymət / endirim</button>
                       <button type="button" onClick={() => setQty(id, 0)} className="ml-auto rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Sil">
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3" /></svg>
@@ -1020,6 +1042,19 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             )}
           </div>
         </Modal>
+      )}
+
+      {weigh && (
+        <WeightEntry product={weigh.product}
+          price={num(inCart(weigh.product.id)?.price ?? String(priceOf(weigh.product, level)))}
+          current={weigh.line ? num(inCart(weigh.product.id)?.quantity ?? "0") : undefined}
+          onClose={() => { setWeigh(null); searchRef.current?.focus(); }}
+          onDone={(q) => {
+            if (weigh.line) setQty(weigh.product.id, q);
+            else add(weigh.product, q);
+            setWeigh(null);
+            searchRef.current?.focus();
+          }} />
       )}
     </div>
   );

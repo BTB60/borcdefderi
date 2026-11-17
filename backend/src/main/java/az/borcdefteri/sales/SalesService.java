@@ -84,7 +84,7 @@ public class SalesService {
     public record CancelRequest(UUID refundAccountId, @jakarta.validation.constraints.Size(max = 500) String reason) {}
 
     public record Item(UUID id, UUID productId, String name, BigDecimal quantity, BigDecimal unitPrice, BigDecimal discount,
-                       BigDecimal lineTotal, BigDecimal unitCost, BigDecimal returnedQty) {}
+                       BigDecimal lineTotal, BigDecimal unitCost, BigDecimal returnedQty, String unit) {}
 
     public record ReturnView(UUID id, BigDecimal amount, BigDecimal debtReduced, BigDecimal refunded, LocalDate returnedOn,
                              String reason, String createdByName, OffsetDateTime createdAt) {}
@@ -375,11 +375,14 @@ public class SalesService {
 
     Sale load(UUID storeId, UUID id) {
         List<Item> items = jdbc.sql("""
-                SELECT id, product_id, name, quantity, unit_price, discount, line_total, unit_cost, returned_qty
-                FROM sale_items WHERE sale_id = :id AND store_id = :s ORDER BY name""").param("id", id).param("s", storeId)
+                SELECT si.id, si.product_id, si.name, si.quantity, si.unit_price, si.discount, si.line_total, si.unit_cost,
+                       si.returned_qty, COALESCE(p.unit, 'ədəd') AS unit
+                FROM sale_items si LEFT JOIN products p ON p.id = si.product_id
+                WHERE si.sale_id = :id AND si.store_id = :s ORDER BY si.name""").param("id", id).param("s", storeId)
                 .query((rs, n) -> new Item(rs.getObject("id", UUID.class), rs.getObject("product_id", UUID.class), rs.getString("name"),
                         rs.getBigDecimal("quantity"), Money.of(rs.getBigDecimal("unit_price")), Money.of(rs.getBigDecimal("discount")),
-                        Money.of(rs.getBigDecimal("line_total")), Money.of(rs.getBigDecimal("unit_cost")), rs.getBigDecimal("returned_qty")))
+                        Money.of(rs.getBigDecimal("line_total")), Money.of(rs.getBigDecimal("unit_cost")), rs.getBigDecimal("returned_qty"),
+                        rs.getString("unit")))
                 .list();
         List<ReturnView> returns = jdbc.sql("""
                 SELECT r.id, r.amount, r.debt_reduced, r.refunded, r.returned_on, r.reason, u.full_name, r.created_at

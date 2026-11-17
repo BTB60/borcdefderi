@@ -566,7 +566,7 @@ export interface StockCountDetail { count: StockCount; lines: StockCountLine[] }
 
 export interface InventorySummary { productCount: number; activeCount: number; lowStockCount: number; outOfStockCount: number; costValue: number; saleValue: number }
 
-export interface SaleItem { id: string; productId: string; name: string; quantity: number; unitPrice: number; discount: number; lineTotal: number; unitCost: number; returnedQty: number }
+export interface SaleItem { id: string; productId: string; name: string; quantity: number; unitPrice: number; discount: number; lineTotal: number; unitCost: number; returnedQty: number; unit?: string }
 
 export interface Sale {
   id: string; number: string; customerId: string | null; customerName: string | null; customerCode: string | null; status: "COMPLETED" | "CANCELLED";

@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { BulkPriceModal } from "@/components/BulkPriceModal";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import type { InventorySummary, Party, Product, ProductCategory, StockMovement } from "@/lib/types";
+import { UNIT_SUGGESTIONS, isWeighed, unitKind } from "@/lib/units";
 
 const MOVE_LABEL: Record<StockMovement["kind"], string> = {
   RECEIPT: "Anbara giriş", ISSUE: "Anbardan çıxış", SALE: "Satış", SALE_RETURN: "Satış qaytarıldı", ADJUSTMENT: "Düzəliş", COUNT: "Sayım",
@@ -241,7 +242,10 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
             <option value="">—</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </Select>
         </Field>
-        <Field label="Ölçü vahidi"><Input maxLength={20} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="ədəd, kq, litr" /></Field>
+        <Field label="Ölçü vahidi" hint={isWeighed(form.unit) ? "Kassada çəki qram və ya kq ilə yazılır; qiymət 1 " + (unitKind(form.unit) === "g" ? "qram" : "kq") + " üçündür" : "ədəd — tam say; kq / qram — çəki ilə satış"}>
+          <Input maxLength={20} list="unit-options" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="ədəd, kq, qram, litr" />
+          <datalist id="unit-options">{UNIT_SUGGESTIONS.map((u) => <option key={u} value={u} />)}</datalist>
+        </Field>
         <Field label="Alış qiyməti (₼)"><Input required type="number" min="0" step="0.01" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} /></Field>
         <Field label="Top 1 — topdan qiyməti (₼)" hint="Boş = topdan satışda da pərakəndə qiymət"><Input type="number" min="0" step="0.01" value={form.wholesalePrice} onChange={(e) => setForm({ ...form, wholesalePrice: e.target.value })} /></Field>
         <Field label="Top 2 — pərakəndə satış qiyməti (₼)" hint="Kassa həmişə bu qiymətlə satır"><Input required type="number" min="0" step="0.01" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} /></Field>

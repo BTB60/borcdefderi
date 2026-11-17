@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
 import { PosTerminal } from "@/components/sales/PosTerminal";
+import { qtyWithUnit } from "@/lib/units";
 import { TillSettings } from "@/components/sales/TillSettings";
 import { DayEndModal } from "@/components/sales/DayEnd";
 import { ShiftBar, ShiftList } from "@/components/sales/Shift";
@@ -162,7 +163,7 @@ function SaleModal({ sale, onClose, onChanged }: { sale: Sale; onClose: () => vo
           {sale.items.map((i) => (
             <tr key={i.id}>
               <Td>{i.name}{i.returnedQty > 0 && <div className="text-xs text-rose-600">qaytarılıb {i.returnedQty}</div>}</Td>
-              <Td className="text-right tabular-nums">{i.quantity}</Td>
+              <Td className="text-right tabular-nums">{qtyWithUnit(Number(i.quantity), i.unit)}</Td>
               <Td className="text-right tabular-nums">{formatMoney(i.unitPrice)}</Td>
               <Td className="text-right tabular-nums">{formatMoney(i.lineTotal)}</Td>
               {active && <Td>{i.quantity - i.returnedQty > 0 ? <Input type="number" min="0" max={i.quantity - i.returnedQty} step="0.001" className="w-24" value={ret[i.id] ?? ""} onChange={(e) => setRet({ ...ret, [i.id]: e.target.value })} aria-label="Qaytarılan miqdar" /> : "—"}</Td>}

@@ -3,6 +3,7 @@
  * helper here falls back to normal web behaviour.
  */
 import type { Sale } from "./types";
+import { qtyWithUnit, unitKind } from "@/lib/units";
 import { formatMoney } from "./format";
 
 export interface DesktopBridge {
@@ -112,7 +113,7 @@ export function receiptHtml(sale: Sale, store: { name: string | null }, opts: { 
   const d = opts.design ?? receiptSettings();
   const rows = sale.items.map((i) => `
     <tr><td colspan="2">${esc(i.name)}</td></tr>
-    <tr><td class="m">${Number(i.quantity)} × ${formatMoney(i.unitPrice)}${i.discount > 0 ? ` −${formatMoney(i.discount)}` : ""}</td>
+    <tr><td class="m">${unitKind(i.unit) === "piece" ? Number(i.quantity) : esc(qtyWithUnit(Number(i.quantity), i.unit))} × ${formatMoney(i.unitPrice)}${i.discount > 0 ? ` −${formatMoney(i.discount)}` : ""}</td>
         <td class="r">${formatMoney(i.lineTotal)}</td></tr>`).join("");
   const line = (label: string, v: number, cls = "") => `<tr class="${cls}"><td>${label}</td><td class="r">${formatMoney(v)}</td></tr>`;
   const when = new Date(sale.createdAt || Date.now()).toLocaleString("az-AZ");

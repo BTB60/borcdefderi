@@ -85,6 +85,29 @@ async function siteHandler(request) {
   }
 }
 
+// ---------- daily backup of the sales not sent yet ----------
+// Documents\HesabPro Kassa\ehtiyat\satislar-YYYY-MM-DD.json (last 30 days), so nothing is lost if this
+// computer's app data is damaged before the internet comes back.
+
+function backupQueue() {
+  try {
+    const items = queue();
+    const dir = path.join(app.getPath("documents"), "HesabPro Kassa", "ehtiyat");
+    fs.mkdirSync(dir, { recursive: true });
+    if (items.length > 0) {
+      const day = new Date().toISOString().slice(0, 10);
+      // the sign-in token stays out of the backup file
+      const sales = items.map(({ token: _t, ...rest }) => rest);
+      writeJson(path.join(dir, `satislar-${day}.json`), { savedAt: new Date().toISOString(), count: sales.length, sales });
+    }
+    const cutoff = Date.now() - 30 * 86_400_000;
+    for (const f of fs.readdirSync(dir)) {
+      const full = path.join(dir, f);
+      if (f.startsWith("satislar-") && fs.statSync(full).mtimeMs < cutoff) fs.rmSync(full, { force: true });
+    }
+  } catch { /* backup is best effort */ }
+}
+
 // ---------- cash drawer ----------
 // Most receipt printers open the drawer plugged into them on the ESC/POS "pulse" command. Windows has no raw
 // print API in Electron, so a tiny PowerShell script sends the bytes to the printer through winspool.
@@ -227,14 +250,16 @@ async function sync() {
 
 // ---------- printing ----------
 
-async function printHtml(html) {
-  const printer = settings().printer || "";
+/** Prints HTML silently: receipts to the receipt printer; labels to the label printer at the label's size. */
+async function printHtml(html, opts = {}) {
+  const printer = opts.printer ?? (settings().printer || "");
   const pw = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
   try {
     await pw.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
     return await new Promise((resolve) => {
       pw.webContents.print(
-        { silent: true, deviceName: printer, printBackground: true, margins: { marginType: "none" } },
+        { silent: true, deviceName: printer, printBackground: true, margins: { marginType: "none" },
+          ...(opts.pageSize ? { pageSize: opts.pageSize } : {}) },
         (ok, reason) => {
           if (!ok) console.error("print failed:", reason);
           resolve(ok);
@@ -331,6 +356,13 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle("get-drawer-auto", () => !!settings().drawerAuto);
   ipcMain.handle("set-drawer-auto", (_e, on) => { saveSettings({ drawerAuto: !!on }); return !!on; });
   ipcMain.handle("open-customer-display", () => openCustomerDisplay());
+  ipcMain.handle("get-label-printer", () => settings().labelPrinter || null);
+  ipcMain.handle("set-label-printer", (_e, name) => saveSettings({ labelPrinter: name || null }));
+  ipcMain.handle("print-labels", (_e, job) => {
+    const w = Math.round(Number(job?.widthMm) * 1000), h = Math.round(Number(job?.heightMm) * 1000);
+    if (!(w > 0 && h > 0)) return false;
+    return printHtml(String(job.html), { printer: settings().labelPrinter || "", pageSize: { width: w, height: h } });
+  });
   ipcMain.handle("install-update", () => {
     if (updateStatus.state === "ready" && updater) {
       // closes the app, installs the new version quietly and opens it again
@@ -349,6 +381,8 @@ if (!app.requestSingleInstanceLock()) {
       saveSettings({ autoStartSet: true });
     }
     setInterval(sync, 30_000);
+    setTimeout(backupQueue, 60_000);
+    setInterval(backupQueue, 60 * 60 * 1000);
     setTimeout(sync, 5_000);
     // the Microsoft Store version is updated by the Store itself
     if (!process.windowsStore) startUpdater();

@@ -30,4 +30,13 @@ class PinTest extends IntegrationTestBase {
         activateSubscription(other, "MONTHLY");
         post(other, "/api/till/pin-switch", Map.of("pin", "4321")).andExpect(status().isBadRequest());
     }
+
+    @Test
+    void barcodePicturesForLabelPrinters() throws Exception {
+        byte[] png = get(null, "/api/public/barcode.png?text=4760000000011").andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(png[1]).isEqualTo((byte) 'P');
+        get(null, "/api/public/barcode.png?text=P-000123").andExpect(status().isOk());
+        get(null, "/api/public/barcode.png?text=<script>").andExpect(status().isBadRequest());
+    }
 }

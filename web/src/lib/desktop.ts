@@ -30,6 +30,10 @@ export interface DesktopBridge {
   setDrawerAuto?(on: boolean): Promise<boolean>;
   /** Customer display window, full screen on the second monitor when there is one. */
   openCustomerDisplay?(): Promise<boolean>;
+  /** Label printer (barcode labels go straight to it, one page per label). */
+  getLabelPrinter?(): Promise<string | null>;
+  setLabelPrinter?(name: string | null): Promise<void>;
+  printLabels?(job: { html: string; widthMm: number; heightMm: number }): Promise<boolean>;
 }
 
 export type UpdateStatus = { state: "idle" | "downloading" | "ready"; version: string | null; percent: number };
@@ -52,6 +56,33 @@ export function isNetworkError(e: unknown): boolean {
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 /** 80 mm receipt as HTML (the desktop app prints it silently). */
+/** Receipt paper: 80 mm (default) or 58 mm, and the line printed at the bottom of every receipt. */
+export type ReceiptSettings = { paper: "80" | "58"; footer: string };
+
+export function receiptSettings(): ReceiptSettings {
+  try {
+    const paper = localStorage.getItem("hp_paper") === "58" ? "58" : "80";
+    return { paper, footer: localStorage.getItem("hp_receipt_footer") ?? "Təşəkkür edirik!" };
+  } catch {
+    return { paper: "80", footer: "Təşəkkür edirik!" };
+  }
+}
+
+export function saveReceiptSettings(s: Partial<ReceiptSettings>) {
+  try {
+    if (s.paper) localStorage.setItem("hp_paper", s.paper);
+    if (s.footer !== undefined) localStorage.setItem("hp_receipt_footer", s.footer);
+  } catch { /* ignore */ }
+}
+
+/** Page CSS for the chosen paper width. */
+export function paperCss(): string {
+  const { paper } = receiptSettings();
+  return paper === "58"
+    ? "@page { size: 58mm auto; margin: 0 } body { width: 50mm; margin: 0 auto; padding: 3mm 0; font: 10.5px/1.3 'Segoe UI', Arial, sans-serif; color: #000 }"
+    : "@page { size: 80mm auto; margin: 0 } body { width: 72mm; margin: 0 auto; padding: 4mm 0; font: 12px/1.35 'Segoe UI', Arial, sans-serif; color: #000 }";
+}
+
 export function receiptHtml(sale: Sale, store: { name: string | null }, opts: { change?: number; offline?: boolean } = {}): string {
   const rows = sale.items.map((i) => `
     <tr><td colspan="2">${esc(i.name)}</td></tr>
@@ -60,8 +91,7 @@ export function receiptHtml(sale: Sale, store: { name: string | null }, opts: { 
   const line = (label: string, v: number, cls = "") => `<tr class="${cls}"><td>${label}</td><td class="r">${formatMoney(v)}</td></tr>`;
   const when = new Date(sale.createdAt || Date.now()).toLocaleString("az-AZ");
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-    @page { size: 80mm auto; margin: 0 }
-    body { width: 72mm; margin: 0 auto; padding: 4mm 0; font: 12px/1.35 "Segoe UI", Arial, sans-serif; color: #000 }
+    ${paperCss()}
     h1 { font-size: 16px; text-align: center; margin: 0 0 2px } .c { text-align: center } .m { color: #333 }
     table { width: 100%; border-collapse: collapse } td { padding: 1px 0; vertical-align: top } .r { text-align: right; white-space: nowrap }
     hr { border: 0; border-top: 1px dashed #000; margin: 6px 0 } .big td { font-size: 15px; font-weight: 700 }
@@ -79,6 +109,6 @@ export function receiptHtml(sale: Sale, store: { name: string | null }, opts: { 
       ${sale.creditAmount > 0 ? line("Borca", sale.creditAmount) : ""}
       ${opts.change && opts.change > 0 ? line("Qaytarılan", opts.change) : ""}
     </table>
-    <hr><div class="c">Təşəkkür edirik!</div><div class="c m">HesabPro</div>
+    <hr>${receiptSettings().footer.trim() ? `<div class="c">${esc(receiptSettings().footer.trim())}</div>` : ""}<div class="c m">HesabPro</div>
   </body></html>`;
 }

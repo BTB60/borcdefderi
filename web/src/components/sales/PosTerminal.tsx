@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { Alert, Button, Modal, cx } from "@/components/ui";
 import { API_URL, ApiError, api, getToken, openProtected } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { desktop, isNetworkError, receiptHtml } from "@/lib/desktop";
+import { desktop, isNetworkError, receiptHtml, receiptSettings, saveReceiptSettings } from "@/lib/desktop";
 import { formatMoney } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
 import { SetPinModal } from "@/components/sales/SetPin";
+import { TillLabelsModal } from "@/components/sales/TillLabels";
 import { lockMinutes, setLockMinutes } from "@/components/sales/TillLock";
 import type { Party, Product, Sale } from "@/lib/types";
 
@@ -158,6 +159,14 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
   const discountRef = useRef<HTMLInputElement>(null);
   const [showKeys, setShowKeys] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
+  const [labelsOpen, setLabelsOpen] = useState(false);
+  const [paper, setPaper] = useState<"80" | "58">("80");
+  const [footer, setFooter] = useState("Təşəkkür edirik!");
+  useEffect(() => { const r = receiptSettings(); setPaper(r.paper); setFooter(r.footer); }, []);
+  // Toxunma ekranı rejimi: bigger product tiles and an on-screen number pad for touch-screen tills
+  const [touch, setTouch] = useState(false);
+  useEffect(() => { try { setTouch(localStorage.getItem("hp_touch") === "1"); } catch { /* ignore */ } }, []);
+  const toggleTouch = (on: boolean) => { setTouch(on); try { localStorage.setItem("hp_touch", on ? "1" : "0"); } catch { /* ignore */ } };
   const [lockMin, setLockMin] = useState(5);
   useEffect(() => { setLockMin(lockMinutes()); }, []);
   // Windows kassa extras (only when the app supports them)
@@ -404,7 +413,7 @@ Təşəkkür edirik!`;
         api(`/api/online-orders/${orderRef.current.id}/status`, { method: "POST", json: { status: "DONE", saleId: s.id } }).catch(() => undefined);
         orderRef.current = null;
       }
-      api<Party[]>("/api/customers").then(setCustomers).catch(() => undefined); // fresh bonus balances
+      api<Party[]>("/api/customers").then((l) => setCustomers(cached(CUSTOMERS_CACHE, l) ?? [])).catch(() => undefined); // fresh bonus balances
       setPayOpen(false);
       if (autoPrint) printSale(s, change);
       reset();
@@ -536,11 +545,11 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
 
         <div className={fill ? "-mr-2 mt-4 min-h-0 flex-1 overflow-y-auto pr-2" : "mt-4"}>
           {!products ? (
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-44 animate-pulse rounded-2xl bg-slate-100" />)}</div>
+            <div className={`grid gap-3 ${touch ? "[grid-template-columns:repeat(auto-fill,minmax(190px,1fr))]" : "[grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]"}`}>{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-44 animate-pulse rounded-2xl bg-slate-100" />)}</div>
           ) : visible.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 py-14 text-center text-sm text-slate-500">Məhsul tapılmadı</div>
           ) : (
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
+            <div className={cx("grid gap-3", touch ? "[grid-template-columns:repeat(auto-fill,minmax(190px,1fr))]" : "[grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]")}>
               {visible.map((p) => {
                 const line = inCart(p.id);
                 const out = p.stockQty <= 0;
@@ -551,7 +560,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
                       out ? "cursor-not-allowed border-slate-200 opacity-50" : "border-slate-200 hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-card active:scale-[0.98]",
                       flash === p.id && "ring-2 ring-gold-500",
                     )}>
-                    <Thumb product={p} className="h-24 w-full text-2xl" />
+                    <Thumb product={p} className={cx("w-full text-2xl", touch ? "h-32" : "h-24")} />
                     {line && <span className="absolute right-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-gold-500 px-2 text-xs font-bold text-navy-900 shadow">{qtyText(num(line.quantity))}</span>}
                     {p.oldPrice && p.oldPrice > p.salePrice && <span className="absolute left-2 top-2 rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">Endirim</span>}
                     <div className="flex flex-1 flex-col p-3">
@@ -810,6 +819,19 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             </div>
           )}
           {app && (
+            <div className="grid grid-cols-[auto_1fr] items-center gap-2 text-xs text-slate-600">
+              <label htmlFor="pos-paper">Çek eni</label>
+              <select id="pos-paper" value={paper} onChange={(e) => { const v = e.target.value as "80" | "58"; setPaper(v); saveReceiptSettings({ paper: v }); }}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs outline-none focus:border-gold-500">
+                <option value="80">80 mm (geniş)</option>
+                <option value="58">58 mm (dar)</option>
+              </select>
+              <label htmlFor="pos-footer">Çekin sonu</label>
+              <input id="pos-footer" value={footer} maxLength={120} onChange={(e) => { setFooter(e.target.value); saveReceiptSettings({ footer: e.target.value }); }}
+                placeholder="Təşəkkür edirik!" className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs outline-none focus:border-gold-500" />
+            </div>
+          )}
+          {app && (
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
               <button type="button" onClick={() => setPinOpen(true)} className="font-medium text-navy-800 hover:underline">🔑 Kassa PIN-im</button>
               <label className="flex items-center gap-1.5">
@@ -826,6 +848,14 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             </div>
           )}
           {pinOpen && <SetPinModal onClose={() => setPinOpen(false)} />}
+          {app?.printLabels && (
+            <button type="button" onClick={() => setLabelsOpen(true)} className="text-left text-xs font-medium text-slate-500 hover:text-navy-800">🏷 Etiket çap et (etiket printerinə)</button>
+          )}
+          {labelsOpen && <TillLabelsModal products={products ?? []} onClose={() => setLabelsOpen(false)} />}
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+            <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={touch} onChange={(e) => toggleTouch(e.target.checked)} />
+            Sensor ekran rejimi (böyük düymələr, rəqəm klaviaturası)
+          </label>
           {app?.setAutoStart && autoStart !== null && (
             <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
               <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={autoStart}
@@ -903,6 +933,19 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
                     </button>
                   ))}
                 </div>
+                {touch && (
+                  <div className="mt-3 grid grid-cols-4 gap-2">
+                    {["7", "8", "9", "⌫", "4", "5", "6", "C", "1", "2", "3", ".", "0", "00"].map((k) => (
+                      <button key={k} type="button" tabIndex={-1}
+                        onClick={() => setGiven((g) => (k === "⌫" ? g.slice(0, -1) : k === "C" ? "" : k === "." ? (g.includes(".") ? g : (g || "0") + ".") : (g + k).replace(/^0+(?=\d)/, "")))}
+                        className={cx("h-14 rounded-xl text-xl font-semibold transition active:scale-95",
+                          k === "C" ? "bg-rose-50 text-rose-700" : k === "⌫" ? "bg-slate-100 text-slate-600" : "bg-white text-navy-800 ring-1 ring-slate-200 hover:ring-gold-500",
+                          k === "0" && "col-span-2")}>
+                        {k}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className={cx("mt-4 flex items-center justify-between rounded-2xl px-5 py-3 ring-1", change > 0 ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-slate-50 text-slate-500 ring-slate-200")}>
                   <span className="text-sm font-medium">Qaytarılacaq pul</span>
                   <span className="font-serif text-3xl font-semibold tabular-nums">{formatMoney(change)}</span>

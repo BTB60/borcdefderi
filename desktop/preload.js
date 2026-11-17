@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld("hesabDesktop", {
   getDrawerAuto: () => ipcRenderer.invoke("get-drawer-auto"),
   setDrawerAuto: (on) => ipcRenderer.invoke("set-drawer-auto", on),
   openCustomerDisplay: () => ipcRenderer.invoke("open-customer-display"),
+  getLabelPrinter: () => ipcRenderer.invoke("get-label-printer"),
+  setLabelPrinter: (name) => ipcRenderer.invoke("set-label-printer", name),
+  printLabels: (job) => ipcRenderer.invoke("print-labels", job),
   installUpdate: () => ipcRenderer.invoke("install-update"),
   onUpdate: (cb) => {
     const listener = (_e, status) => cb(status);

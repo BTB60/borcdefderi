@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, Spinner, Table, Td, Th } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { desktop } from "@/lib/desktop";
+import { desktop, paperCss } from "@/lib/desktop";
 import { formatDateTime, formatMoney } from "@/lib/format";
 
 export type ShiftReport = {
@@ -28,7 +28,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 export function zReportHtml(r: ShiftReport, storeName: string | null): string {
   const row = (l: string, v: number | null, b = false) => v == null ? "" : `<tr${b ? ' class="b"' : ""}><td>${esc(l)}</td><td class="r">${formatMoney(v)}</td></tr>`;
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-    @page { size: 80mm auto; margin: 0 } body { width: 72mm; margin: 0 auto; padding: 4mm 0; font: 12px/1.35 "Segoe UI", Arial, sans-serif }
+    ${paperCss()}
     h1 { font-size: 15px; text-align: center; margin: 0 } .c { text-align: center } table { width: 100%; border-collapse: collapse }
     td { padding: 1px 0 } .r { text-align: right } hr { border: 0; border-top: 1px dashed #000; margin: 6px 0 } .b td { font-weight: 700; font-size: 13px }
   </style></head><body>

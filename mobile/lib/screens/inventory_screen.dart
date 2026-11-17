@@ -346,6 +346,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 ? Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReorderScreen(session: widget.session)))
                 : v == 'expiry'
                 ? Navigator.of(context).push(MaterialPageRoute(builder: (_) => ExpiryScreen(session: widget.session)))
+                : v == 'idle'
+                ? Navigator.of(context).push(MaterialPageRoute(builder: (_) => IdleGoodsScreen(session: widget.session)))
                 : v == 'bulk'
                 ? _bulkPrice()
                 : v == 'labels'
@@ -358,6 +360,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'reorder', child: ListTile(leading: Icon(Icons.local_shipping_outlined), title: Text('Sifariş siyahısı'))),
               PopupMenuItem(value: 'expiry', child: ListTile(leading: Icon(Icons.event_busy_outlined), title: Text('Son istifadə tarixi'))),
+              PopupMenuItem(value: 'idle', child: ListTile(leading: Icon(Icons.hourglass_bottom), title: Text('Yatmış mallar'))),
               PopupMenuItem(value: 'bulk', child: ListTile(leading: Icon(Icons.price_change_outlined), title: Text('Qiymətləri toplu dəyiş'))),
               PopupMenuItem(value: 'pdf', child: ListTile(leading: Icon(Icons.picture_as_pdf_outlined), title: Text('Bütün məhsullar — PDF'))),
               PopupMenuItem(value: 'xlsx', child: ListTile(leading: Icon(Icons.table_chart_outlined), title: Text('Bütün məhsullar — Excel'))),

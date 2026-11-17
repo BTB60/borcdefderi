@@ -76,6 +76,7 @@ export default function InventoryPage() {
           <Link href="/anbar/sifaris" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Sifariş siyahısı</Link>
           <Link href="/anbar/sayim" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Sayım</Link>
           <Link href="/anbar/srok" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Son istifadə tarixi</Link>
+          <Link href="/anbar/yatmis" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Yatmış mallar</Link>
           <Button variant="gold" onClick={() => setEditing("new")}>+ Məhsul əlavə et</Button>
         </div> : undefined} />
       {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}

@@ -55,4 +55,23 @@ class ExpiryTest extends IntegrationTestBase {
                 .isEqualTo(today.plusDays(60).toString());
         get(owner, "/api/inventory/expiring?days=400").andExpect(status().isBadRequest());
     }
+
+    @Test
+    void idleGoodsAreListedWithTheMoneyInThem() throws Exception {
+        String owner = register("Yatmış Mağaza");
+        activateSubscription(owner, "MONTHLY");
+        String old = body(post(owner, "/api/products", Map.of("name", "Köhnə çanta", "purchasePrice", "20.00", "salePrice", "35.00", "initialStock", "5"))
+                .andExpect(status().isCreated())).get("id").asText();
+        String hot = body(post(owner, "/api/products", Map.of("name", "Su", "purchasePrice", "0.30", "salePrice", "0.50", "initialStock", "50"))
+                .andExpect(status().isCreated())).get("id").asText();
+        clock.setDate(LocalDate.now(clock).plusDays(25));
+        post(owner, "/api/sales", Map.of("items", List.of(Map.of("productId", hot, "quantity", "2")), "paidCash", "1.00"))
+                .andExpect(status().isCreated());
+
+        JsonNode idle = body(get(owner, "/api/inventory/idle?days=20").andExpect(status().isOk()));
+        assertThat(idle.findValuesAsText("productId")).containsExactly(old);
+        assertThat(idle.get(0).get("costValue").asDouble()).isEqualTo(100.0);
+        assertThat(idle.get(0).get("idleDays").asLong()).isGreaterThanOrEqualTo(25);
+        get(owner, "/api/inventory/idle?days=1").andExpect(status().isBadRequest());
+    }
 }

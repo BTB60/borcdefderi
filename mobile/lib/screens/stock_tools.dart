@@ -322,3 +322,79 @@ class _ExpiryScreenState extends State<ExpiryScreen> {
         ]),
       );
 }
+
+/// Yatmış mallar: goods in stock not sold for 30 / 60 / 90 days, with the money frozen in them.
+class IdleGoodsScreen extends StatefulWidget {
+  const IdleGoodsScreen({super.key, required this.session});
+
+  final Session session;
+
+  @override
+  State<IdleGoodsScreen> createState() => _IdleGoodsScreenState();
+}
+
+class _IdleGoodsScreenState extends State<IdleGoodsScreen> {
+  int _days = 60;
+  late Future<List<Map<String, dynamic>>> _data = _load();
+
+  Future<List<Map<String, dynamic>>> _load() async =>
+      ((await widget.session.api.get('/api/inventory/idle', query: {'days': '$_days'})) as List).cast<Map<String, dynamic>>();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Yatmış mallar')),
+        body: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: SegmentedButton<int>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: 30, label: Text('30+')),
+                ButtonSegment(value: 60, label: Text('60+')),
+                ButtonSegment(value: 90, label: Text('90+')),
+                ButtonSegment(value: 180, label: Text('180+')),
+              ],
+              selected: {_days},
+              onSelectionChanged: (v) => setState(() {
+                _days = v.first;
+                _data = _load();
+              }),
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _data,
+              builder: (context, snap) {
+                if (snap.hasError) return ListView(children: [ErrorBanner(errorMessage(snap.error!))]);
+                if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+                final rows = snap.data!;
+                if (rows.isEmpty) return ListView(children: [EmptyState(title: 'Yatmış mal yoxdur', text: 'Son $_days gündə bütün mallar satılıb.')]);
+                final frozen = rows.fold<double>(0, (a, r) => a + _n(r['costValue']));
+                return ListView(padding: const EdgeInsets.all(12), children: [
+                  Card(
+                    color: Colors.red.shade50,
+                    child: ListTile(
+                      leading: Icon(Icons.savings_outlined, color: Colors.red.shade800),
+                      title: Text('Donmuş pul: ${formatMoney(frozen)}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                      subtitle: Text('${rows.length} məhsul $_days+ gündür satılmır. Endirimə qoyun.'),
+                    ),
+                  ),
+                  for (final r in rows)
+                    Card(
+                      child: ListTile(
+                        title: Text('${r['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: Text('Qalıq ${_q(_n(r['stockQty']))} ${r['unit']} · '
+                            '${r['lastSoldOn'] == null ? 'heç satılmayıb' : 'son satış ${formatDate(DateTime.tryParse('${r['lastSoldOn']}'))}'}'),
+                        trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                          Text(formatMoney(_n(r['costValue'])), style: const TextStyle(fontWeight: FontWeight.w800)),
+                          Text('${r['idleDays']} gün', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                        ]),
+                      ),
+                    ),
+                ]);
+              },
+            ),
+          ),
+        ]),
+      );
+}

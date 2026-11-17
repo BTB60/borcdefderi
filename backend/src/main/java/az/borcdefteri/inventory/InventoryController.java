@@ -25,6 +25,12 @@ public class InventoryController {
     }
 
     /** Son istifadə tarixi: batches on the shelf that expire within {@code days} days (or already have). */
+    /** Yatmış mallar: in stock, not sold for {@code days} days. */
+    @GetMapping("/inventory/idle")
+    public List<ExpiryService.IdleProduct> idle(@RequestParam(defaultValue = "60") int days) {
+        return expiry.idle(days);
+    }
+
     @GetMapping("/inventory/expiring")
     public List<ExpiryService.ExpiringBatch> expiring(@RequestParam(defaultValue = "30") int days) {
         return expiry.expiring(days);

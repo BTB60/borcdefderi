@@ -75,6 +75,43 @@ public class ExpiryService {
                 }).list();
     }
 
+    public record IdleProduct(UUID productId, String name, String code, String unit, BigDecimal stockQty,
+                              LocalDate lastSoldOn, LocalDate lastReceivedOn, long idleDays,
+                              BigDecimal costValue, BigDecimal saleValue) {}
+
+    /**
+     * Yatmış mallar: products in stock that have not been sold for {@code days} days or more (never sold counts from
+     * when the product was added), with the money frozen in them. Most idle and most valuable first.
+     */
+    public List<IdleProduct> idle(int days) {
+        if (days < 7 || days > 730) throw ApiException.badRequest("INVALID_DAYS", "Gün sayı 7-730 olmalıdır");
+        CurrentMember m = inventory.requireInventory();
+        LocalDate today = tenant.today();
+        return jdbc.sql("""
+                SELECT p.id, p.name, p.code, p.unit, p.stock_qty, p.purchase_price, p.sale_price,
+                       CAST(p.created_at AT TIME ZONE 'Asia/Baku' AS date) AS added_on,
+                       (SELECT MAX(s.sold_on) FROM sale_items i JOIN sales s ON s.id = i.sale_id
+                         WHERE i.product_id = p.id AND s.status = 'COMPLETED') AS last_sold,
+                       (SELECT MAX(pu.received_on) FROM purchase_items pi JOIN purchases pu ON pu.id = pi.purchase_id
+                         WHERE pi.product_id = p.id) AS last_received
+                FROM products p
+                WHERE p.store_id = :s AND p.active AND p.stock_qty > 0
+                """).param("s", m.storeId())
+                .query((rs, n) -> {
+                    LocalDate sold = rs.getObject("last_sold", LocalDate.class);
+                    LocalDate since = sold != null ? sold : rs.getObject("added_on", LocalDate.class);
+                    BigDecimal qty = rs.getBigDecimal("stock_qty");
+                    return new IdleProduct(rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("code"),
+                            rs.getString("unit"), qty.stripTrailingZeros(), sold, rs.getObject("last_received", LocalDate.class),
+                            ChronoUnit.DAYS.between(since, today),
+                            Money.of(qty.multiply(rs.getBigDecimal("purchase_price"))),
+                            Money.of(qty.multiply(rs.getBigDecimal("sale_price"))));
+                }).list().stream()
+                .filter(p -> p.idleDays() >= days)
+                .sorted(java.util.Comparator.comparing(IdleProduct::costValue).reversed())
+                .toList();
+    }
+
     /** For the bell: how many batches expire within a week, and how many already have. */
     public int[] counts(UUID storeId) {
         List<ExpiringBatch> week = list(storeId, 7);

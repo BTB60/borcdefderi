@@ -583,7 +583,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
         </div>
 
         {/* lines */}
-        <div className="min-h-[120px] flex-1 overflow-y-auto px-3 py-2">
+        <div className="min-h-[96px] flex-1 overflow-y-auto px-3 py-2">
           {cart.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center py-10 text-center text-sm text-slate-400">
               <svg viewBox="0 0 24 24" className="mb-2 h-10 w-10 text-slate-300" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true"><path d="M3 4h2l2.4 11h11.2L21 8H6.2M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" /></svg>
@@ -635,7 +635,9 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
         </div>
 
         {/* totals + payment */}
-        <div className="space-y-3 border-t border-slate-200 bg-slate-50/60 px-5 py-4">
+        {/* totals and payment options scroll on short screens; the "Ödəniş" button below always stays in view */}
+        <div className="flex min-h-0 flex-col border-t border-slate-200 bg-slate-50/60">
+        <div className="min-h-0 space-y-3 overflow-y-auto px-5 pb-3 pt-4">
           <div className="flex items-center justify-between text-sm text-slate-600"><span>Ara cəmi</span><span className="tabular-nums">{formatMoney(subtotal)}</span></div>
           <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
             <span>Endirim</span>
@@ -753,11 +755,14 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
               {pending} satış hələ serverə göndərilməyib — internet gələndə özü gedəcək. İndi göndər
             </button>
           )}
+        </div>
+        <div className="shrink-0 px-5 pb-4 pt-2">
           <button type="button" disabled={cart.length === 0 || busy} onClick={() => { setError(null); setPayOpen(true); }}
             className="flex w-full items-center justify-between rounded-2xl bg-gold-500 px-5 py-4 text-navy-900 shadow-sm transition hover:bg-gold-600 hover:text-white active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50">
             <span className="text-base font-semibold">{busy ? "Saxlanılır…" : "Ödəniş"}</span>
             <span className="flex items-center gap-2"><span className="font-serif text-lg font-semibold tabular-nums">{formatMoney(total)}</span><Kbd>F9</Kbd></span>
           </button>
+        </div>
         </div>
       </aside>
 

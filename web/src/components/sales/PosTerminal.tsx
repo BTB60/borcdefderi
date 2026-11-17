@@ -737,8 +737,11 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={autoPrint} onChange={(e) => toggleAutoPrint(e.target.checked)} />
             Satışdan sonra çeki printerdən çıxar
           </label>
-          <button type="button" onClick={() => window.open("/musteri-ekrani", "hesabpro-display", "popup,width=1024,height=700")}
-            className="text-left text-xs font-medium text-slate-500 hover:text-navy-800">🖥 Müştəri ekranını aç (ikinci monitor)</button>
+          {/* the Windows kassa app shows only the till and opens no other windows */}
+          {!app && (
+            <button type="button" onClick={() => window.open("/musteri-ekrani", "hesabpro-display", "popup,width=1024,height=700")}
+              className="text-left text-xs font-medium text-slate-500 hover:text-navy-800">🖥 Müştəri ekranını aç (ikinci monitor)</button>
+          )}
           {app && (
             <label className="flex items-center gap-2 text-xs text-slate-600">
               Printer

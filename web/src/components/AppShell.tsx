@@ -3,10 +3,11 @@ import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 import Image from "next/image";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { ADMIN_GROUPS, adminHref, adminTabFrom } from "@/lib/adminNav";
 import { useAuth } from "@/lib/auth";
-import { api } from "@/lib/api";
+import { api, openProtected } from "@/lib/api";
 import { JOB_TITLE_LABEL } from "@/lib/format";
 import type { Notification, Permission } from "@/lib/types";
 import { cx } from "./ui";
@@ -52,6 +53,57 @@ function Icon({ d, className }: { d: string; className?: string }) {
   );
 }
 
+/** The platform admin's sections, grouped, in the blue sidebar (the admin page shows the one in ?tab=). */
+function AdminNav({ pending, onExport, exporting }: { pending: number; onExport: () => void; exporting: boolean }) {
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const current = pathname === "/admin" ? adminTabFrom(params.get("tab")) : null;
+  return (
+    <>
+      {ADMIN_GROUPS.map((g) => (
+        <div key={g.title || "top"} className={g.title ? "pt-4" : ""}>
+          {g.title && <p className="px-4 pb-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/35">{g.title}</p>}
+          {g.items.map((t) => {
+            const active = current === t.key;
+            const badge = t.key === "subscriptions" ? pending : 0;
+            return (
+              <Link
+                key={t.key}
+                href={adminHref(t.key)}
+                aria-current={active ? "page" : undefined}
+                className={cx(
+                  "group flex items-center gap-3 rounded-xl px-3.5 py-2 text-sm font-medium transition-all duration-200",
+                  active ? "bg-white/10 text-gold-400 shadow-inner" : "text-white/75 hover:bg-white/5 hover:text-white",
+                )}
+              >
+                <span className={cx("h-5 w-1 rounded-full transition-colors", active ? "bg-gold-500" : "bg-transparent group-hover:bg-white/20")} />
+                <Icon d={t.d} className={active ? "text-gold-400" : ""} />
+                <span className="flex-1">{t.label}</span>
+                {badge > 0 && <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{badge}</span>}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
+      <div className="pt-4">
+        <p className="px-4 pb-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/35">Hesab</p>
+        <Link href="/profil" className={cx("group flex items-center gap-3 rounded-xl px-3.5 py-2 text-sm font-medium transition-all",
+          pathname === "/profil" ? "bg-white/10 text-gold-400" : "text-white/75 hover:bg-white/5 hover:text-white")}>
+          <span className={cx("h-5 w-1 rounded-full", pathname === "/profil" ? "bg-gold-500" : "bg-transparent")} />
+          <Icon d={SETTINGS_ICON} className={pathname === "/profil" ? "text-gold-400" : ""} />
+          Parametrlər
+        </Link>
+        <button onClick={onExport} disabled={exporting}
+          className="group flex w-full items-center gap-3 rounded-xl px-3.5 py-2 text-left text-sm font-medium text-white/75 transition hover:bg-white/5 hover:text-white disabled:opacity-50">
+          <span className="h-5 w-1 rounded-full bg-transparent group-hover:bg-white/20" />
+          <Icon d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" />
+          {exporting ? "Hazırlanır…" : "Excel-ə ixrac"}
+        </button>
+      </div>
+    </>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { me, can, isLocked, isOwner, isSuperAdmin, signOut } = useAuth();
   const pathname = usePathname();
@@ -61,6 +113,24 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [showNotes, setShowNotes] = useState(false);
 
   useEffect(() => setOpen(false), [pathname]);
+
+  // admin: payment requests waiting for approval (badge in the menu) and the Excel export
+  const [pending, setPending] = useState(0);
+  const [exporting, setExporting] = useState(false);
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    api<unknown[]>("/api/admin/subscriptions?status=PENDING").then((l) => setPending(l.length)).catch(() => setPending(0));
+  }, [isSuperAdmin, pathname]);
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      await openProtected("/api/admin/export");
+    } catch {
+      /* the button simply stops spinning; the admin can try again */
+    } finally {
+      setExporting(false);
+    }
+  }
 
   useEffect(() => {
     if (!me || isSuperAdmin) return;
@@ -136,7 +206,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5" aria-label="Əsas naviqasiya">
-          {items.map((item) => {
+          {isSuperAdmin && (
+            <Suspense fallback={null}>
+              <AdminNav pending={pending} onExport={exportExcel} exporting={exporting} />
+            </Suspense>
+          )}
+          {!isSuperAdmin && items.map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <Link

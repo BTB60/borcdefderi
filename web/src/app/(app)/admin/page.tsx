@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ADMIN_TABS, adminHref, adminTabFrom, type AdminTab } from "@/lib/adminNav";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
 import { ApiError, api, openProtected } from "@/lib/api";
 import { Countdown, WARN_DAYS, countdown, useNow } from "@/components/Countdown";
@@ -17,47 +19,27 @@ import { optionLabel } from "@/lib/plans";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { AdminRevenue, AdminStore, AuditEntry, Plan } from "@/lib/types";
 
-type Tab = "overview" | "stores" | "expiring" | "subscriptions" | "plans" | "revenue" | "growth" | "users" | "audit" | "settings";
+type Tab = AdminTab;
 
-/** Side menu: tabs grouped by what the admin is doing; d = 24px outline icon path. */
-const GROUPS: { title: string; items: { key: Tab; label: string; d: string }[] }[] = [
-  { title: "", items: [{ key: "overview", label: "İcmal", d: "M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10" }] },
-  {
-    title: "Mağazalar",
-    items: [
-      { key: "stores", label: "Bütün mağazalar", d: "M4 7h16l-1 4H5L4 7zm1 4v9h14v-9M9 20v-5h6v5" },
-      { key: "expiring", label: "Bitən abunəliklər", d: "M12 7v5l3 3M12 3a9 9 0 100 18 9 9 0 000-18z" },
-      { key: "subscriptions", label: "Ödəniş sorğuları", d: "M3 7h18v10H3zM3 11h18M7 15h3" },
-    ],
-  },
-  {
-    title: "Pul və satış",
-    items: [
-      { key: "revenue", label: "Gəlir hesabatı", d: "M4 20V10m6 10V4m6 16v-7m6 7H2" },
-      { key: "plans", label: "Abunəlik paketləri", d: "M4 6h16v12H4zM8 6v12M4 10h4" },
-      { key: "growth", label: "Promo, sınaq, elanlar", d: "M4 10v4l12 5V5L4 10zm12-1a3 3 0 010 6M7 14l1 5h3" },
-    ],
-  },
-  {
-    title: "Sistem",
-    items: [
-      { key: "users", label: "İstifadəçilər", d: "M16 19v-1a4 4 0 00-8 0v1M12 11a3 3 0 100-6 3 3 0 000 6zm7 8v-1a3 3 0 00-2-3M17 5a3 3 0 010 6" },
-      { key: "audit", label: "Audit jurnalı", d: "M8 4h8l3 3v13H5V4h3zm0 6h8m-8 4h8m-8 4h5" },
-      { key: "settings", label: "Ödəniş və əlaqə", d: "M12 15a3 3 0 100-6 3 3 0 000 6zm7-3l2-1-2-4-2 1-2-2V4h-4v2L9 8 7 7 5 11l2 1v0l-2 1 2 4 2-1 2 2v2h4v-2l2-2 2 1 2-4-2-1z" },
-    ],
-  },
-];
-const TABS = GROUPS.flatMap((g) => g.items);
+const TABS = ADMIN_TABS;
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<Tab>("overview");
+  return (
+    <Suspense fallback={<Spinner />}>
+      <Admin />
+    </Suspense>
+  );
+}
+
+/** Platform administration; the section comes from ?tab= so the blue menu on the left can open it. */
+function Admin() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const tab = adminTabFrom(params.get("tab"));
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [pending, setPending] = useState(0);
-  useEffect(() => {
-    api<unknown[]>("/api/admin/subscriptions?status=PENDING").then((l) => setPending(l.length)).catch(() => setPending(0));
-  }, [tab, notice]);
-  const go = (t: Tab) => { setError(null); setNotice(null); setTab(t); };
+  useEffect(() => { setError(null); setNotice(null); }, [tab]);
+  const go = (t: Tab) => router.push(adminHref(t));
   const [exporting, setExporting] = useState(false);
   const current = TABS.find((t) => t.key === tab);
 
@@ -72,59 +54,15 @@ export default function AdminPage() {
     }
   }
 
-  const badge = (k: Tab) => (k === "subscriptions" && pending > 0 ? pending : 0);
 
   return (
-    <div className="lg:grid lg:grid-cols-[232px_1fr] lg:gap-8">
-      {/* side menu (desktop) */}
-      <nav aria-label="Admin bölmələri" className="hidden lg:block">
-        <div className="sticky top-6 rounded-2xl bg-white p-3 shadow-card ring-1 ring-slate-200/70">
-          <div className="mb-3 rounded-xl bg-gradient-to-br from-navy-800 to-navy-600 px-4 py-3 text-white">
-            <p className="text-[11px] uppercase tracking-widest text-gold-400">Platforma</p>
-            <p className="font-serif text-lg font-semibold">İdarəetmə</p>
-          </div>
-          {GROUPS.map((g) => (
-            <div key={g.title || "top"} className="mb-2">
-              {g.title && <p className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{g.title}</p>}
-              {g.items.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => go(t.key)}
-                  aria-current={tab === t.key ? "page" : undefined}
-                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition ${tab === t.key ? "bg-gold-500/15 text-navy-800" : "text-slate-600 hover:bg-slate-50 hover:text-navy-800"}`}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
-                    className={`h-[18px] w-[18px] shrink-0 ${tab === t.key ? "text-gold-600" : "text-slate-400 group-hover:text-navy-800"}`}><path d={t.d} /></svg>
-                  <span className="flex-1">{t.label}</span>
-                  {badge(t.key) > 0 && <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{badge(t.key)}</span>}
-                </button>
-              ))}
-            </div>
-          ))}
-          <div className="mt-3 border-t border-slate-100 pt-3">
-            <button onClick={exportExcel} disabled={exporting}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-navy-800 transition hover:border-gold-500 disabled:opacity-50">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} className="h-4 w-4" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" /></svg>
-              {exporting ? "Hazırlanır…" : "Excel-ə ixrac"}
-            </button>
-          </div>
-        </div>
-      </nav>
-
+    <div>
       <div className="min-w-0">
-        {/* section picker (phone / tablet) */}
-        <div className="mb-4 flex gap-2 lg:hidden">
-          <select value={tab} onChange={(e) => go(e.target.value as Tab)} aria-label="Bölmə"
-            className="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-navy-800">
-            {GROUPS.map((g) => (
-              <optgroup key={g.title || "top"} label={g.title || "Ümumi"}>
-                {g.items.map((t) => <option key={t.key} value={t.key}>{t.label}{badge(t.key) ? ` (${badge(t.key)})` : ""}</option>)}
-              </optgroup>
-            ))}
-          </select>
-          <Button variant="outline" onClick={exportExcel} disabled={exporting}>Excel</Button>
-        </div>
-        <PageHeader title={current?.label ?? "Platforma idarəetməsi"} subtitle={tab === "overview" ? "Platformanın bugünkü vəziyyəti və görüləsi işlər" : undefined} />
+        <PageHeader
+          title={current?.label ?? "Platforma idarəetməsi"}
+          subtitle={tab === "overview" ? "Platformanın bugünkü vəziyyəti və görüləsi işlər" : undefined}
+          actions={<Button variant="outline" onClick={exportExcel} disabled={exporting}>{exporting ? "Hazırlanır…" : "Excel-ə ixrac"}</Button>}
+        />
         {error && <div className="mb-4"><Alert>{error}</Alert></div>}
         {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
 

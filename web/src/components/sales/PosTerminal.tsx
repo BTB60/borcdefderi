@@ -803,6 +803,13 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={autoPrint} onChange={(e) => toggleAutoPrint(e.target.checked)} />
             Satışdan sonra çeki printerdən çıxar
           </label>
+          {fill ? (
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              {app?.openDrawer && <button type="button" onClick={() => void app.openDrawer?.()} className="rounded-lg bg-white px-2.5 py-1 font-medium text-navy-800 ring-1 ring-slate-200 hover:ring-gold-500">💰 Qutunu aç</button>}
+              <span className="text-slate-400">Printer, PIN, kilid və digər ayarlar — yuxarıda <b>⚙ Parametrlər</b></span>
+            </div>
+          ) : (
+            <>
           {/* customer display: a popup in the browser, a full-screen window on the second monitor in the Windows app */}
           {(!app || app.openCustomerDisplay) && (
             <button type="button" onClick={() => (app?.openCustomerDisplay ? void app.openCustomerDisplay() : window.open("/musteri-ekrani", "hesabpro-display", "popup,width=1024,height=700"))}
@@ -872,6 +879,8 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
                 {printers.map((p) => <option key={p.name} value={p.name}>{p.name}{p.isDefault ? " (əsas)" : ""}</option>)}
               </select>
             </label>
+          )}
+            </>
           )}
           {app && pending > 0 && (
             <button type="button" onClick={() => void app.syncNow()}

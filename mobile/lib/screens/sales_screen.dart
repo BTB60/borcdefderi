@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../api/api_client.dart';
 import '../format.dart';
 import '../state/offline_sales.dart';
 import '../state/receipt_printer.dart';
@@ -490,7 +491,26 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
     try {
       Map<String, dynamic> s;
       try {
-        s = await widget.session.api.post('/api/sales', payload) as Map<String, dynamic>;
+        try {
+          s = await widget.session.api.post('/api/sales', payload) as Map<String, dynamic>;
+        } on ApiException catch (e) {
+          // over the customer's borc limiti: only the owner can let the credit sale through
+          if (e.code != 'CREDIT_LIMIT' || !(widget.session.me?.isOwner ?? false) || !mounted) rethrow;
+          final ok = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              icon: Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 36),
+              title: const Text('Borc limiti keçilir'),
+              content: Text(e.message),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ləğv et')),
+                FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yenə də sat')),
+              ],
+            ),
+          );
+          if (ok != true) rethrow;
+          s = await widget.session.api.post('/api/sales', {...payload, 'allowOverLimit': true}) as Map<String, dynamic>;
+        }
       } catch (e) {
         if (!OfflineSales.isOffline(e)) rethrow;
         // no internet: keep the sale on the phone; it is sent by itself later (same request id = no double sale)

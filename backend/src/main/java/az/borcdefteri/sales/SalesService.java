@@ -67,7 +67,9 @@ public class SalesService {
             @jakarta.validation.constraints.DecimalMin("0.00")
             @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal bonusUsed,
             /** RETAIL (Top 2, the default) or WHOLESALE (Top 1, topdan): which price the goods are sold at. */
-            @jakarta.validation.constraints.Pattern(regexp = "RETAIL|WHOLESALE") String priceLevel) {}
+            @jakarta.validation.constraints.Pattern(regexp = "RETAIL|WHOLESALE") String priceLevel,
+            /** The owner lets a credit sale through although it goes over the customer's borc limiti. */
+            Boolean allowOverLimit) {}
 
     public record ReturnItem(@jakarta.validation.constraints.NotNull UUID saleItemId,
                              @jakarta.validation.constraints.NotNull
@@ -177,6 +179,8 @@ public class SalesService {
         if (credit.signum() > 0 && req.customerId() == null) {
             throw ApiException.badRequest("CUSTOMER_REQUIRED", "Borcla və ya qismən ödənişli satış üçün müştəri seçin");
         }
+
+        if (credit.signum() > 0) checkCreditLimit(m, req.customerId(), credit, Boolean.TRUE.equals(req.allowOverLimit()));
 
         BigDecimal bonusEarned = req.customerId() == null ? Money.zero() : bonus.earnedFor(m.storeId(), paid);
         UUID saleId = UUID.randomUUID();
@@ -399,5 +403,29 @@ public class SalesService {
                         Money.of(rs.getBigDecimal("bonus_used")), Money.of(rs.getBigDecimal("bonus_earned")),
                         rs.getString("price_level")))
                 .optional().orElseThrow(() -> ApiException.notFound("Satış tapılmadı"));
+    }
+
+    /**
+     * Müştəri borc limiti: a credit sale may not push the customer's open debt over their limit. The owner may let
+     * it through ({@code allow}); anyone else gets CREDIT_LIMIT with the numbers.
+     */
+    private void checkCreditLimit(CurrentMember m, UUID customerId, BigDecimal credit, boolean allow) {
+        BigDecimal limit = jdbc.sql("SELECT credit_limit FROM customers WHERE id = :c AND store_id = :s")
+                .param("c", customerId).param("s", m.storeId()).query(BigDecimal.class).optional().orElse(null);
+        if (limit == null) return;
+        BigDecimal owes = Money.of(jdbc.sql("""
+                SELECT COALESCE(SUM(remaining_amount), 0) FROM debts
+                WHERE store_id = :s AND customer_id = :c AND status <> 'PAID'
+                """).param("s", m.storeId()).param("c", customerId).query(BigDecimal.class).single());
+        BigDecimal after = Money.of(owes.add(credit));
+        if (after.compareTo(limit) <= 0) return;
+        if (allow && m.isOwner()) return;
+        java.util.Map<String, String> details = new java.util.LinkedHashMap<>();
+        details.put("limit", Money.of(limit).toPlainString());
+        details.put("owes", owes.toPlainString());
+        details.put("after", after.toPlainString());
+        throw new ApiException(org.springframework.http.HttpStatus.CONFLICT, "CREDIT_LIMIT",
+                "Müştərinin borc limiti " + Money.of(limit) + " AZN-dir. İndiki borcu " + owes + " AZN, bu satışla "
+                        + after + " AZN olur" + (m.isOwner() ? "" : ". Mağaza sahibinin icazəsi lazımdır"), details);
     }
 }

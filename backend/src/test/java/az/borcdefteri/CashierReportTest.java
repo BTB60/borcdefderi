@@ -39,4 +39,30 @@ class CashierReportTest extends IntegrationTestBase {
 
         get(owner, "/api/reports/cashiers?from=2026-12-01&to=2026-11-01").andExpect(status().isBadRequest());
     }
+
+    @Test
+    void aCreditSaleOverTheCustomersLimitNeedsTheOwner() throws Exception {
+        String owner = register("Limit Mağaza");
+        activateSubscription(owner, "MONTHLY");
+        String p = body(post(owner, "/api/products", Map.of("name", "Ət", "purchasePrice", "10.00", "salePrice", "20.00", "initialStock", "100"))
+                .andExpect(status().isCreated())).get("id").asText();
+        java.util.UUID c = createCustomer(owner, "Nisyəçi", "+994501239999");
+        put(owner, "/api/customers/" + c, Map.of("name", "Nisyəçi", "phone", "+994501239999", "creditLimit", "50.00"))
+                .andExpect(status().isOk());
+        JsonNode list = body(get(owner, "/api/customers"));
+        assertThat(list.toString()).contains("\"creditLimit\":50.0");
+
+        Map<String, Object> s2 = new HashMap<>(Map.of("items", List.of(Map.of("productId", p, "quantity", "2")), "customerId", c.toString()));
+        post(owner, "/api/sales", s2).andExpect(status().isCreated());          // owes 40
+        JsonNode err = body(post(owner, "/api/sales", s2).andExpect(status().isConflict()));  // would be 80
+        assertThat(err.get("error").asText()).isEqualTo("CREDIT_LIMIT");
+        assertThat(err.get("fields").get("after").asText()).isEqualTo("80.00");
+
+        Map<String, Object> allowed = new HashMap<>(s2);
+        allowed.put("allowOverLimit", true);
+        post(owner, "/api/sales", allowed).andExpect(status().isCreated());     // the owner lets it through
+
+        put(owner, "/api/customers/" + c, Map.of("name", "Nisyəçi", "noCreditLimit", true)).andExpect(status().isOk());
+        post(owner, "/api/sales", s2).andExpect(status().isCreated());
+    }
 }

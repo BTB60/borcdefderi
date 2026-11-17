@@ -14,9 +14,18 @@ public record PartyRequest(
         @Size(max = 1000) String note,
         /** Customers only: standing discount in %, applied at the till. Null on update = unchanged. */
         @DecimalMin(value = "0", message = "Endirim 0-100% arası olmalıdır")
-        @DecimalMax(value = "100", message = "Endirim 0-100% arası olmalıdır") BigDecimal discountPercent
+        @DecimalMax(value = "100", message = "Endirim 0-100% arası olmalıdır") BigDecimal discountPercent,
+        /** Customers only: the most the customer may owe (null on update = unchanged). */
+        @DecimalMin(value = "0", message = "Borc limiti mənfi ola bilməz")
+        @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal creditLimit,
+        /** Customers only: true removes the limit. */
+        Boolean noCreditLimit
 ) {
     public PartyRequest(String name, String phone, String note) {
-        this(name, phone, note, null);
+        this(name, phone, note, null, null, null);
+    }
+
+    public PartyRequest(String name, String phone, String note, BigDecimal discountPercent) {
+        this(name, phone, note, discountPercent, null, null);
     }
 }

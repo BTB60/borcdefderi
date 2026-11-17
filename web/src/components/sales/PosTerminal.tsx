@@ -153,7 +153,7 @@ export function PosTerminal({ onSold }: { onSold?: () => void }) {
   };
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const { me } = useAuth();
+  const { me, isOwner } = useAuth();
   const app = desktop();
   const [pending, setPending] = useState(0);
   const [printers, setPrinters] = useState<{ name: string; isDefault: boolean }[]>([]);
@@ -300,7 +300,7 @@ Təşəkkür edirik!`;
     setCustomer(null); setCustomerQuery(""); setMode("cash"); setEditing(null); setError(null); setRequestId(crypto.randomUUID());
   };
 
-  async function submit() {
+  async function submit(allowOverLimit = false) {
     if (!canSell) return;
     setBusy(true);
     setError(null);
@@ -314,6 +314,7 @@ Təşəkkür edirik!`;
           paidCard: paidCard.toFixed(2),
           note: note || null,
           clientRequestId: requestId,
+          allowOverLimit: allowOverLimit || null,
     };
     try {
       let s: Sale;
@@ -354,6 +355,14 @@ Təşəkkür edirik!`;
       loadProducts();
       onSold?.();
     } catch (e) {
+      // over the customer's borc limiti: the owner may let it through, others see why it stopped
+      if (e instanceof ApiError && e.code === "CREDIT_LIMIT" && isOwner && !allowOverLimit
+        && window.confirm(`${e.message}.
+
+Limiti keçərək yenə də nisyə satılsın?`)) {
+        setBusy(false);
+        return submit(true);
+      }
       setError(e instanceof ApiError ? e.message : "Satış alınmadı");
     } finally {
       setBusy(false);

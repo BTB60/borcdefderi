@@ -24,7 +24,9 @@ public class PartyService {
                         BigDecimal openBalance, long openDebtCount, String code, OffsetDateTime lastContactAt,
                         OffsetDateTime lastActivityAt, long overdueDebts,
                         /** Customers: standing discount (%) and bonus balance; 0 for companies. */
-                        BigDecimal discountPercent, BigDecimal bonusBalance) {}
+                        BigDecimal discountPercent, BigDecimal bonusBalance,
+                        /** Customers: the most they may owe (null = no limit). */
+                        BigDecimal creditLimit) {}
 
     private final JdbcClient jdbc;
     private final TenantService tenant;
@@ -121,8 +123,8 @@ public class PartyService {
         String code = customers ? "p.code" : "NULL";
         String contact = customers ? "p.last_contact_at" : "CAST(NULL AS timestamptz)";
         String loyalty = customers
-                ? "p.discount_percent, (SELECT COALESCE(SUM(b.amount), 0) FROM customer_bonus_entries b WHERE b.customer_id = p.id) AS bonus_balance, "
-                : "0 AS discount_percent, 0 AS bonus_balance, ";
+                ? "p.discount_percent, p.credit_limit, (SELECT COALESCE(SUM(b.amount), 0) FROM customer_bonus_entries b WHERE b.customer_id = p.id) AS bonus_balance, "
+                : "0 AS discount_percent, CAST(NULL AS numeric) AS credit_limit, 0 AS bonus_balance, ";
         return jdbc.sql("SELECT p.id, p.name, p.phone, p.note, p.created_at, " + code + " AS code, " + contact
                 + " AS last_contact_at, " + loyalty
                 + """
@@ -134,7 +136,7 @@ public class PartyService {
                 + "FROM " + table + " p LEFT JOIN debts d ON d." + fkColumn + " = p.id AND d.store_id = p.store_id" + typeFilter
                 + " WHERE p.store_id = :storeId AND (LOWER(p.name) LIKE LOWER(:q) OR COALESCE(p.phone, '') LIKE :q"
                 + (customers ? " OR LOWER(p.code) LIKE LOWER(:q)" : "") + ")"
-                + " GROUP BY p.id, p.name, p.phone, p.note, p.created_at" + (customers ? ", p.code, p.last_contact_at, p.discount_percent" : "")
+                + " GROUP BY p.id, p.name, p.phone, p.note, p.created_at" + (customers ? ", p.code, p.last_contact_at, p.discount_percent, p.credit_limit" : "")
                 + " ORDER BY p.name")
                 .param("storeId", m.storeId()).param("q", like).param("today", tenant.today())
                 .query((rs, n) -> mapParty(rs))
@@ -183,6 +185,10 @@ public class PartyService {
             jdbc.sql("UPDATE customers SET discount_percent = :d WHERE id = :id")
                     .param("d", req.discountPercent().setScale(2, java.math.RoundingMode.HALF_UP)).param("id", id).update();
         }
+        if ("customers".equals(table) && (req.creditLimit() != null || Boolean.TRUE.equals(req.noCreditLimit()))) {
+            jdbc.sql("UPDATE customers SET credit_limit = :l WHERE id = :id")
+                    .param("l", Boolean.TRUE.equals(req.noCreditLimit()) ? null : Money.of(req.creditLimit())).param("id", id).update();
+        }
     }
 
     private static Party mapParty(java.sql.ResultSet rs) throws java.sql.SQLException {
@@ -199,7 +205,8 @@ public class PartyService {
                 rs.getObject("last_activity_at", OffsetDateTime.class),
                 rs.getLong("overdue_debts"),
                 rs.getBigDecimal("discount_percent"),
-                Money.of(rs.getBigDecimal("bonus_balance")));
+                Money.of(rs.getBigDecimal("bonus_balance")),
+                rs.getBigDecimal("credit_limit") == null ? null : Money.of(rs.getBigDecimal("credit_limit")));
     }
 
     private static String blankToNull(String s) {

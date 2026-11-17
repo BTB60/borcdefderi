@@ -278,6 +278,8 @@ class _PartyFormState extends State<_PartyForm> {
   late final _note = TextEditingController(text: widget.party?.note ?? '');
   late final _discount = TextEditingController(
       text: (widget.party?.discountPercent ?? 0) > 0 ? widget.party!.discountPercent.toString().replaceAll(RegExp(r'\.0$'), '') : '');
+  late final _limit = TextEditingController(
+      text: widget.party?.creditLimit == null ? '' : widget.party!.creditLimit!.toStringAsFixed(2));
   bool _busy = false;
   String? _error;
 
@@ -289,6 +291,7 @@ class _PartyFormState extends State<_PartyForm> {
     _phone.dispose();
     _note.dispose();
     _discount.dispose();
+    _limit.dispose();
     super.dispose();
   }
 
@@ -303,6 +306,8 @@ class _PartyFormState extends State<_PartyForm> {
       'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
       'note': _note.text.trim().isEmpty ? null : _note.text.trim(),
       if (widget.isCustomer) 'discountPercent': double.tryParse(_discount.text.trim().replaceAll(',', '.')) ?? 0,
+      if (widget.isCustomer && _limit.text.trim().isNotEmpty) 'creditLimit': _limit.text.trim().replaceAll(',', '.'),
+      if (widget.isCustomer && _limit.text.trim().isEmpty) 'noCreditLimit': true,
     };
     try {
       final base = _endpoint(widget.isCustomer);
@@ -365,6 +370,23 @@ class _PartyFormState extends State<_PartyForm> {
               if (t.isEmpty) return null;
               final d = double.tryParse(t.replaceAll(',', '.'));
               return d == null || d < 0 || d > 100 ? '0 ilə 100 arası' : null;
+            },
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _limit,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Borc limiti',
+              helperText: 'Bundan çox nisyə satılmır (sahib icazə verə bilər). Boş = limitsiz',
+              helperMaxLines: 2,
+              suffixText: '₼',
+            ),
+            validator: (v) {
+              final t = (v ?? '').trim();
+              if (t.isEmpty) return null;
+              final d = double.tryParse(t.replaceAll(',', '.'));
+              return d == null || d < 0 ? 'Düzgün məbləğ yazın' : null;
             },
           ),
         ],

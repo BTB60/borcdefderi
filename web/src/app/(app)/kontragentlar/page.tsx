@@ -157,6 +157,7 @@ function PartiesList() {
 function PartyModal({ tab, party, onClose, onSaved }: { tab: Tab; party: Party | null; onClose: () => void; onSaved: (msg: string) => void }) {
   const [form, setForm] = useState<FormState>(party ? { name: party.name, phone: party.phone ?? "", note: party.note ?? "" } : EMPTY);
   const [discountPct, setDiscountPct] = useState(party?.discountPercent ? String(party.discountPercent) : "");
+  const [limit, setLimit] = useState(party?.creditLimit != null ? String(party.creditLimit) : "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -168,7 +169,7 @@ function PartyModal({ tab, party, onClose, onSaved }: { tab: Tab; party: Party |
     setError(null);
     setErrors({});
     const pct = Number(discountPct.replace(",", ".")) || 0;
-    const body = { name: form.name, phone: form.phone || null, note: form.note || null, ...(tab === "customers" ? { discountPercent: pct } : {}) };
+    const body = { name: form.name, phone: form.phone || null, note: form.note || null, ...(tab === "customers" ? { discountPercent: pct, ...(limit.trim() ? { creditLimit: limit.trim().replace(",", ".") } : { noCreditLimit: true }) } : {}) };
     try {
       if (party) await api(`/api/${tab}/${party.id}`, { method: "PUT", json: body });
       else await api(`/api/${tab}`, { method: "POST", json: body });
@@ -204,6 +205,11 @@ function PartyModal({ tab, party, onClose, onSaved }: { tab: Tab; party: Party |
         {tab === "customers" && (
           <Field label="Daimi endirim (%)" error={errors.discountPercent} hint="Kassada bu müştəri seçiləndə çekə avtomatik tətbiq olunur">
             <Input inputMode="decimal" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} placeholder="0" />
+          </Field>
+        )}
+        {tab === "customers" && (
+          <Field label="Borc limiti (₼)" error={errors.creditLimit} hint="Müştəri bundan çox borc ala bilməz — kassada nisyə satış dayandırılır (yalnız sahib icazə verə bilər). Boş = limitsiz">
+            <Input inputMode="decimal" value={limit} onChange={(e) => setLimit(e.target.value)} placeholder="Limitsiz" />
           </Field>
         )}
       </form>

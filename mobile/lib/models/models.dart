@@ -359,10 +359,12 @@ class Party {
   /// Customers: standing discount (%) at the till and bonus balance.
   final double discountPercent;
   final double bonusBalance;
+  /// Customers: the most they may owe (null = no limit).
+  final double? creditLimit;
 
   const Party({required this.id, required this.name, required this.phone, required this.openBalance, this.note, this.openDebtCount = 0,
       this.code, this.createdAt, this.lastContactAt, this.lastActivityAt, this.overdueDebts = 0, this.discountPercent = 0,
-      this.bonusBalance = 0});
+      this.bonusBalance = 0, this.creditLimit});
 
   factory Party.fromJson(Map<String, dynamic> j) => Party(
         id: j['id'] as String,
@@ -378,6 +380,7 @@ class Party {
         overdueDebts: _num(j['overdueDebts']).toInt(),
         discountPercent: _num(j['discountPercent']),
         bonusBalance: _num(j['bonusBalance']),
+        creditLimit: j['creditLimit'] == null ? null : _num(j['creditLimit']),
       );
 }
 

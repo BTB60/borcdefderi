@@ -180,6 +180,8 @@ export interface Party {
   /** Customers: standing discount (%) applied at the till, and bonus balance. */
   discountPercent?: number;
   bonusBalance?: number;
+  /** Customers: the most they may owe (null = no limit). */
+  creditLimit?: number | null;
 }
 
 // ----- HesabPro 2.0 -----

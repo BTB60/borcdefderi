@@ -10,6 +10,7 @@ import 'inventory_screen.dart';
 import 'more_screen.dart';
 import 'payments_screen.dart';
 import 'sales_screen.dart';
+import 'update_banner.dart';
 
 /// Bottom navigation. Tabs follow the signed-in user's permissions; the server enforces them anyway.
 class HomeShell extends StatefulWidget {
@@ -62,13 +63,17 @@ class _HomeShellState extends State<HomeShell> {
     final safeIndex = _index.clamp(0, tabs.length - 1);
     return Scaffold(
       body: IndexedStack(index: safeIndex, children: [for (final t in tabs) t.page]),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: safeIndex,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: [
-          for (final t in tabs) NavigationDestination(icon: Icon(t.icon), label: t.label),
-        ],
-      ),
+      // "Yeni versiya var — Yenilə" sits right above the tabs when a newer APK is out
+      bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
+        const UpdateBanner(),
+        NavigationBar(
+          selectedIndex: safeIndex,
+          onDestinationSelected: (i) => setState(() => _index = i),
+          destinations: [
+            for (final t in tabs) NavigationDestination(icon: Icon(t.icon), label: t.label),
+          ],
+        ),
+      ]),
     );
   }
 }

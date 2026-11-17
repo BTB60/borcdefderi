@@ -294,6 +294,20 @@ Təşəkkür edirik!`;
   const total = r2(Math.max(0, subtotal - discountAmount - bonusAmount));
   const itemCount = lines.reduce((s, l) => s + num(l.quantity), 0);
 
+  // Müştəri ekranı: a second window (second monitor) shows the customer what is being rung up
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const ch = new BroadcastChannel("hesabpro-customer-display");
+    ch.postMessage(done
+      ? { kind: "done", store: me?.storeName ?? "", total: done.sale.total, change: done.change }
+      : {
+          kind: "cart", store: me?.storeName ?? "", subtotal, discount: r2(discountAmount + bonusAmount), total,
+          lines: lines.map((l) => ({ name: l.product.name, quantity: num(l.quantity), price: num(l.price), total: l.total })),
+        });
+    ch.close();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, discountAmount, bonusAmount, total, done]);
+
   let paidCash = 0, paidCard = 0, change = 0;
   if (mode === "cash") {
     const g = given.trim() === "" ? total : num(given);
@@ -721,6 +735,8 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={autoPrint} onChange={(e) => toggleAutoPrint(e.target.checked)} />
             Satışdan sonra çeki printerdən çıxar
           </label>
+          <button type="button" onClick={() => window.open("/musteri-ekrani", "hesabpro-display", "popup,width=1024,height=700")}
+            className="text-left text-xs font-medium text-slate-500 hover:text-navy-800">🖥 Müştəri ekranını aç (ikinci monitor)</button>
           {app && (
             <label className="flex items-center gap-2 text-xs text-slate-600">
               Printer

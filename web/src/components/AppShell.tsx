@@ -156,9 +156,10 @@ function KioskHeader({ store, name, role, onSignOut }: { store: string; name: st
           </span>
         )}
         {update?.state === "installing" && (
-          <span className="inline-flex items-center gap-2 rounded-xl bg-gold-500 px-4 py-2 text-sm font-semibold text-navy-900">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-navy-900/30 border-t-navy-900" />
-            Yenilənir — proqram bağlanıb yenidən açılacaq…
+          <span className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-gold-500 px-4 py-2 text-sm font-semibold text-navy-900"
+            title="Proqram bağlanıb yeni versiya quraşdırılacaq və özü yenidən açılacaq">
+            <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-navy-900/30 border-t-navy-900" />
+            Yenilənir…<span className="hidden xl:inline">&nbsp;proqram bağlanıb yenidən açılacaq</span>
           </span>
         )}
         {update?.state === "ready" && (

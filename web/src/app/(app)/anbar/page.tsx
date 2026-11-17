@@ -10,6 +10,7 @@ import { BulkPriceModal } from "@/components/BulkPriceModal";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import type { InventorySummary, Party, Product, ProductCategory, StockMovement } from "@/lib/types";
 import { UNIT_SUGGESTIONS, isWeighed, unitKind } from "@/lib/units";
+import { shortBranch, useBranchStock } from "@/lib/branchStock";
 
 const MOVE_LABEL: Record<StockMovement["kind"], string> = {
   RECEIPT: "Anbara giriş", ISSUE: "Anbardan çıxış", SALE: "Satış", SALE_RETURN: "Satış qaytarıldı", ADJUSTMENT: "Düzəliş", COUNT: "Sayım",
@@ -21,6 +22,9 @@ const q = (n: number) => Number(n).toLocaleString("az-AZ", { maximumFractionDigi
 export default function InventoryPage() {
   const { isOwner, can } = useAuth();
   const [items, setItems] = useState<Product[] | null>(null);
+  // Digər filiallarda: the same goods in the owner's other branches
+  const branchStock = useBranchStock(items);
+  const hasBranches = Object.keys(branchStock).length > 0;
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [suppliers, setSuppliers] = useState<Party[]>([]);
@@ -108,7 +112,7 @@ export default function InventoryPage() {
         </div>
         {!items ? <Spinner /> : items.length === 0 ? <EmptyState title="Məhsul yoxdur" text="“+ Məhsul əlavə et” ilə başlayın." /> : (
           <Table>
-            <thead className="bg-slate-50/70"><tr><Th>Məhsul</Th><Th>Kateqoriya</Th><Th className="text-right">Alış</Th><Th className="text-right">Top 1 · topdan</Th><Th className="text-right">Top 2 · pərakəndə</Th><Th className="text-right">Qalıq</Th><Th className="text-right">Əməliyyat</Th></tr></thead>
+            <thead className="bg-slate-50/70"><tr><Th>Məhsul</Th><Th>Kateqoriya</Th><Th className="text-right">Alış</Th><Th className="text-right">Top 1 · topdan</Th><Th className="text-right">Top 2 · pərakəndə</Th><Th className="text-right">Qalıq</Th>{hasBranches && <Th>Digər filiallarda</Th>}<Th className="text-right">Əməliyyat</Th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {items.map((p) => (
                 <tr key={p.id} className={p.active ? "" : "opacity-50"}>
@@ -124,6 +128,18 @@ export default function InventoryPage() {
                     <span className={`font-semibold tabular-nums ${p.outOfStock ? "text-rose-600" : p.lowStock ? "text-amber-600" : "text-navy-800"}`}>{q(p.stockQty)} {p.unit}</span>
                     {p.outOfStock ? <div><Badge tone="rose">bitib</Badge></div> : p.lowStock ? <div><Badge tone="amber">az qalıb</Badge></div> : null}
                   </Td>
+                  {hasBranches && (
+                    <Td>
+                      <div className="flex flex-wrap gap-1">
+                        {(branchStock[p.id] ?? []).map((b) => (
+                          <span key={b.storeId} title={b.storeName}
+                            className={`rounded-md px-1.5 py-0.5 text-xs tabular-nums ${b.qty > 0 ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>
+                            📍 {shortBranch(b.storeName)}: {q(b.qty)}
+                          </span>
+                        ))}
+                      </div>
+                    </Td>
+                  )}
                   <Td className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" className="px-2.5 py-1.5" onClick={() => setHistoryOf(p)}>Tarixçə</Button>

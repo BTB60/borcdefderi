@@ -31,6 +31,10 @@ class BranchTest extends IntegrationTestBase {
         post(owner, "/api/branches/transfer", Map.of("toStoreId", branch, "items", List.of(Map.of("productId", tea, "quantity", "4"))))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.created", contains("Çay")));
         get(owner, "/api/products/" + tea).andExpect(jsonPath("$.stockQty", is(6.0)));
+        // the main store sees the branch has 4 teas (by code)
+        get(owner, "/api/products/branch-stock").andExpect(jsonPath("$['" + tea + "'][0].storeName", is("Yasamal filialı")))
+                .andExpect(jsonPath("$['" + tea + "'][0].qty", is(4)));
+        get(owner, "/api/products/branch-stock?productId=" + tea).andExpect(jsonPath("$.*", hasSize(1)));
         // more than in stock is refused
         post(owner, "/api/branches/transfer", Map.of("toStoreId", branch, "items", List.of(Map.of("productId", tea, "quantity", "7"))))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.error", is("INSUFFICIENT_STOCK")));
@@ -61,6 +65,8 @@ class BranchTest extends IntegrationTestBase {
                 .andExpect(status().isCreated());
         String cashier = login(email, EMPLOYEE_PASSWORD);
         get(cashier, "/api/branches").andExpect(status().isForbidden());
+        // a cashier of the main store sees the other branch's stock too (to tell the customer where it is)
+        get(cashier, "/api/products/branch-stock?productId=" + tea).andExpect(jsonPath("$['" + tea + "'][0].qty", is(3)));
         String other = register("Başqa Mağaza");
         String otherStore = body(get(other, "/api/auth/me")).get("storeId").asText();
         post(owner, "/api/branches/" + otherStore + "/switch", Map.of()).andExpect(status().isNotFound());

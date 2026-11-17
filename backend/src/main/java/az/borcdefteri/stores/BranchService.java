@@ -189,6 +189,39 @@ public class BranchService {
         return new TransferResult(target.getKey(), items.size(), created);
     }
 
+    public record BranchQty(UUID storeId, String storeName, BigDecimal qty) {}
+
+    /**
+     * Digər filiallarda: for every product of the current branch, how much the other branches of the same owner
+     * have (same code, or same barcode). Any staff member who sells or keeps stock may see it; empty with no branches.
+     */
+    @GetMapping("/api/products/branch-stock")
+    public Map<UUID, List<BranchQty>> branchStock(@RequestParam(required = false) UUID productId) {
+        CurrentMember m = tenant.requireBusinessMember();
+        if (!m.has("SALES") && !m.has("INVENTORY")) {
+            throw ApiException.forbidden("PERMISSION_DENIED", "Bu modul üçün icazəniz yoxdur");
+        }
+        Map<UUID, List<BranchQty>> out = new LinkedHashMap<>();
+        jdbc.sql("""
+                WITH me AS (SELECT COALESCE(branch_of, id) AS root FROM stores WHERE id = :s),
+                     sib AS (SELECT st.id, st.name, st.created_at FROM stores st, me
+                             WHERE COALESCE(st.branch_of, st.id) = me.root AND st.id <> :s AND st.status = 'ACTIVE')
+                SELECT p.id AS product_id, sib.id AS store_id, sib.name AS store_name,
+                       COALESCE((SELECT o.stock_qty FROM products o
+                                 WHERE o.store_id = sib.id AND o.system_kind IS NULL
+                                   AND (LOWER(o.code) = LOWER(p.code) OR (p.barcode IS NOT NULL AND o.barcode = p.barcode))
+                                 ORDER BY o.active DESC LIMIT 1), 0) AS qty
+                FROM products p CROSS JOIN sib
+                WHERE p.store_id = :s AND p.system_kind IS NULL AND (CAST(:pid AS uuid) IS NULL OR p.id = :pid)
+                ORDER BY sib.created_at
+                """).param("s", m.storeId()).param("pid", productId)
+                .query((rs, n) -> Map.entry(rs.getObject("product_id", UUID.class),
+                        new BranchQty(rs.getObject("store_id", UUID.class), rs.getString("store_name"),
+                                rs.getBigDecimal("qty").stripTrailingZeros())))
+                .list().forEach(e -> out.computeIfAbsent(e.getKey(), k -> new ArrayList<>()).add(e.getValue()));
+        return out;
+    }
+
     /** All branches' day side by side, with the sum. */
     @GetMapping("/api/branches/overview")
     public Overview overview(@RequestParam(required = false) LocalDate date) {

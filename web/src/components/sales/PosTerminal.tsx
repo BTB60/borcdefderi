@@ -15,6 +15,7 @@ import { WeightEntry } from "@/components/sales/WeightEntry";
 import { FreeAmount } from "@/components/sales/FreeAmount";
 import { SerialEntry } from "@/components/sales/SerialEntry";
 import { isWeighed, qtyWithUnit, unitKind } from "@/lib/units";
+import { shortBranch, useBranchStock } from "@/lib/branchStock";
 
 const PRODUCTS_CACHE = "pos_cache_products";
 const CUSTOMERS_CACHE = "pos_cache_customers";
@@ -141,6 +142,8 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
   // çəki ilə satılan mal (kq / qram): the weight window; `line` = changing a line already in the receipt
   const [weigh, setWeigh] = useState<{ product: Product; line?: boolean } | null>(null);
   const [freeOpen, setFreeOpen] = useState(false);
+  // where an item that ran out here can still be found (owner's other branches)
+  const branchStock = useBranchStock();
   // IMEI / seriya: the numbers window for a product that asks for them
   const [serialFor, setSerialFor] = useState<Product | null>(null);
   const [customer, setCustomer] = useState<Party | null>(null);
@@ -656,6 +659,11 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
                           {out ? "bitib" : `${qtyText(p.stockQty)} ${p.unit}`}
                         </span>
                       </div>
+                      {out && (branchStock[p.id] ?? []).some((b) => b.qty > 0) && (
+                        <p className="mt-1 truncate text-[11px] font-medium text-emerald-700" title={(branchStock[p.id] ?? []).filter((b) => b.qty > 0).map((b) => `${b.storeName}: ${b.qty}`).join(", ")}>
+                          📍 {(branchStock[p.id] ?? []).filter((b) => b.qty > 0).map((b) => `${shortBranch(b.storeName)} ${qtyText(b.qty)}`).join(" · ")}
+                        </p>
+                      )}
                     </div>
                   </button>
                 );

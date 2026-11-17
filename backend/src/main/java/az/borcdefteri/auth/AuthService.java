@@ -114,6 +114,12 @@ public class AuthService {
         return issue(userId, role);
     }
 
+    /** A token for this user (cashier switch by PIN); logged as a sign-in. */
+    public AuthResponse issueFor(UUID userId) {
+        String role = jdbc.sql("SELECT platform_role FROM users WHERE id = :id").param("id", userId).query(String.class).single();
+        return issue(userId, role);
+    }
+
     private AuthResponse issue(UUID userId, String platformRole) {
         UUID storeId = jdbc.sql("SELECT store_id FROM store_members WHERE user_id = :id")
                 .param("id", userId).query(UUID.class).optional().orElse(null);

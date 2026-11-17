@@ -7,6 +7,8 @@ import { useAuth } from "@/lib/auth";
 import { desktop, isNetworkError, receiptHtml } from "@/lib/desktop";
 import { formatMoney } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
+import { SetPinModal } from "@/components/sales/SetPin";
+import { lockMinutes, setLockMinutes } from "@/components/sales/TillLock";
 import type { Party, Product, Sale } from "@/lib/types";
 
 const PRODUCTS_CACHE = "pos_cache_products";
@@ -155,6 +157,9 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
   const customerRef = useRef<HTMLInputElement>(null);
   const discountRef = useRef<HTMLInputElement>(null);
   const [showKeys, setShowKeys] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [lockMin, setLockMin] = useState(5);
+  useEffect(() => { setLockMin(lockMinutes()); }, []);
   // Windows kassa extras (only when the app supports them)
   const [autoStart, setAutoStart] = useState<boolean | null>(null);
   const [drawerAuto, setDrawerAuto] = useState(false);
@@ -804,6 +809,23 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
               <button type="button" onClick={() => void app.openDrawer?.()} className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-navy-800 ring-1 ring-slate-200 hover:ring-gold-500">💰 Qutunu aç</button>
             </div>
           )}
+          {app && (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+              <button type="button" onClick={() => setPinOpen(true)} className="font-medium text-navy-800 hover:underline">🔑 Kassa PIN-im</button>
+              <label className="flex items-center gap-1.5">
+                Ekran kilidi
+                <select value={lockMin} onChange={(e) => { const v = Number(e.target.value); setLockMin(v); setLockMinutes(v); }}
+                  className="rounded-lg border border-slate-200 bg-white px-1.5 py-0.5 text-xs outline-none focus:border-gold-500">
+                  <option value={0}>Söndür</option>
+                  <option value={2}>2 dəq</option>
+                  <option value={5}>5 dəq</option>
+                  <option value={10}>10 dəq</option>
+                  <option value={30}>30 dəq</option>
+                </select>
+              </label>
+            </div>
+          )}
+          {pinOpen && <SetPinModal onClose={() => setPinOpen(false)} />}
           {app?.setAutoStart && autoStart !== null && (
             <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
               <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={autoStart}

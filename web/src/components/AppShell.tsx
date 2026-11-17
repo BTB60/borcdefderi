@@ -7,6 +7,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { ADMIN_GROUPS, SUPPORT_GROUPS, adminHref, adminTabFrom } from "@/lib/adminNav";
 import { desktop, type UpdateStatus } from "@/lib/desktop";
+import { PinPad } from "@/components/sales/PinPad";
+import { TillLock, lockNow } from "@/components/sales/TillLock";
 import { useAuth } from "@/lib/auth";
 import { api, openProtected } from "@/lib/api";
 import { JOB_TITLE_LABEL } from "@/lib/format";
@@ -109,6 +111,7 @@ function AdminNav({ pending, onExport, exporting, limited }: { pending: number; 
 /** Top bar of the Windows kassa: store, live clock, internet state, cashier and sign-out. */
 function KioskHeader({ store, name, role, onSignOut }: { store: string; name: string; role: string; onSignOut: () => void }) {
   const [now, setNow] = useState(() => new Date());
+  const [switching, setSwitching] = useState(false);
   const [online, setOnline] = useState(true);
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -172,6 +175,16 @@ function KioskHeader({ store, name, role, onSignOut }: { store: string; name: st
             <span className="block text-[11px] text-white/55">{role}</span>
           </span>
         </div>
+        <button onClick={() => setSwitching(true)} title="Başqa kassir PIN ilə keçsin"
+          className="flex h-10 items-center gap-2 rounded-xl border border-white/15 px-3 text-sm text-white/80 transition hover:border-gold-500 hover:text-gold-400">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7" /></svg>
+          <span className="hidden xl:inline">Kassir dəyiş</span>
+        </button>
+        <button onClick={lockNow} title="Ekranı kilidlə (PIN ilə açılır)" aria-label="Ekranı kilidlə"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 text-white/80 transition hover:border-gold-500 hover:text-gold-400">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path d="M6 11h12v10H6V11Zm3 0V8a3 3 0 0 1 6 0v3" /></svg>
+        </button>
+        {switching && <PinPad title="Kassir dəyiş" subtitle="Növbəti kassir PIN-ini yazsın" onDone={() => setSwitching(false)} onCancel={() => setSwitching(false)} />}
         <button onClick={onSignOut} title="Çıxış" aria-label="Çıxış"
           className="flex h-10 items-center gap-2 rounded-xl border border-white/15 px-3 text-sm text-white/80 transition hover:border-gold-500 hover:text-gold-400">
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" /></svg>
@@ -251,6 +264,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return (
       <div className="flex h-screen flex-col overflow-hidden bg-[#EEF1F7]">
         <KioskHeader store={me?.storeName ?? ""} name={me?.fullName ?? ""} role={roleLabel} onSignOut={signOut} />
+        <TillLock />
         <main className="min-h-0 flex-1 p-3 [&>*]:h-full">{pathname === "/satis" ? children : null}</main>
       </div>
     );

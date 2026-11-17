@@ -5,6 +5,7 @@ import { Avatar } from "@/components/Avatar";
 import { Alert, Button, Card, Field, Input, PageHeader, Spinner, useConfirm } from "@/components/ui";
 import { ApiError, api, download } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { SetPinModal } from "@/components/sales/SetPin";
 import type { AuthResponse, Profile } from "@/lib/types";
 
 const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
@@ -44,6 +45,7 @@ export default function SettingsPage() {
           <PersonalCard profile={profile} onChange={updated} />
           {profile.role === "STORE_OWNER" && <StoreCard profile={profile} onChange={updated} />}
           {profile.role === "STORE_OWNER" && <RequisitesCard />}
+          {profile.storeId && <PinCard />}
           {profile.role === "STORE_OWNER" && <BonusCard />}
           {profile.role === "STORE_OWNER" && <BackupCard />}
           <PasswordCard isAdmin={profile.platformRole === "SUPER_ADMIN" || profile.platformRole === "SUPPORT_ADMIN"} />
@@ -227,6 +229,19 @@ function StoreCard({ profile, onChange }: { profile: Profile; onChange: (p: Prof
         </Field>
         <Button type="submit" variant="primary" disabled={busy}>{busy ? "Saxlanılır…" : "Yadda saxla"}</Button>
       </form>
+    </Card>
+  );
+}
+
+/** Kassa PIN-i: cashier switch and screen lock on the till. */
+function PinCard() {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card>
+      <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Kassa PIN-i</h2>
+      <p className="mb-4 text-sm text-slate-500">Ortaq kassada PIN ilə “Kassir dəyiş” edin və kilidlənmiş ekranı açın</p>
+      <Button variant="outline" onClick={() => setOpen(true)}>PIN təyin et / dəyiş</Button>
+      {open && <SetPinModal onClose={() => setOpen(false)} />}
     </Card>
   );
 }

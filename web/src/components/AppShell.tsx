@@ -144,7 +144,7 @@ function KioskHeader({ store, name, role, onSignOut }: { store: string; name: st
           <p className="truncate text-xs text-white/55">{store}</p>
         </div>
       </div>
-      <div className="absolute left-1/2 hidden -translate-x-1/2 text-center md:block">
+      <div className={cx("absolute left-1/2 hidden -translate-x-1/2 text-center", update && update.state !== "idle" ? "" : "xl:block")}>
         <p className="font-serif text-2xl font-semibold tabular-nums leading-none tracking-wide">{time}</p>
         <p className="mt-1 text-[11px] text-white/55">{date}</p>
       </div>

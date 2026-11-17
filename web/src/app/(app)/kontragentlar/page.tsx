@@ -158,6 +158,7 @@ function PartyModal({ tab, party, onClose, onSaved }: { tab: Tab; party: Party |
   const [form, setForm] = useState<FormState>(party ? { name: party.name, phone: party.phone ?? "", note: party.note ?? "" } : EMPTY);
   const [discountPct, setDiscountPct] = useState(party?.discountPercent ? String(party.discountPercent) : "");
   const [limit, setLimit] = useState(party?.creditLimit != null ? String(party.creditLimit) : "");
+  const [taxId, setTaxId] = useState(party?.taxId ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -171,8 +172,11 @@ function PartyModal({ tab, party, onClose, onSaved }: { tab: Tab; party: Party |
     const pct = Number(discountPct.replace(",", ".")) || 0;
     const body = { name: form.name, phone: form.phone || null, note: form.note || null, ...(tab === "customers" ? { discountPercent: pct, ...(limit.trim() ? { creditLimit: limit.trim().replace(",", ".") } : { noCreditLimit: true }) } : {}) };
     try {
-      if (party) await api(`/api/${tab}/${party.id}`, { method: "PUT", json: body });
-      else await api(`/api/${tab}`, { method: "POST", json: body });
+      const saved = party ? await api<Party>(`/api/${tab}/${party.id}`, { method: "PUT", json: body })
+        : await api<Party>(`/api/${tab}`, { method: "POST", json: body });
+      if (tab === "customers" && (taxId.trim() || party?.taxId)) {
+        await api(`/api/customers/${saved.id}/tax-id`, { method: "PUT", json: { taxId: taxId.trim() || null } });
+      }
       onSaved(party ? "Dəyişikliklər yadda saxlanıldı" : `Yeni ${label} əlavə edildi`);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -205,6 +209,11 @@ function PartyModal({ tab, party, onClose, onSaved }: { tab: Tab; party: Party |
         {tab === "customers" && (
           <Field label="Daimi endirim (%)" error={errors.discountPercent} hint="Kassada bu müştəri seçiləndə çekə avtomatik tətbiq olunur">
             <Input inputMode="decimal" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} placeholder="0" />
+          </Field>
+        )}
+        {tab === "customers" && (
+          <Field label="VÖEN (şirkətdirsə)" hint="Topdan satışın qaimə-fakturasında alıcı kimi çıxır">
+            <Input maxLength={20} value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder="Boş qala bilər" />
           </Field>
         )}
         {tab === "customers" && (

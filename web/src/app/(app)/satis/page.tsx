@@ -119,6 +119,7 @@ function SaleModal({ sale, onClose, onChanged }: { sale: Sale; onClose: () => vo
     <Modal open size="xl" title={`Satış ${sale.number}`} onClose={onClose}
       footer={<>
         <Button variant="outline" onClick={() => openProtected(`/api/sales/${sale.id}/receipt`)}>Çek (PDF)</Button>
+        <Button variant="outline" onClick={() => openProtected(`/api/sales/${sale.id}/invoice`)}>Qaimə-faktura</Button>
         {active && mayChange(sale.createdBy) && <Button variant="danger" disabled={busy} onClick={cancel}>Satışı ləğv et</Button>}
         <Button variant="ghost" onClick={onClose}>Bağla</Button>
       </>}>

@@ -182,6 +182,8 @@ export interface Party {
   bonusBalance?: number;
   /** Customers: the most they may owe (null = no limit). */
   creditLimit?: number | null;
+  /** Customers: VÖEN printed on the qaimə-faktura. */
+  taxId?: string | null;
 }
 
 // ----- HesabPro 2.0 -----

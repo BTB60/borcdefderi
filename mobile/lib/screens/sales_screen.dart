@@ -159,10 +159,30 @@ class _SalesScreenState extends State<SalesScreen> {
     if (mounted) await showReceiptPrinterSheet(context, widget.session, lastSale: last);
   }
 
-  Future<void> _share(Map<String, dynamic> s) async {
+  /// Tap on a sale: the receipt (çek) or the A4 qaimə-faktura (for wholesale buyers).
+  Future<void> _pickShare(Map<String, dynamic> s) async {
+    final kind = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.receipt_long_outlined), title: const Text('Çek'), onTap: () => Navigator.pop(ctx, 'receipt')),
+          ListTile(
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('Qaimə-faktura (A4)'),
+            subtitle: const Text('Rekvizitlərlə — topdan alan şirkətlər üçün'),
+            onTap: () => Navigator.pop(ctx, 'invoice'),
+          ),
+        ]),
+      ),
+    );
+    if (kind != null && mounted) await _share(s, kind: kind);
+  }
+
+  Future<void> _share(Map<String, dynamic> s, {String kind = 'receipt'}) async {
     try {
-      final bytes = await widget.session.api.getBytes('/api/sales/${s['id']}/receipt');
-      final name = 'cek-${s['number']}.pdf';
+      final bytes = await widget.session.api.getBytes('/api/sales/${s['id']}/$kind');
+      final name = '${kind == 'invoice' ? 'qaime' : 'cek'}-${s['number']}.pdf';
       await SharePlus.instance.share(ShareParams(
         files: [XFile.fromData(Uint8List.fromList(bytes), mimeType: 'application/pdf', name: name)],
         fileNameOverrides: [name],
@@ -277,7 +297,7 @@ class _SalesScreenState extends State<SalesScreen> {
                             onPressed: () => _cancel(s),
                           ),
                       ]),
-                      onTap: () => _share(s),
+                      onTap: () => _pickShare(s),
                       onLongPress: s['status'] == 'COMPLETED' && widget.session.me!.mayChange(s['createdBy']) ? () => _cancel(s) : null,
                     ),
                     ),

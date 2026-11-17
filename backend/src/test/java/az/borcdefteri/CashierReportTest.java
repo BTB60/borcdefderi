@@ -72,5 +72,15 @@ class CashierReportTest extends IntegrationTestBase {
 
         put(owner, "/api/customers/" + c, Map.of("name", "Nisyəçi", "noCreditLimit", true)).andExpect(status().isOk());
         post(owner, "/api/sales", s2).andExpect(status().isCreated());
+
+        // qaimə-faktura with both sides' rekvizitlər
+        put(owner, "/api/profile/requisites", Map.of("taxId", "1234567891", "bankName", "Kapital Bank", "bankAccount", "AZ00TEST"))
+                .andExpect(status().isOk());
+        put(owner, "/api/customers/" + c + "/tax-id", Map.of("taxId", "9876543210")).andExpect(status().isOk());
+        assertThat(body(get(owner, "/api/customers")).toString()).contains("9876543210");
+        String saleId = body(get(owner, "/api/sales")).get("items").get(0).get("id").asText();
+        byte[] pdf = get(owner, "/api/sales/" + saleId + "/invoice").andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(new String(pdf, 0, 5)).isEqualTo("%PDF-");
     }
 }

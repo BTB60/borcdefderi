@@ -43,6 +43,7 @@ export default function SettingsPage() {
         <div className="space-y-6 xl:col-span-2">
           <PersonalCard profile={profile} onChange={updated} />
           {profile.role === "STORE_OWNER" && <StoreCard profile={profile} onChange={updated} />}
+          {profile.role === "STORE_OWNER" && <RequisitesCard />}
           {profile.role === "STORE_OWNER" && <BonusCard />}
           {profile.role === "STORE_OWNER" && <BackupCard />}
           <PasswordCard isAdmin={profile.platformRole === "SUPER_ADMIN"} />
@@ -224,6 +225,57 @@ function StoreCard({ profile, onChange }: { profile: Profile; onChange: (p: Prof
         <Field label="Ünvan">
           <Input maxLength={255} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
         </Field>
+        <Button type="submit" variant="primary" disabled={busy}>{busy ? "Saxlanılır…" : "Yadda saxla"}</Button>
+      </form>
+    </Card>
+  );
+}
+
+type Requisites = { taxId: string | null; bankName: string | null; bankAccount: string | null; bankCode: string | null; director: string | null };
+
+/** Rekvizitlər printed on the qaimə-faktura: VÖEN, bank details, director. */
+function RequisitesCard() {
+  const [form, setForm] = useState<Record<keyof Requisites, string> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<Msg>(null);
+  useEffect(() => {
+    api<Requisites>("/api/profile/requisites")
+      .then((r) => setForm({ taxId: r.taxId ?? "", bankName: r.bankName ?? "", bankAccount: r.bankAccount ?? "", bankCode: r.bankCode ?? "", director: r.director ?? "" }))
+      .catch(() => setForm({ taxId: "", bankName: "", bankAccount: "", bankCode: "", director: "" }));
+  }, []);
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    if (!form) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api("/api/profile/requisites", { method: "PUT", json: form });
+      setMsg({ kind: "success", text: "Rekvizitlər yadda saxlanıldı" });
+    } catch (err) {
+      setMsg({ kind: "error", text: errorText(err, "Yadda saxlanılmadı") });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!form) return null;
+  const f = (k: keyof Requisites, label: string, max: number, placeholder?: string) => (
+    <Field label={label}><Input maxLength={max} value={form[k]} placeholder={placeholder} onChange={(e) => setForm({ ...form, [k]: e.target.value })} /></Field>
+  );
+  return (
+    <Card>
+      <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Rekvizitlər</h2>
+      <p className="mb-5 text-sm text-slate-500">Topdan satışın qaimə-fakturasında satıcı kimi çıxır</p>
+      {msg && <div className="mb-4"><Alert kind={msg.kind}>{msg.text}</Alert></div>}
+      <form onSubmit={save} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {f("taxId", "VÖEN", 20, "1234567891")}
+          {f("director", "Direktor / məsul şəxs", 100)}
+          {f("bankName", "Bank", 100, "Kapital Bank")}
+          {f("bankCode", "Bank kodu", 20)}
+        </div>
+        {f("bankAccount", "Hesab nömrəsi (IBAN)", 40, "AZ00 ....")}
         <Button type="submit" variant="primary" disabled={busy}>{busy ? "Saxlanılır…" : "Yadda saxla"}</Button>
       </form>
     </Card>

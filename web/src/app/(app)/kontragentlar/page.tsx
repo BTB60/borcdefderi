@@ -60,6 +60,7 @@ function PartiesList() {
           <>
             <Button variant="outline" onClick={() => download(`/api/reports/${tab}/export`, `${tab}.xlsx`).catch((e) => setError(e instanceof ApiError ? e.message : "Excel hazırlanmadı"))}>Excel</Button>
             <Button variant="outline" onClick={() => setImporting(true)}>Excel-dən import</Button>
+            <Link href="/kampaniya" className="inline-flex items-center rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100">WhatsApp kampaniyası</Link>
             <Button variant="gold" onClick={() => setEditing("new")}>+ {label} əlavə et</Button>
           </>
         }
@@ -159,6 +160,7 @@ function PartyModal({ tab, party, onClose, onSaved }: { tab: Tab; party: Party |
   const [discountPct, setDiscountPct] = useState(party?.discountPercent ? String(party.discountPercent) : "");
   const [limit, setLimit] = useState(party?.creditLimit != null ? String(party.creditLimit) : "");
   const [taxId, setTaxId] = useState(party?.taxId ?? "");
+  const [birthday, setBirthday] = useState(party?.birthday ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -174,6 +176,9 @@ function PartyModal({ tab, party, onClose, onSaved }: { tab: Tab; party: Party |
     try {
       const saved = party ? await api<Party>(`/api/${tab}/${party.id}`, { method: "PUT", json: body })
         : await api<Party>(`/api/${tab}`, { method: "POST", json: body });
+      if (tab === "customers" && (birthday || party?.birthday) && birthday !== (party?.birthday ?? "")) {
+        await api(`/api/customers/${saved.id}/birthday`, { method: "PUT", json: { birthday: birthday || null } });
+      }
       if (tab === "customers" && (taxId.trim() || party?.taxId)) {
         await api(`/api/customers/${saved.id}/tax-id`, { method: "PUT", json: { taxId: taxId.trim() || null } });
       }
@@ -209,6 +214,11 @@ function PartyModal({ tab, party, onClose, onSaved }: { tab: Tab; party: Party |
         {tab === "customers" && (
           <Field label="Daimi endirim (%)" error={errors.discountPercent} hint="Kassada bu müştəri seçiləndə çekə avtomatik tətbiq olunur">
             <Input inputMode="decimal" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} placeholder="0" />
+          </Field>
+        )}
+        {tab === "customers" && (
+          <Field label="Doğum günü" hint="Ad günündə bildiriş gəlir və WhatsApp-da təbrik etmək olur">
+            <Input type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
           </Field>
         )}
         {tab === "customers" && (

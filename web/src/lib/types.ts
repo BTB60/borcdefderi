@@ -184,6 +184,7 @@ export interface Party {
   creditLimit?: number | null;
   /** Customers: VÖEN printed on the qaimə-faktura. */
   taxId?: string | null;
+  birthday?: string | null;
 }
 
 // ----- HesabPro 2.0 -----

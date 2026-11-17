@@ -9,6 +9,7 @@ import '../format.dart';
 import '../models/models.dart';
 import '../state/session.dart';
 import '../theme.dart';
+import 'campaign_screen.dart';
 import 'common.dart';
 import 'account_sheet.dart';
 import 'party_profile_screen.dart';
@@ -133,6 +134,12 @@ class _PartiesScreenState extends State<PartiesScreen> {
     final noun = widget.isCustomer ? 'müştəri' : 'şirkət';
     return Scaffold(
       appBar: AppBar(title: Text(widget.isCustomer ? 'Müştərilər' : 'Şirkətlər'), actions: [
+        if (widget.isCustomer)
+          IconButton(
+            tooltip: 'WhatsApp kampaniyası',
+            icon: const Icon(Icons.campaign_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CampaignScreen(session: widget.session))),
+          ),
         PopupMenuButton<String>(
           tooltip: 'Excel',
           icon: const Icon(Icons.table_view_outlined),

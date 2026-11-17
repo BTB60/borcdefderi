@@ -48,11 +48,14 @@ public class DashboardService {
     private final PaymentService payments;
     private final az.borcdefteri.notifications.NotificationService stored;
     private final az.borcdefteri.inventory.ExpiryService expiry;
+    private final az.borcdefteri.customers.CampaignService campaigns;
 
     public DashboardService(JdbcClient jdbc, TenantService tenant, PaymentService payments,
                             az.borcdefteri.notifications.NotificationService stored,
-                            az.borcdefteri.inventory.ExpiryService expiry) {
+                            az.borcdefteri.inventory.ExpiryService expiry,
+                            az.borcdefteri.customers.CampaignService campaigns) {
         this.expiry = expiry;
+        this.campaigns = campaigns;
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.payments = payments;
@@ -266,6 +269,16 @@ public class DashboardService {
                             rs.getString("party_name") + " — " + rs.getBigDecimal("remaining_amount")
                                     + " AZN (son tarix: " + due + ")", due);
                 }).list().stream().filter(java.util.Objects::nonNull).forEach(out::add);
+
+        // Ad günü: customers whose birthday is today
+        if (m.has("CUSTOMER_DEBTS") || m.has("SALES")) {
+            var today0 = campaigns.upcoming(m.storeId(), 0);
+            if (!today0.isEmpty()) {
+                out.add(new Notification("BIRTHDAY", "INFO", "Bu gün ad günüdür 🎂",
+                        today0.stream().map(b -> b.name()).limit(5).collect(java.util.stream.Collectors.joining(", "))
+                                + (today0.size() > 5 ? " və daha " + (today0.size() - 5) : "") + " — WhatsApp-da təbrik edin", today));
+            }
+        }
 
         // Son istifadə tarixi: goods on the shelf that expire within a week (or already have)
         if (m.isOwner() || m.permissions().contains("INVENTORY")) {

@@ -11,6 +11,12 @@ contextBridge.exposeInMainWorld("hesabDesktop", {
   pending: () => ipcRenderer.invoke("pending"),
   syncNow: () => ipcRenderer.invoke("sync-now"),
   updateStatus: () => ipcRenderer.invoke("update-status"),
+  getAutoStart: () => ipcRenderer.invoke("get-auto-start"),
+  setAutoStart: (on) => ipcRenderer.invoke("set-auto-start", on),
+  openDrawer: () => ipcRenderer.invoke("open-drawer"),
+  getDrawerAuto: () => ipcRenderer.invoke("get-drawer-auto"),
+  setDrawerAuto: (on) => ipcRenderer.invoke("set-drawer-auto", on),
+  openCustomerDisplay: () => ipcRenderer.invoke("open-customer-display"),
   installUpdate: () => ipcRenderer.invoke("install-update"),
   onUpdate: (cb) => {
     const listener = (_e, status) => cb(status);

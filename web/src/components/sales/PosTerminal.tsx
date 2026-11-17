@@ -152,6 +152,17 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
     try { window.localStorage.setItem(AUTO_PRINT_KEY, String(v)); } catch { /* storage blocked */ }
   };
   const searchRef = useRef<HTMLInputElement>(null);
+  const customerRef = useRef<HTMLInputElement>(null);
+  const discountRef = useRef<HTMLInputElement>(null);
+  const [showKeys, setShowKeys] = useState(false);
+  // Windows kassa extras (only when the app supports them)
+  const [autoStart, setAutoStart] = useState<boolean | null>(null);
+  const [drawerAuto, setDrawerAuto] = useState(false);
+  useEffect(() => {
+    const d = desktop();
+    d?.getAutoStart?.().then(setAutoStart).catch(() => undefined);
+    d?.getDrawerAuto?.().then(setDrawerAuto).catch(() => undefined);
+  }, []);
 
   const { me, isOwner } = useAuth();
   const app = desktop();
@@ -382,6 +393,8 @@ Təşəkkür edirik!`;
         return;
       }
       setDone({ sale: s, change });
+      // the cash drawer opens by itself after a sale with cash (Windows app, when switched on)
+      if (drawerAuto && s.paidCash > 0) void desktop()?.openDrawer?.();
       if (orderRef.current) {
         api(`/api/online-orders/${orderRef.current.id}/status`, { method: "POST", json: { status: "DONE", saleId: s.id } }).catch(() => undefined);
         orderRef.current = null;
@@ -407,12 +420,22 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
     }
   }
 
-  // keyboard: F2 search, F9 sell, Esc clears search
+  // keyboard: Boşluq (space) = ödəniş / sat, F1 help, F2 search, F4 card, F6 discount, F7 customer, F8 clear,
+  // Esc clears the search. F9 still works as before.
   const submitRef = useRef(submit);
   submitRef.current = submit;
-  const payRef = useRef({ payOpen, hasCart: cart.length > 0, done: !!done });
-  payRef.current = { payOpen, hasCart: cart.length > 0, done: !!done };
+  const resetRef = useRef(reset);
+  resetRef.current = reset;
+  const payRef = useRef({ payOpen, hasCart: cart.length > 0, done: !!done, search });
+  payRef.current = { payOpen, hasCart: cart.length > 0, done: !!done, search };
   useEffect(() => {
+    const openPay = (m?: PayMode) => {
+      const st = payRef.current;
+      if (!st.hasCart || st.done) return;
+      if (m) { setMode(m); setCash(""); setCard(""); setGiven(""); }
+      setError(null);
+      setPayOpen(true);
+    };
     const onKey = (e: KeyboardEvent) => {
       const st = payRef.current;
       if (st.done && (e.key === " " || e.key === "Enter") && !(e.target instanceof HTMLButtonElement)) {
@@ -421,11 +444,28 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
         setTimeout(() => searchRef.current?.focus(), 0);
         return;
       }
-      if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); }
+      const t = e.target as HTMLElement | null;
+      const typing = !!t && (t.tagName === "TEXTAREA" || t.tagName === "SELECT" || (t.tagName === "INPUT" && t !== searchRef.current));
+      // Boşluq: open the payment (from the empty search box or anywhere outside a text field); in the payment
+      // window Boşluq completes the sale (handled there)
+      if (e.key === " " && !st.payOpen && !typing && !(t instanceof HTMLButtonElement)
+          && (t !== searchRef.current || st.search.trim() === "")) {
+        if (st.hasCart) { e.preventDefault(); openPay(); }
+        return;
+      }
+      if (e.key === "F1") { e.preventDefault(); setShowKeys((v) => !v); }
+      else if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); }
+      else if (e.key === "F4") { e.preventDefault(); if (!st.payOpen) openPay("card"); }
+      else if (e.key === "F6") { e.preventDefault(); discountRef.current?.focus(); discountRef.current?.select(); }
+      else if (e.key === "F7") { e.preventDefault(); customerRef.current?.focus(); }
+      else if (e.key === "F8") {
+        e.preventDefault();
+        if (st.hasCart && !st.payOpen && window.confirm("Çek təmizlənsin? Səbətdəki bütün mallar silinəcək.")) resetRef.current();
+      }
       else if (e.key === "F9") {
         e.preventDefault();
         if (st.payOpen) void submitRef.current();
-        else if (st.hasCart && !st.done) { setError(null); setPayOpen(true); }
+        else openPay();
       }
       else if (e.key === "Escape" && document.activeElement === searchRef.current) setSearch("");
     };
@@ -467,6 +507,16 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
           />
           <span className="absolute right-4 top-1/2 -translate-y-1/2"><Kbd>F2</Kbd></span>
         </form>
+        <button type="button" onClick={() => setShowKeys((v) => !v)} className="mt-2 text-xs font-medium text-slate-400 hover:text-navy-800">
+          ⌨ Qısayollar <Kbd>F1</Kbd>
+        </button>
+        {showKeys && (
+          <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-xl bg-slate-50 p-3 text-xs text-slate-600 ring-1 ring-slate-200 sm:grid-cols-4">
+            {([["Boşluq", "Ödəniş / sat"], ["F2", "Axtarış"], ["F4", "Kartla ödə"], ["F6", "Endirim"], ["F7", "Müştəri seç"], ["F8", "Çeki təmizlə"], ["Esc", "Axtarışı sil"], ["F1", "Bu siyahı"]] as const).map(([k, l]) => (
+              <span key={k} className="flex items-center gap-2"><Kbd>{k}</Kbd>{l}</span>
+            ))}
+          </div>
+        )}
 
         {categories.length > 0 && (
           <div className="-mx-1 mt-4 flex gap-2 overflow-x-auto px-1 pb-1">
@@ -559,6 +609,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
           ) : (
             <>
               <input
+                ref={customerRef}
                 value={customerQuery}
                 onChange={(e) => { setCustomerQuery(e.target.value); setCustomerOpen(true); }}
                 onFocus={() => setCustomerOpen(true)}
@@ -643,7 +694,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
           <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
             <span>Endirim</span>
             <div className="flex items-center gap-1.5">
-              <input value={discount} onChange={(e) => setDiscount(e.target.value)} inputMode="decimal" placeholder="0" aria-label="Ümumi endirim"
+              <input ref={discountRef} value={discount} onChange={(e) => setDiscount(e.target.value)} inputMode="decimal" placeholder="0" aria-label="Ümumi endirim"
                 className="h-8 w-20 rounded-lg border border-slate-200 bg-white px-2 text-right text-sm tabular-nums outline-none focus:border-gold-500" />
               <div className="inline-flex rounded-lg bg-white p-0.5 ring-1 ring-slate-200">
                 {[false, true].map((pc) => (
@@ -738,10 +789,27 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={autoPrint} onChange={(e) => toggleAutoPrint(e.target.checked)} />
             Satışdan sonra çeki printerdən çıxar
           </label>
-          {/* the Windows kassa app shows only the till and opens no other windows */}
-          {!app && (
-            <button type="button" onClick={() => window.open("/musteri-ekrani", "hesabpro-display", "popup,width=1024,height=700")}
+          {/* customer display: a popup in the browser, a full-screen window on the second monitor in the Windows app */}
+          {(!app || app.openCustomerDisplay) && (
+            <button type="button" onClick={() => (app?.openCustomerDisplay ? void app.openCustomerDisplay() : window.open("/musteri-ekrani", "hesabpro-display", "popup,width=1024,height=700"))}
               className="text-left text-xs font-medium text-slate-500 hover:text-navy-800">🖥 Müştəri ekranını aç (ikinci monitor)</button>
+          )}
+          {app?.openDrawer && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+                <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={drawerAuto}
+                  onChange={(e) => { setDrawerAuto(e.target.checked); void app.setDrawerAuto?.(e.target.checked); }} />
+                Nağd satışdan sonra pul qutusunu aç
+              </label>
+              <button type="button" onClick={() => void app.openDrawer?.()} className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-navy-800 ring-1 ring-slate-200 hover:ring-gold-500">💰 Qutunu aç</button>
+            </div>
+          )}
+          {app?.setAutoStart && autoStart !== null && (
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+              <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={autoStart}
+                onChange={(e) => { setAutoStart(e.target.checked); void app.setAutoStart?.(e.target.checked); }} />
+              Kompüter açılanda kassa özü açılsın
+            </label>
           )}
           {app && (
             <label className="flex items-center gap-2 text-xs text-slate-600">
@@ -764,7 +832,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
           <button type="button" disabled={cart.length === 0 || busy} onClick={() => { setError(null); setPayOpen(true); }}
             className="flex w-full items-center justify-between rounded-2xl bg-gold-500 px-5 py-4 text-navy-900 shadow-sm transition hover:bg-gold-600 hover:text-white active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50">
             <span className="text-base font-semibold">{busy ? "Saxlanılır…" : "Ödəniş"}</span>
-            <span className="flex items-center gap-2"><span className="font-serif text-lg font-semibold tabular-nums">{formatMoney(total)}</span><Kbd>F9</Kbd></span>
+            <span className="flex items-center gap-2"><span className="font-serif text-lg font-semibold tabular-nums">{formatMoney(total)}</span><Kbd>Boşluq</Kbd></span>
           </button>
         </div>
         </div>

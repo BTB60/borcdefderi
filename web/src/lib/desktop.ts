@@ -21,6 +21,15 @@ export interface DesktopBridge {
   updateStatus?(): Promise<UpdateStatus>;
   installUpdate?(): Promise<boolean>;
   onUpdate?(cb: (s: UpdateStatus) => void): () => void;
+  /** Open with Windows. */
+  getAutoStart?(): Promise<boolean>;
+  setAutoStart?(on: boolean): Promise<boolean>;
+  /** Cash drawer on the receipt printer (ESC/POS pulse); auto = open after every cash sale. */
+  openDrawer?(): Promise<boolean>;
+  getDrawerAuto?(): Promise<boolean>;
+  setDrawerAuto?(on: boolean): Promise<boolean>;
+  /** Customer display window, full screen on the second monitor when there is one. */
+  openCustomerDisplay?(): Promise<boolean>;
 }
 
 export type UpdateStatus = { state: "idle" | "downloading" | "ready"; version: string | null; percent: number };

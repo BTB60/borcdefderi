@@ -1,7 +1,8 @@
 // HesabPro Kassa — Windows app around the HesabPro web till (/satis).
 // Adds what a browser can't: silent receipt printing, selling without internet (the site is kept on disk and
 // sales are queued and sent later) and a full-screen till that opens with Windows.
-const { app, BrowserWindow, ipcMain, protocol, net, shell, Menu, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, protocol, net, shell, Menu, dialog, screen } = require("electron");
+const { execFile } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -82,6 +83,75 @@ async function siteHandler(request) {
     }
     return Response.error();
   }
+}
+
+// ---------- cash drawer ----------
+// Most receipt printers open the drawer plugged into them on the ESC/POS "pulse" command. Windows has no raw
+// print API in Electron, so a tiny PowerShell script sends the bytes to the printer through winspool.
+
+const DRAWER_PS = `
+param([string]$Printer)
+$src = @"
+using System; using System.Runtime.InteropServices;
+public class RawPrint {
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public class DOCINFO { public string pDocName; public string pOutputFile; public string pDataType; }
+  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool OpenPrinter(string n, out IntPtr h, IntPtr d);
+  [DllImport("winspool.drv", SetLastError=true)] public static extern bool ClosePrinter(IntPtr h);
+  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool StartDocPrinter(IntPtr h, int l, DOCINFO d);
+  [DllImport("winspool.drv", SetLastError=true)] public static extern bool EndDocPrinter(IntPtr h);
+  [DllImport("winspool.drv", SetLastError=true)] public static extern bool StartPagePrinter(IntPtr h);
+  [DllImport("winspool.drv", SetLastError=true)] public static extern bool EndPagePrinter(IntPtr h);
+  [DllImport("winspool.drv", SetLastError=true)] public static extern bool WritePrinter(IntPtr h, byte[] b, int c, out int w);
+  public static bool Send(string printer, byte[] data) {
+    IntPtr h; if (!OpenPrinter(printer, out h, IntPtr.Zero)) return false;
+    var di = new DOCINFO { pDocName = "HesabPro drawer", pDataType = "RAW" };
+    bool ok = StartDocPrinter(h, 1, di) && StartPagePrinter(h);
+    int w = 0; if (ok) ok = WritePrinter(h, data, data.Length, out w);
+    EndPagePrinter(h); EndDocPrinter(h); ClosePrinter(h); return ok;
+  }
+}
+"@
+Add-Type -TypeDefinition $src
+if (-not $Printer) { $Printer = (Get-CimInstance Win32_Printer | Where-Object Default).Name }
+$bytes = [byte[]](0x1B, 0x70, 0x00, 0x19, 0xFA)
+if ([RawPrint]::Send($Printer, $bytes)) { "ok" } else { "fail" }
+`;
+
+function openDrawer() {
+  return new Promise((resolve) => {
+    const script = path.join(DATA, "drawer.ps1");
+    try { fs.writeFileSync(script, DRAWER_PS); } catch { return resolve(false); }
+    const args = ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script];
+    const printer = settings().printer;
+    if (printer) args.push("-Printer", printer);
+    execFile("powershell.exe", args, { windowsHide: true, timeout: 15000 }, (err, out) => resolve(!err && String(out).includes("ok")));
+  });
+}
+
+// ---------- customer display (second monitor) ----------
+
+let display = null;
+function openCustomerDisplay() {
+  if (display && !display.isDestroyed()) {
+    display.focus();
+    return true;
+  }
+  const main = screen.getPrimaryDisplay();
+  const other = screen.getAllDisplays().find((d) => d.id !== main.id);
+  const area = (other || main).bounds;
+  display = new BrowserWindow({
+    x: area.x, y: area.y, width: other ? area.width : 1024, height: other ? area.height : 700,
+    title: "HesabPro — Müştəri ekranı",
+    icon: path.join(__dirname, "build", "icon.png"),
+    backgroundColor: "#101C35",
+    autoHideMenuBar: true,
+    fullscreen: !!other,
+    webPreferences: { contextIsolation: true, sandbox: true },
+  });
+  display.setMenu(null);
+  display.loadURL(APP_URL + "/musteri-ekrani");
+  display.on("closed", () => { display = null; });
+  return !!other;
 }
 
 // ---------- app updates ----------
@@ -255,6 +325,12 @@ if (!app.requestSingleInstanceLock()) {
   }));
   ipcMain.handle("sync-now", () => sync());
   ipcMain.handle("update-status", () => updateStatus);
+  ipcMain.handle("get-auto-start", () => app.getLoginItemSettings().openAtLogin);
+  ipcMain.handle("set-auto-start", (_e, on) => { app.setLoginItemSettings({ openAtLogin: !!on }); return !!on; });
+  ipcMain.handle("open-drawer", () => openDrawer());
+  ipcMain.handle("get-drawer-auto", () => !!settings().drawerAuto);
+  ipcMain.handle("set-drawer-auto", (_e, on) => { saveSettings({ drawerAuto: !!on }); return !!on; });
+  ipcMain.handle("open-customer-display", () => openCustomerDisplay());
   ipcMain.handle("install-update", () => {
     if (updateStatus.state === "ready" && updater) {
       // closes the app, installs the new version quietly and opens it again
@@ -267,6 +343,11 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     protocol.handle("https", siteHandler);
     createWindow();
+    // first start: the till opens with Windows (can be switched off on the till screen)
+    if (!settings().autoStartSet) {
+      try { app.setLoginItemSettings({ openAtLogin: true }); } catch { /* ignore */ }
+      saveSettings({ autoStartSet: true });
+    }
     setInterval(sync, 30_000);
     setTimeout(sync, 5_000);
     // the Microsoft Store version is updated by the Store itself

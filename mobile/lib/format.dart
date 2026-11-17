@@ -38,6 +38,7 @@ const permissionLabels = {
   'EXPENSES': 'Xərclər və büdcə',
   'INVENTORY': 'Anbar',
   'SALES': 'Satış',
+  'TILL_SETTINGS': 'Kassa parametrləri',
 };
 
 /// Sections a package may include (every menu section except the subscription page), in menu order.

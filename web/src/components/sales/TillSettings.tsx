@@ -49,7 +49,8 @@ function Section({ icon, title, children }: { icon: string; title: string; child
  */
 export function TillSettings() {
   const app = desktop();
-  const { me } = useAuth();
+  const { me, isOwner, can } = useAuth();
+  const full = isOwner || can("TILL_SETTINGS");
   const [printers, setPrinters] = useState<{ name: string; isDefault: boolean }[]>([]);
   const [printer, setPrinter] = useState("");
   const [labelPrinter, setLabelPrinter] = useState("");
@@ -108,6 +109,25 @@ export function TillSettings() {
       {printers.map((p) => <option key={p.name} value={p.name}>{p.name}{p.isDefault ? " (əsas)" : ""}</option>)}
     </>
   );
+
+  if (!full) {
+    return (
+      <div className="mx-auto grid max-w-3xl gap-4 pb-6">
+        <Section icon="🔐" title="Mənim kassa PIN-im">
+          <Row title="PIN təyin et / dəyiş" hint="“Kassir dəyiş” və kilidi açmaq üçün">
+            <Button variant="outline" onClick={() => setPinOpen(true)}>PIN təyin et / dəyiş</Button>
+          </Row>
+        </Section>
+        <Card>
+          <p className="text-sm text-slate-600">
+            🔒 Printer, çek dizaynı, pul qutusu, ekran kilidi və digər kassa ayarları bağlıdır.
+            Mağaza sahibi <b>İşçilər → İcazələr</b> bölməsində <b>“Kassa parametrləri”</b> icazəsini verə bilər.
+          </p>
+        </Card>
+        {pinOpen && <SetPinModal onClose={() => setPinOpen(false)} />}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto grid max-w-5xl gap-4 pb-6 lg:grid-cols-2">

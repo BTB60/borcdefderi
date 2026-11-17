@@ -1,7 +1,7 @@
 export type DebtType = "CUSTOMER_DEBT" | "COMPANY_RECEIVABLE" | "COMPANY_PAYABLE";
 export type DebtStatus = "OPEN" | "PARTIAL" | "PAID";
 export type PaymentMethod = "CASH" | "CARD" | "TRANSFER" | "OTHER";
-export type Permission = "CUSTOMER_DEBTS" | "COMPANY_RECEIVABLES" | "COMPANY_PAYABLES" | "REPORTS" | "CASH" | "EXPENSES" | "INVENTORY" | "SALES";
+export type Permission = "CUSTOMER_DEBTS" | "COMPANY_RECEIVABLES" | "COMPANY_PAYABLES" | "REPORTS" | "CASH" | "EXPENSES" | "INVENTORY" | "SALES" | "TILL_SETTINGS";
 
 export interface SubscriptionSummary {
   active: boolean;

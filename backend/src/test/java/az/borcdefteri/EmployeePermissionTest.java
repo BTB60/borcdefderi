@@ -41,6 +41,26 @@ class EmployeePermissionTest extends IntegrationTestBase {
     }
 
     @Test
+    void ownerCanGiveACashierTheTillSettingsPermission() throws Exception {
+        String owner = register("Kassa Ayarları");
+        activateSubscription(owner, "SEMI_ANNUAL");
+        String email = uniqueEmail("kassir");
+        String memberId = body(post(owner, "/api/employees", Map.of("email", email, "password", EMPLOYEE_PASSWORD,
+                "fullName", "Kassir Ayan", "permissions", perms("SALES"), "jobTitle", "CASHIER"))
+                .andExpect(status().isCreated())).get("memberId").asText();
+        String cashier = login(email, EMPLOYEE_PASSWORD);
+        get(cashier, "/api/auth/me").andExpect(jsonPath("$.permissions", not(hasItem("TILL_SETTINGS"))));
+
+        put(owner, "/api/employees/" + memberId, Map.of("permissions", perms("SALES", "TILL_SETTINGS"), "active", true))
+                .andExpect(status().isOk());
+        get(cashier, "/api/auth/me").andExpect(jsonPath("$.permissions", hasItem("TILL_SETTINGS")));
+
+        put(owner, "/api/employees/" + memberId, Map.of("permissions", perms("SALES"), "active", true))
+                .andExpect(status().isOk());
+        get(cashier, "/api/auth/me").andExpect(jsonPath("$.permissions", not(hasItem("TILL_SETTINGS"))));
+    }
+
+    @Test
     void employeeOnlySeesAndWritesPermittedDebtSection() throws Exception {
         String owner = register("İşçi Mağazası");
         activateSubscription(owner, "SEMI_ANNUAL");

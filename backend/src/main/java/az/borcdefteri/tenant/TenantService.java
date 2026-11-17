@@ -239,6 +239,6 @@ public class TenantService {
     }
 
     public static List<String> allPermissions() {
-        return List.of(PERM_CUSTOMER_DEBTS, PERM_COMPANY_RECEIVABLES, PERM_COMPANY_PAYABLES, PERM_REPORTS, "CASH", "EXPENSES", "INVENTORY", "SALES");
+        return List.of(PERM_CUSTOMER_DEBTS, PERM_COMPANY_RECEIVABLES, PERM_COMPANY_PAYABLES, PERM_REPORTS, "CASH", "EXPENSES", "INVENTORY", "SALES", "TILL_SETTINGS");
     }
 }

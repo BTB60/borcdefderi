@@ -178,7 +178,8 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
     d?.getDrawerAuto?.().then(setDrawerAuto).catch(() => undefined);
   }, []);
 
-  const { me, isOwner } = useAuth();
+  const { me, isOwner, can } = useAuth();
+  const mayConfigure = isOwner || can("TILL_SETTINGS");
   const app = desktop();
   const [pending, setPending] = useState(0);
   const [printers, setPrinters] = useState<{ name: string; isDefault: boolean }[]>([]);
@@ -799,14 +800,16 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             <button type="button" onClick={() => setShowNote(true)} className="text-xs font-medium text-slate-500 hover:text-navy-800">+ Qeyd əlavə et</button>
           )}
 
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
-            <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={autoPrint} onChange={(e) => toggleAutoPrint(e.target.checked)} />
-            Satışdan sonra çeki printerdən çıxar
-          </label>
-          {fill ? (
+          {mayConfigure && (
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+              <input type="checkbox" className="h-4 w-4 accent-navy-800" checked={autoPrint} onChange={(e) => toggleAutoPrint(e.target.checked)} />
+              Satışdan sonra çeki printerdən çıxar
+            </label>
+          )}
+          {fill || !mayConfigure ? (
             <div className="flex flex-wrap items-center gap-3 text-xs">
               {app?.openDrawer && <button type="button" onClick={() => void app.openDrawer?.()} className="rounded-lg bg-white px-2.5 py-1 font-medium text-navy-800 ring-1 ring-slate-200 hover:ring-gold-500">💰 Qutunu aç</button>}
-              <span className="text-slate-400">Printer, PIN, kilid və digər ayarlar — yuxarıda <b>⚙ Parametrlər</b></span>
+              {fill && mayConfigure && <span className="text-slate-400">Printer, PIN, kilid və digər ayarlar — yuxarıda <b>⚙ Parametrlər</b></span>}
             </div>
           ) : (
             <>

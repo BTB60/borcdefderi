@@ -193,7 +193,8 @@ export function TillSettings() {
         )}
         <Row title="Proqramın versiyası" hint={update?.state === "ready" ? `Yeni versiya ${update.version ?? ""} hazırdır` : update?.state === "downloading" ? `Yeni versiya yüklənir ${update.percent}%` : "Ən son versiya"}>
           <span className="font-mono text-sm text-slate-600">v{app?.version ?? "—"}</span>
-          {update?.state === "ready" && <Button variant="gold" onClick={() => void app?.installUpdate?.()}>Yenilə</Button>}
+          {update?.state === "ready" && <Button variant="gold" onClick={() => { setUpdate({ ...update, state: "installing" }); setTimeout(() => void app?.installUpdate?.(), 1500); }}>Yenilə</Button>}
+          {update?.state === "installing" && <span className="text-sm font-medium text-navy-800">Yenilənir — proqram bağlanıb yenidən açılacaq…</span>}
         </Row>
       </Section>
 

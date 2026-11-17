@@ -391,8 +391,13 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle("scale-weight", () => scaleReading);
   ipcMain.handle("install-update", () => {
     if (updateStatus.state === "ready" && updater) {
-      // closes the app, installs the new version quietly and opens it again
-      setImmediate(() => updater.quitAndInstall(true, true));
+      // the till shows "Yenilənir…", then the app closes and the installer runs with its own progress window
+      // (not silent, so the cashier sees it working) and opens the new version when it is done
+      setUpdate({ state: "installing" });
+      setTimeout(() => {
+        scale.stopScale();
+        updater.quitAndInstall(false, true);
+      }, 1200);
       return true;
     }
     return false;

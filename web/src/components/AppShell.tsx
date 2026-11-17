@@ -155,8 +155,18 @@ function KioskHeader({ store, name, role, onSignOut }: { store: string; name: st
             Yeniləmə yüklənir{update.percent ? ` ${update.percent}%` : "…"}
           </span>
         )}
+        {update?.state === "installing" && (
+          <span className="inline-flex items-center gap-2 rounded-xl bg-gold-500 px-4 py-2 text-sm font-semibold text-navy-900">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-navy-900/30 border-t-navy-900" />
+            Yenilənir — proqram bağlanıb yenidən açılacaq…
+          </span>
+        )}
         {update?.state === "ready" && (
-          <button onClick={() => { void desktop()?.installUpdate?.(); }}
+          <button onClick={() => {
+            // older app versions install silently and do not say anything: show it here first
+            setUpdate({ ...update, state: "installing" });
+            setTimeout(() => { void desktop()?.installUpdate?.(); }, 1500);
+          }}
             title={`Yeni versiya ${update.version ?? ""} hazırdır — proqram bağlanıb yenidən açılacaq`}
             className="flex h-10 items-center gap-2 rounded-xl bg-gold-500 px-4 text-sm font-semibold text-navy-900 shadow-glow transition hover:bg-gold-400">
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.2} aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5" /></svg>

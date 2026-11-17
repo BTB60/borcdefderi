@@ -49,7 +49,7 @@ export type ScaleConfig = { port: string; protocol: string; baud: number; format
 /** kg = weight in kilograms (null while moving), stable = the scale has settled; error = no connection. */
 export type ScaleReading = { kg?: number | null; stable?: boolean; open?: boolean; error?: string; at: number };
 
-export type UpdateStatus = { state: "idle" | "downloading" | "ready"; version: string | null; percent: number };
+export type UpdateStatus = { state: "idle" | "downloading" | "ready" | "installing"; version: string | null; percent: number };
 
 declare global {
   interface Window {

@@ -158,6 +158,8 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
     salePrice: product ? String(product.salePrice) : "", minStock: product ? String(product.minStock) : "0", initialStock: "", active: product?.active ?? true,
     oldPrice: product?.oldPrice ? String(product.oldPrice) : "",
     wholesalePrice: product?.wholesalePrice != null ? String(product.wholesalePrice) : "",
+    trackSerial: product?.trackSerial ?? false,
+    warrantyMonths: product?.warrantyMonths ? String(product.warrantyMonths) : "",
   });
   const [newCat, setNewCat] = useState("");
   const [version, setVersion] = useState(product?.version);
@@ -189,6 +191,7 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
       initialStock: product ? null : form.initialStock || null, version,
       oldPrice: form.oldPrice ? form.oldPrice : (product?.oldPrice ? "0" : null),
       wholesalePrice: form.wholesalePrice ? form.wholesalePrice : (product?.wholesalePrice != null ? "0" : null),
+      warrantyMonths: form.warrantyMonths ? Number(form.warrantyMonths) : 0,
     };
     try {
       const saved = await api<Product>(product ? `/api/products/${product.id}` : "/api/products", { method: product ? "PUT" : "POST", json: body });
@@ -252,6 +255,13 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
         <Field label="Endirimdən əvvəlki qiymət (₼)" hint="Boş = endirim yoxdur. Barkod etiketində xətli göstərilir"><Input type="number" min="0" step="0.01" value={form.oldPrice} onChange={(e) => setForm({ ...form, oldPrice: e.target.value })} /></Field>
         <Field label="Minimum stok" hint="Bundan az olanda xəbərdarlıq"><Input type="number" min="0" step="0.001" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: e.target.value })} /></Field>
         {!product && <Field label="Başlanğıc qalıq"><Input type="number" min="0" step="0.001" value={form.initialStock} onChange={(e) => setForm({ ...form, initialStock: e.target.value })} /></Field>}
+        <Field label="Zəmanət (ay)" hint="Boş = zəmanət yoxdur. Çekdə və zəmanət axtarışında görünür">
+          <Input type="number" min="0" max="120" step="1" value={form.warrantyMonths} onChange={(e) => setForm({ ...form, warrantyMonths: e.target.value })} />
+        </Field>
+        <label className="flex items-start gap-2 self-end text-sm">
+          <input type="checkbox" className="mt-0.5" checked={form.trackSerial} onChange={(e) => setForm({ ...form, trackSerial: e.target.checked })} />
+          <span>IMEI / seriya nömrəsi soruşulsun<span className="block text-xs text-slate-500">Telefon, elektronika: kassada hər ədədin nömrəsi oxudulur</span></span>
+        </label>
         <Field label="Şəkil" hint="PNG/JPG, ≤5 MB"><input type="file" accept="image/png,image/jpeg" onChange={(e) => setImage(e.target.files?.[0] ?? null)} className="text-sm" /></Field>
         {product && <label className="flex items-center gap-2 self-end text-sm"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Aktiv (satışda)</label>}
       </form>

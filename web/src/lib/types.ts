@@ -539,6 +539,10 @@ export interface Product {
   oldPrice?: number | null;
   /** Top 1 — topdan (wholesale) price; null = same as the retail salePrice (Top 2). */
   wholesalePrice?: number | null;
+  /** IMEI / seriya nömrəsi asked per unit at the till. */
+  trackSerial?: boolean;
+  /** Zəmanət, months. */
+  warrantyMonths?: number | null;
 }
 
 export interface StockMovement {
@@ -566,7 +570,7 @@ export interface StockCountDetail { count: StockCount; lines: StockCountLine[] }
 
 export interface InventorySummary { productCount: number; activeCount: number; lowStockCount: number; outOfStockCount: number; costValue: number; saleValue: number }
 
-export interface SaleItem { id: string; productId: string; name: string; quantity: number; unitPrice: number; discount: number; lineTotal: number; unitCost: number; returnedQty: number; unit?: string }
+export interface SaleItem { id: string; productId: string; name: string; quantity: number; unitPrice: number; discount: number; lineTotal: number; unitCost: number; returnedQty: number; unit?: string; serials?: string[]; warrantyMonths?: number | null }
 
 export interface Sale {
   id: string; number: string; customerId: string | null; customerName: string | null; customerCode: string | null; status: "COMPLETED" | "CANCELLED";

@@ -13,6 +13,7 @@ import { lockMinutes, setLockMinutes } from "@/components/sales/TillLock";
 import type { Party, Product, Sale } from "@/lib/types";
 import { WeightEntry } from "@/components/sales/WeightEntry";
 import { FreeAmount } from "@/components/sales/FreeAmount";
+import { SerialEntry } from "@/components/sales/SerialEntry";
 import { isWeighed, qtyWithUnit, unitKind } from "@/lib/units";
 
 const PRODUCTS_CACHE = "pos_cache_products";
@@ -33,7 +34,7 @@ function cached<T>(key: string, fresh?: T): T | null {
 }
 
 /** freeOf = the store's "Sərbəst məbləğ" product id (the line's product is a copy with its own id and name). */
-type Line = { product: Product; quantity: string; price: string; discount: string; freeOf?: string };
+type Line = { product: Product; quantity: string; price: string; discount: string; freeOf?: string; serials?: string[] };
 type PayMode = "cash" | "card" | "mixed" | "credit";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -140,6 +141,8 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
   // çəki ilə satılan mal (kq / qram): the weight window; `line` = changing a line already in the receipt
   const [weigh, setWeigh] = useState<{ product: Product; line?: boolean } | null>(null);
   const [freeOpen, setFreeOpen] = useState(false);
+  // IMEI / seriya: the numbers window for a product that asks for them
+  const [serialFor, setSerialFor] = useState<Product | null>(null);
   const [customer, setCustomer] = useState<Party | null>(null);
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
@@ -290,7 +293,8 @@ Təşəkkür edirik!`;
 
   /** A tap or a scan: goods sold by weight ask for the weight, the rest go in one by one. */
   const pick = useCallback((p: Product) => {
-    if (isWeighed(p.unit)) setWeigh({ product: p });
+    if (p.trackSerial) setSerialFor(p);
+    else if (isWeighed(p.unit)) setWeigh({ product: p });
     else add(p);
   }, [add]);
 
@@ -434,7 +438,7 @@ Təşəkkür edirik!`;
     setError(null);
     const payload = {
           items: lines.map((l) => ({ productId: l.freeOf ?? l.product.id, quantity: l.quantity, unitPrice: l.price, discount: l.discount || null,
-            name: l.freeOf ? l.product.name : undefined })),
+            name: l.freeOf ? l.product.name : undefined, serials: l.serials?.length ? l.serials : undefined })),
           customerId: customer?.id ?? null,
           discount: discountAmount > 0 ? discountAmount.toFixed(2) : null,
           bonusUsed: bonusAmount > 0 ? bonusAmount.toFixed(2) : null,
@@ -461,7 +465,8 @@ Təşəkkür edirik!`;
           returnedAmount: 0, costTotal: 0, debtId: null, soldOn: "", note: note || null, createdByName: me?.fullName ?? "",
           createdAt: new Date().toISOString(), returns: [], createdBy: null, priceLevel: level,
           items: lines.map((l) => ({ id: l.product.id, productId: l.product.id, name: l.product.name, quantity: num(l.quantity),
-            unitPrice: num(l.price), discount: num(l.discount), lineTotal: l.total, unitCost: 0, returnedQty: 0, unit: l.product.unit })),
+            unitPrice: num(l.price), discount: num(l.discount), lineTotal: l.total, unitCost: 0, returnedQty: 0, unit: l.product.unit,
+            serials: l.serials, warrantyMonths: l.product.warrantyMonths ?? null })),
         };
         // the stock on this computer goes down too, so the next offline sale sees it
         const left = (cached<Product[]>(PRODUCTS_CACHE) ?? []).map((p) => {
@@ -767,11 +772,17 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
                           {num(l.discount) > 0 && <span className="text-rose-600"> · −{formatMoney(num(l.discount))}</span>}
                           {short && <span className="text-rose-600"> · anbarda {weighed ? qtyWithUnit(l.product.stockQty, l.product.unit) : qtyText(l.product.stockQty)}</span>}
                         </p>
+                        {l.serials && l.serials.length > 0 && <p className="truncate font-mono text-[11px] text-slate-400">{l.serials.join(" · ")}</p>}
                       </button>
                       <span className="pt-0.5 text-sm font-semibold tabular-nums text-navy-800">{formatMoney(l.total)}</span>
                     </div>
                     <div className="mt-1.5 flex items-center gap-1.5">
-                      {weighed ? (
+                      {l.product.trackSerial ? (
+                        <button type="button" onClick={() => setSerialFor(l.product)}
+                          className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-navy-800 hover:border-gold-500" aria-label="IMEI nömrələri">
+                          📱 {l.serials?.length ?? 0} ədəd · IMEI
+                        </button>
+                      ) : weighed ? (
                         <button type="button" onClick={() => setWeigh({ product: l.product, line: true })}
                           className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-semibold tabular-nums text-navy-800 hover:border-gold-500" aria-label="Çəkini dəyiş">
                           ⚖ {qtyWithUnit(num(l.quantity), l.product.unit)}
@@ -1126,6 +1137,23 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             )}
           </div>
         </Modal>
+      )}
+
+      {serialFor && (
+        <SerialEntry product={serialFor} current={inCart(serialFor.id)?.serials ?? []}
+          onClose={() => { setSerialFor(null); searchRef.current?.focus(); }}
+          onDone={(serials) => {
+            const p = serialFor;
+            setCart((c) => {
+              const rest = c.filter((l) => l.product.id !== p.id);
+              if (serials.length === 0) return rest;
+              const old = c.find((l) => l.product.id === p.id);
+              const line = { product: p, price: old?.price ?? String(priceOf(p, level)), discount: old?.discount ?? "", quantity: String(serials.length), serials };
+              return old ? c.map((l) => (l.product.id === p.id ? line : l)) : [...c, line];
+            });
+            setSerialFor(null);
+            searchRef.current?.focus();
+          }} />
       )}
 
       {freeOpen && (

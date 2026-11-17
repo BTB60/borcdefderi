@@ -126,7 +126,9 @@ export function receiptHtml(sale: Sale, store: { name: string | null }, opts: { 
   const rows = sale.items.map((i) => `
     <tr><td colspan="2">${esc(i.name)}</td></tr>
     <tr><td class="m">${unitKind(i.unit) === "piece" ? Number(i.quantity) : esc(qtyWithUnit(Number(i.quantity), i.unit))} × ${formatMoney(i.unitPrice)}${i.discount > 0 ? ` −${formatMoney(i.discount)}` : ""}</td>
-        <td class="r">${formatMoney(i.lineTotal)}</td></tr>`).join("");
+        <td class="r">${formatMoney(i.lineTotal)}</td></tr>${(i.serials ?? []).map((s) => `
+    <tr><td colspan="2" class="m">IMEI/SN: ${esc(s)}</td></tr>`).join("")}${i.warrantyMonths ? `
+    <tr><td colspan="2" class="m">Zəmanət: ${i.warrantyMonths} ay${sale.createdAt ? ` (${esc(new Date(new Date(sale.createdAt).setMonth(new Date(sale.createdAt).getMonth() + i.warrantyMonths)).toLocaleDateString("az-AZ"))}-dək)` : ""}</td></tr>` : ""}`).join("");
   const line = (label: string, v: number, cls = "") => `<tr class="${cls}"><td>${label}</td><td class="r">${formatMoney(v)}</td></tr>`;
   const when = new Date(sale.createdAt || Date.now()).toLocaleString("az-AZ");
   const head = d.header.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `<div class="h m">${esc(l)}</div>`).join("");

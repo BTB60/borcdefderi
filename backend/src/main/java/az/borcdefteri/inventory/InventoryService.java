@@ -38,7 +38,11 @@ public class InventoryService {
                           /** Price before a discount (shown struck through on labels); null = no discount. */
                           BigDecimal oldPrice,
                           /** Top 1 — topdan (wholesale) price; null = same as the retail salePrice (Top 2). */
-                          BigDecimal wholesalePrice) {}
+                          BigDecimal wholesalePrice,
+                          /** IMEI / seriya nömrəsi asked at the till, one per unit. */
+                          boolean trackSerial,
+                          /** Zəmanət in months; null = none. */
+                          Integer warrantyMonths) {}
 
     public record ProductRequest(
             @jakarta.validation.constraints.NotBlank(message = "Məhsulun adını daxil edin")
@@ -64,13 +68,24 @@ public class InventoryService {
             @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal oldPrice,
             /** Top 1 — topdan qiyməti. null = keep as is (on update), 0 = remove (sells at retail). */
             @jakarta.validation.constraints.DecimalMin("0.00")
-            @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal wholesalePrice) {
+            @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal wholesalePrice,
+            /** null = keep as is (on update). */
+            Boolean trackSerial,
+            /** Months; null = keep as is (on update), 0 = no warranty. */
+            @jakarta.validation.constraints.Min(0) @jakarta.validation.constraints.Max(120) Integer warrantyMonths) {
 
         public ProductRequest(String name, String code, String barcode, UUID categoryId, UUID supplierId, String unit,
                               BigDecimal purchasePrice, BigDecimal salePrice, BigDecimal minStock, BigDecimal initialStock,
                               Boolean active, Long version, BigDecimal oldPrice) {
             this(name, code, barcode, categoryId, supplierId, unit, purchasePrice, salePrice, minStock, initialStock, active,
-                    version, oldPrice, null);
+                    version, oldPrice, null, null, null);
+        }
+
+        public ProductRequest(String name, String code, String barcode, UUID categoryId, UUID supplierId, String unit,
+                              BigDecimal purchasePrice, BigDecimal salePrice, BigDecimal minStock, BigDecimal initialStock,
+                              Boolean active, Long version, BigDecimal oldPrice, BigDecimal wholesalePrice) {
+            this(name, code, barcode, categoryId, supplierId, unit, purchasePrice, salePrice, minStock, initialStock, active,
+                    version, oldPrice, wholesalePrice, null, null);
         }
     }
 
@@ -215,14 +230,17 @@ public class InventoryService {
         try {
             jdbc.sql("""
                     INSERT INTO products (id, store_id, code, barcode, name, category_id, supplier_id, unit, purchase_price,
-                                          sale_price, min_stock, active, created_by, old_price, wholesale_price)
-                    VALUES (:id, :s, :code, :bc, :n, :c, :sup, :u, :pp, :sp, :min, :act, :by, :op, :wp)
+                                          sale_price, min_stock, active, created_by, old_price, wholesale_price, track_serial,
+                                          warranty_months)
+                    VALUES (:id, :s, :code, :bc, :n, :c, :sup, :u, :pp, :sp, :min, :act, :by, :op, :wp, :ts, :wm)
                     """).param("id", id).param("s", m.storeId()).param("code", code).param("bc", blank(req.barcode()))
                     .param("n", req.name().trim()).param("c", req.categoryId()).param("sup", req.supplierId())
                     .param("u", req.unit() == null || req.unit().isBlank() ? "ədəd" : req.unit().trim())
                     .param("pp", Money.of(req.purchasePrice())).param("sp", Money.of(req.salePrice()))
                     .param("min", qty(req.minStock())).param("act", req.active() == null || req.active()).param("by", m.userId())
                     .param("op", oldPrice(req.oldPrice(), null)).param("wp", oldPrice(req.wholesalePrice(), null))
+                    .param("ts", Boolean.TRUE.equals(req.trackSerial()))
+                    .param("wm", req.warrantyMonths() == null || req.warrantyMonths() == 0 ? null : req.warrantyMonths())
                     .update();
         } catch (org.springframework.dao.DuplicateKeyException e) {
             throw ApiException.conflict("DUPLICATE_CODE", "Bu kod və ya barkod artıq başqa məhsulda istifadə olunur");
@@ -245,7 +263,8 @@ public class InventoryService {
         try {
             jdbc.sql("""
                     UPDATE products SET code = :code, barcode = :bc, name = :n, category_id = :c, supplier_id = :sup, unit = :u,
-                           purchase_price = :pp, sale_price = :sp, min_stock = :min, active = :act, old_price = :op, wholesale_price = :wp, updated_at = now(),
+                           purchase_price = :pp, sale_price = :sp, min_stock = :min, active = :act, old_price = :op, wholesale_price = :wp,
+                           track_serial = :ts, warranty_months = :wm, updated_at = now(),
                            version = version + 1
                     WHERE id = :id AND store_id = :s
                     """).param("code", req.code() == null || req.code().isBlank() ? cur.code() : req.code().trim())
@@ -254,6 +273,8 @@ public class InventoryService {
                     .param("pp", Money.of(req.purchasePrice())).param("sp", Money.of(req.salePrice())).param("min", qty(req.minStock()))
                     .param("act", req.active() == null || req.active()).param("op", oldPrice(req.oldPrice(), cur.oldPrice()))
                     .param("wp", oldPrice(req.wholesalePrice(), cur.wholesalePrice()))
+                    .param("ts", req.trackSerial() == null ? cur.trackSerial() : req.trackSerial())
+                    .param("wm", req.warrantyMonths() == null ? cur.warrantyMonths() : req.warrantyMonths() == 0 ? null : req.warrantyMonths())
                     .param("id", id).param("s", m.storeId()).update();
         } catch (org.springframework.dao.DuplicateKeyException e) {
             throw ApiException.conflict("DUPLICATE_CODE", "Bu kod və ya barkod artıq başqa məhsulda istifadə olunur");
@@ -455,7 +476,7 @@ public class InventoryService {
     private static final String SELECT = """
             SELECT p.id, p.code, p.barcode, p.name, p.category_id, c.name AS category_name, p.supplier_id, co.name AS supplier_name,
                    p.unit, p.purchase_price, p.sale_price, p.old_price, p.wholesale_price, p.stock_qty, p.min_stock, p.active, p.image IS NOT NULL AS has_image,
-                   p.version
+                   p.version, p.track_serial, p.warranty_months
             FROM products p
             LEFT JOIN product_categories c ON c.id = p.category_id
             LEFT JOIN companies co ON co.id = p.supplier_id""";
@@ -477,7 +498,8 @@ public class InventoryService {
                 active && stock.compareTo(min) <= 0, stock.signum() == 0, rs.getBoolean("has_image"),
                 Money.of(stock.multiply(pp)), Money.of(stock.multiply(sp)), rs.getLong("version"),
                 rs.getBigDecimal("old_price") == null ? null : Money.of(rs.getBigDecimal("old_price")),
-                rs.getBigDecimal("wholesale_price") == null ? null : Money.of(rs.getBigDecimal("wholesale_price")));
+                rs.getBigDecimal("wholesale_price") == null ? null : Money.of(rs.getBigDecimal("wholesale_price")),
+                rs.getBoolean("track_serial"), (Integer) rs.getObject("warranty_months", Integer.class));
     }
 
     private static Movement mapMove(java.sql.ResultSet rs) throws java.sql.SQLException {

@@ -49,10 +49,16 @@ public class SalesService {
             @jakarta.validation.constraints.DecimalMin("0.00")
             @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal discount,
             /** Only for "Sərbəst məbləğ": what was sold (shown on the receipt). */
-            @jakarta.validation.constraints.Size(max = 200) String name) {
+            @jakarta.validation.constraints.Size(max = 200) String name,
+            /** IMEI / seriya nömrələri — one per unit, for goods that ask for them. */
+            @jakarta.validation.constraints.Size(max = 200) List<@jakarta.validation.constraints.Size(max = 64) String> serials) {
 
         public ItemRequest(UUID productId, BigDecimal quantity, BigDecimal unitPrice, BigDecimal discount) {
-            this(productId, quantity, unitPrice, discount, null);
+            this(productId, quantity, unitPrice, discount, null, null);
+        }
+
+        public ItemRequest(UUID productId, BigDecimal quantity, BigDecimal unitPrice, BigDecimal discount, String name) {
+            this(productId, quantity, unitPrice, discount, name, null);
         }
     }
 
@@ -91,7 +97,8 @@ public class SalesService {
     public record CancelRequest(UUID refundAccountId, @jakarta.validation.constraints.Size(max = 500) String reason) {}
 
     public record Item(UUID id, UUID productId, String name, BigDecimal quantity, BigDecimal unitPrice, BigDecimal discount,
-                       BigDecimal lineTotal, BigDecimal unitCost, BigDecimal returnedQty, String unit) {}
+                       BigDecimal lineTotal, BigDecimal unitCost, BigDecimal returnedQty, String unit,
+                       List<String> serials, Integer warrantyMonths) {}
 
     public record ReturnView(UUID id, BigDecimal amount, BigDecimal debtReduced, BigDecimal refunded, LocalDate returnedOn,
                              String reason, String createdByName, OffsetDateTime createdAt) {}
@@ -123,6 +130,28 @@ public class SalesService {
         this.accounts = accounts;
         this.debts = debts;
         this.audit = audit;
+    }
+
+    /** One IMEI / serial per unit, none twice, none sold before and not returned. */
+    private void checkSerials(UUID storeId, Product p, BigDecimal qty, List<String> serials) {
+        if (qty.stripTrailingZeros().scale() > 0) {
+            throw ApiException.badRequest("SERIAL_QTY", "“" + p.name() + "” ədədlə satılır (IMEI hər ədəd üçün)");
+        }
+        List<String> clean = serials == null ? List.of() : serials.stream().map(s -> s == null ? "" : s.trim()).toList();
+        if (clean.size() != qty.intValue() || clean.stream().anyMatch(String::isEmpty)) {
+            throw ApiException.badRequest("SERIALS_REQUIRED", "“" + p.name() + "” üçün hər ədədin IMEI / seriya nömrəsini oxudun ("
+                    + qty.intValue() + " ədəd, " + clean.stream().filter(s -> !s.isEmpty()).count() + " nömrə)");
+        }
+        if (new java.util.HashSet<>(clean).size() != clean.size()) {
+            throw ApiException.badRequest("SERIAL_DUPLICATE", "Eyni IMEI / seriya nömrəsi iki dəfə yazılıb");
+        }
+        for (String s : clean) {
+            boolean sold = jdbc.sql("""
+                    SELECT EXISTS (SELECT 1 FROM sale_item_serials x JOIN sale_items si ON si.id = x.sale_item_id JOIN sales sa ON sa.id = x.sale_id
+                                   WHERE x.store_id = :st AND x.serial = :s AND sa.status = 'COMPLETED' AND si.returned_qty < si.quantity)
+                    """).param("st", storeId).param("s", s).query(Boolean.class).single();
+            if (sold) throw ApiException.conflict("SERIAL_SOLD", "IMEI / seriya " + s + " artıq satılıb");
+        }
     }
 
     private CurrentMember requireSales() {
@@ -161,6 +190,7 @@ public class SalesService {
             BigDecimal disc = Money.of(it.discount() != null ? it.discount() : BigDecimal.ZERO);
             if (disc.compareTo(gross) > 0) throw ApiException.badRequest("INVALID_DISCOUNT", "Endirim məbləğdən çox ola bilməz");
             BigDecimal total = Money.of(gross.subtract(disc));
+            if (p.trackSerial()) checkSerials(m.storeId(), p, qty, it.serials());
             String lineName = free && it.name() != null && !it.name().isBlank() ? it.name().trim() : p.name();
             lines.add(new Line(it, p, lineName, qty, price, disc, total));
             subtotal = subtotal.add(total);
@@ -211,13 +241,23 @@ public class SalesService {
                 .param("req", req.clientRequestId()).param("bu", bonusUsed).param("be", bonusEarned)
                 .param("pl", wholesale ? "WHOLESALE" : "RETAIL").update();
         for (Line l : lines) {
+            UUID itemId = UUID.randomUUID();
             jdbc.sql("""
                     INSERT INTO sale_items (id, sale_id, store_id, product_id, name, quantity, unit_price, discount, line_total, unit_cost)
                     VALUES (:id, :sale, :s, :p, :n, :q, :up, :d, :lt, :uc)
-                    """).param("id", UUID.randomUUID()).param("sale", saleId).param("s", m.storeId()).param("p", l.p().id())
+                    """).param("id", itemId).param("sale", saleId).param("s", m.storeId()).param("p", l.p().id())
                     .param("n", l.name()).param("q", l.qty()).param("up", l.price()).param("d", l.disc())
                     .param("lt", l.total()).param("uc", l.p().purchasePrice()).update();
             inventory.move(m, l.p().id(), "SALE", l.qty().negate(), l.p().purchasePrice(), saleId, number);
+            if (l.p().trackSerial()) {
+                for (String serial : l.req().serials()) {
+                    jdbc.sql("""
+                            INSERT INTO sale_item_serials (id, store_id, sale_id, sale_item_id, product_id, serial)
+                            VALUES (:id, :s, :sale, :item, :p, :ser)
+                            """).param("id", UUID.randomUUID()).param("s", m.storeId()).param("sale", saleId).param("item", itemId)
+                            .param("p", l.p().id()).param("ser", serial.trim()).update();
+                }
+            }
         }
         if (paidCash.signum() > 0) {
             UUID acc = cash.accountFor(m.storeId(), "CASH", req.cashAccountId(), m.userId());
@@ -388,13 +428,16 @@ public class SalesService {
     Sale load(UUID storeId, UUID id) {
         List<Item> items = jdbc.sql("""
                 SELECT si.id, si.product_id, si.name, si.quantity, si.unit_price, si.discount, si.line_total, si.unit_cost,
-                       si.returned_qty, COALESCE(p.unit, 'ədəd') AS unit
+                       si.returned_qty, COALESCE(p.unit, 'ədəd') AS unit, p.warranty_months,
+                       (SELECT string_agg(x.serial, ',' ORDER BY x.created_at, x.serial) FROM sale_item_serials x WHERE x.sale_item_id = si.id) AS serials
                 FROM sale_items si LEFT JOIN products p ON p.id = si.product_id
                 WHERE si.sale_id = :id AND si.store_id = :s ORDER BY si.name""").param("id", id).param("s", storeId)
                 .query((rs, n) -> new Item(rs.getObject("id", UUID.class), rs.getObject("product_id", UUID.class), rs.getString("name"),
                         rs.getBigDecimal("quantity"), Money.of(rs.getBigDecimal("unit_price")), Money.of(rs.getBigDecimal("discount")),
                         Money.of(rs.getBigDecimal("line_total")), Money.of(rs.getBigDecimal("unit_cost")), rs.getBigDecimal("returned_qty"),
-                        rs.getString("unit")))
+                        rs.getString("unit"),
+                        rs.getString("serials") == null ? List.of() : List.of(rs.getString("serials").split(",")),
+                        (Integer) rs.getObject("warranty_months", Integer.class)))
                 .list();
         List<ReturnView> returns = jdbc.sql("""
                 SELECT r.id, r.amount, r.debt_reduced, r.refunded, r.returned_on, r.reason, u.full_name, r.created_at

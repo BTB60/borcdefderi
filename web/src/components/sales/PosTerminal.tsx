@@ -12,6 +12,7 @@ import { TillLabelsModal } from "@/components/sales/TillLabels";
 import { lockMinutes, setLockMinutes } from "@/components/sales/TillLock";
 import type { Party, Product, Sale } from "@/lib/types";
 import { WeightEntry } from "@/components/sales/WeightEntry";
+import { FreeAmount } from "@/components/sales/FreeAmount";
 import { isWeighed, qtyWithUnit, unitKind } from "@/lib/units";
 
 const PRODUCTS_CACHE = "pos_cache_products";
@@ -31,7 +32,8 @@ function cached<T>(key: string, fresh?: T): T | null {
   }
 }
 
-type Line = { product: Product; quantity: string; price: string; discount: string };
+/** freeOf = the store's "Sərbəst məbləğ" product id (the line's product is a copy with its own id and name). */
+type Line = { product: Product; quantity: string; price: string; discount: string; freeOf?: string };
 type PayMode = "cash" | "card" | "mixed" | "credit";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -137,6 +139,7 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
   const [editing, setEditing] = useState<string | null>(null);
   // çəki ilə satılan mal (kq / qram): the weight window; `line` = changing a line already in the receipt
   const [weigh, setWeigh] = useState<{ product: Product; line?: boolean } | null>(null);
+  const [freeOpen, setFreeOpen] = useState(false);
   const [customer, setCustomer] = useState<Party | null>(null);
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
@@ -269,6 +272,21 @@ Təşəkkür edirik!`;
     setTimeout(() => setFlash((f) => (f === p.id ? null : f)), 600);
     setError(null);
   }, [level, priceOf]);
+
+  /** Sərbəst məbləğ: a line of its own (name + amount) on the store's free-amount product; works offline once loaded. */
+  async function addFree(name: string, amount: number, qty: number) {
+    let base: Product | null = null;
+    try {
+      base = await api<Product>("/api/products/free-item");
+      try { localStorage.setItem("hp_free_item", JSON.stringify(base)); } catch { /* ignore */ }
+    } catch {
+      try { base = JSON.parse(localStorage.getItem("hp_free_item") ?? "null") as Product | null; } catch { base = null; }
+    }
+    if (!base) { setError("Sərbəst məbləğ üçün internet lazımdır (ilk dəfə)"); return; }
+    const copy: Product = { ...base, id: `free:${crypto.randomUUID()}`, name, salePrice: amount, wholesalePrice: null, stockQty: 1e9, unit: "ədəd" };
+    setCart((c) => [...c, { product: copy, quantity: String(qty), price: String(amount), discount: "", freeOf: base.id }]);
+    setError(null);
+  }
 
   /** A tap or a scan: goods sold by weight ask for the weight, the rest go in one by one. */
   const pick = useCallback((p: Product) => {
@@ -415,7 +433,8 @@ Təşəkkür edirik!`;
     setBusy(true);
     setError(null);
     const payload = {
-          items: lines.map((l) => ({ productId: l.product.id, quantity: l.quantity, unitPrice: l.price, discount: l.discount || null })),
+          items: lines.map((l) => ({ productId: l.freeOf ?? l.product.id, quantity: l.quantity, unitPrice: l.price, discount: l.discount || null,
+            name: l.freeOf ? l.product.name : undefined })),
           customerId: customer?.id ?? null,
           discount: discountAmount > 0 ? discountAmount.toFixed(2) : null,
           bonusUsed: bonusAmount > 0 ? bonusAmount.toFixed(2) : null,
@@ -575,6 +594,10 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
           />
           <span className="absolute right-4 top-1/2 -translate-y-1/2"><Kbd>F2</Kbd></span>
         </form>
+        <div className="mt-2 flex justify-end">
+          <button type="button" onClick={() => setFreeOpen(true)} title="Barkodu olmayan mal — məbləği yazıb satın"
+            className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-navy-800 ring-1 ring-slate-200 hover:ring-gold-500">₼ Sərbəst məbləğ</button>
+        </div>
         <button type="button" onClick={() => setShowKeys((v) => !v)} className="mt-2 text-xs font-medium text-slate-400 hover:text-navy-800">
           ⌨ Qısayollar <Kbd>F1</Kbd>
         </button>
@@ -1103,6 +1126,11 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             )}
           </div>
         </Modal>
+      )}
+
+      {freeOpen && (
+        <FreeAmount onClose={() => { setFreeOpen(false); searchRef.current?.focus(); }}
+          onDone={(n, a, q) => { setFreeOpen(false); void addFree(n, a, q); searchRef.current?.focus(); }} />
       )}
 
       {weigh && (

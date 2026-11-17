@@ -60,6 +60,11 @@ public class InventoryController {
         return inventory.summary();
     }
 
+    @GetMapping("/products/free-item")
+    public InventoryService.Product freeItem() {
+        return inventory.freeItem();
+    }
+
     @GetMapping("/products/by-code/{code}")
     public InventoryService.Product byCode(@PathVariable String code) {
         return inventory.byBarcode(code);

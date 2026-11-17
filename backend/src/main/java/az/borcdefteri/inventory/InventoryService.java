@@ -151,7 +151,7 @@ public class InventoryService {
 
     public List<Product> products(String q, UUID categoryId, String stock, Boolean active) {
         CurrentMember m = requireRead();
-        StringBuilder where = new StringBuilder(" WHERE p.store_id = :s");
+        StringBuilder where = new StringBuilder(" WHERE p.store_id = :s AND p.system_kind IS NULL");
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("s", m.storeId());
         if (q != null && !q.isBlank()) {
@@ -365,6 +365,7 @@ public class InventoryService {
         BigDecimal current = jdbc.sql("SELECT stock_qty FROM products WHERE id = :id AND store_id = :s FOR UPDATE")
                 .param("id", productId).param("s", m.storeId()).query(BigDecimal.class).optional()
                 .orElseThrow(() -> ApiException.notFound("Məhsul tapılmadı"));
+        if (isSystem(m.storeId(), productId)) return null; // sərbəst məbləğ keeps no stock
         BigDecimal after = current.add(delta).setScale(3, RoundingMode.HALF_UP);
         if (after.signum() < 0) {
             String name = jdbc.sql("SELECT name FROM products WHERE id = :id").param("id", productId).query(String.class).single();
@@ -381,6 +382,28 @@ public class InventoryService {
                 .param("c", unitCost).param("b", after).param("sale", saleId).param("cnt", stockCountId)
                 .param("note", blank(note)).param("a", m.userId()).update();
         return id;
+    }
+
+    /** The store's "Sərbəst məbləğ" product (made on first use): goods sold by amount, with no stock. */
+    @Transactional
+    public Product freeItem() {
+        CurrentMember m = requireRead();
+        var id = jdbc.sql("SELECT id FROM products WHERE store_id = :s AND system_kind = 'FREE'").param("s", m.storeId())
+                .query(UUID.class).optional();
+        if (id.isPresent()) return load(m.storeId(), id.get());
+        UUID nid = UUID.randomUUID();
+        jdbc.sql("""
+                INSERT INTO products (id, store_id, code, name, unit, purchase_price, sale_price, min_stock, active, created_by, system_kind)
+                VALUES (:id, :s, 'SERBEST', 'Sərbəst məbləğ', 'ədəd', 0, 0, 0, FALSE, :by, 'FREE')
+                ON CONFLICT DO NOTHING
+                """).param("id", nid).param("s", m.storeId()).param("by", m.userId()).update();
+        return load(m.storeId(), jdbc.sql("SELECT id FROM products WHERE store_id = :s AND system_kind = 'FREE'")
+                .param("s", m.storeId()).query(UUID.class).single());
+    }
+
+    public boolean isSystem(UUID storeId, UUID productId) {
+        return jdbc.sql("SELECT system_kind IS NOT NULL FROM products WHERE id = :id AND store_id = :s")
+                .param("id", productId).param("s", storeId).query(Boolean.class).optional().orElse(false);
     }
 
     public Product lockProduct(UUID storeId, UUID id) {

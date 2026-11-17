@@ -47,7 +47,14 @@ public class SalesService {
             @jakarta.validation.constraints.DecimalMin("0.00")
             @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal unitPrice,
             @jakarta.validation.constraints.DecimalMin("0.00")
-            @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal discount) {}
+            @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal discount,
+            /** Only for "Sərbəst məbləğ": what was sold (shown on the receipt). */
+            @jakarta.validation.constraints.Size(max = 200) String name) {
+
+        public ItemRequest(UUID productId, BigDecimal quantity, BigDecimal unitPrice, BigDecimal discount) {
+            this(productId, quantity, unitPrice, discount, null);
+        }
+    }
 
     public record SaleRequest(
             @jakarta.validation.constraints.NotEmpty(message = "Səbət boşdur")
@@ -137,12 +144,16 @@ public class SalesService {
                 .forEach(id -> products.put(id, inventory.lockProduct(m.storeId(), id)));
 
         boolean wholesale = "WHOLESALE".equals(req.priceLevel());
-        record Line(ItemRequest req, Product p, BigDecimal qty, BigDecimal price, BigDecimal disc, BigDecimal total) {}
+        record Line(ItemRequest req, Product p, String name, BigDecimal qty, BigDecimal price, BigDecimal disc, BigDecimal total) {}
         List<Line> lines = new ArrayList<>();
         BigDecimal subtotal = Money.zero();
         for (ItemRequest it : req.items()) {
             Product p = products.get(it.productId());
-            if (!p.active()) throw ApiException.badRequest("PRODUCT_INACTIVE", "“" + p.name() + "” satışda deyil (deaktiv)");
+            boolean free = inventory.isSystem(m.storeId(), p.id());
+            if (free && (it.unitPrice() == null || it.unitPrice().signum() <= 0)) {
+                throw ApiException.badRequest("FREE_AMOUNT_REQUIRED", "Sərbəst məbləğ üçün məbləği yazın");
+            }
+            if (!p.active() && !free) throw ApiException.badRequest("PRODUCT_INACTIVE", "“" + p.name() + "” satışda deyil (deaktiv)");
             BigDecimal qty = it.quantity().setScale(3, RoundingMode.HALF_UP);
             BigDecimal list = wholesale && p.wholesalePrice() != null ? p.wholesalePrice() : p.salePrice();
             BigDecimal price = Money.of(it.unitPrice() != null ? it.unitPrice() : list);
@@ -150,7 +161,8 @@ public class SalesService {
             BigDecimal disc = Money.of(it.discount() != null ? it.discount() : BigDecimal.ZERO);
             if (disc.compareTo(gross) > 0) throw ApiException.badRequest("INVALID_DISCOUNT", "Endirim məbləğdən çox ola bilməz");
             BigDecimal total = Money.of(gross.subtract(disc));
-            lines.add(new Line(it, p, qty, price, disc, total));
+            String lineName = free && it.name() != null && !it.name().isBlank() ? it.name().trim() : p.name();
+            lines.add(new Line(it, p, lineName, qty, price, disc, total));
             subtotal = subtotal.add(total);
         }
         subtotal = Money.of(subtotal);
@@ -203,7 +215,7 @@ public class SalesService {
                     INSERT INTO sale_items (id, sale_id, store_id, product_id, name, quantity, unit_price, discount, line_total, unit_cost)
                     VALUES (:id, :sale, :s, :p, :n, :q, :up, :d, :lt, :uc)
                     """).param("id", UUID.randomUUID()).param("sale", saleId).param("s", m.storeId()).param("p", l.p().id())
-                    .param("n", l.p().name()).param("q", l.qty()).param("up", l.price()).param("d", l.disc())
+                    .param("n", l.name()).param("q", l.qty()).param("up", l.price()).param("d", l.disc())
                     .param("lt", l.total()).param("uc", l.p().purchasePrice()).update();
             inventory.move(m, l.p().id(), "SALE", l.qty().negate(), l.p().purchasePrice(), saleId, number);
         }

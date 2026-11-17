@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
 import { PosTerminal } from "@/components/sales/PosTerminal";
 import { TillSettings } from "@/components/sales/TillSettings";
+import { DayEndModal } from "@/components/sales/DayEnd";
 import { ShiftBar, ShiftList } from "@/components/sales/Shift";
 import { ApiError, api, openProtected } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -17,6 +18,7 @@ export default function SalesPage() {
   const [tab, setTab] = useState<"new" | "list" | "shifts" | "settings">("new");
   // the Windows kassa app: one screen, the till fills it
   const [kiosk, setKiosk] = useState(false);
+  const [dayEnd, setDayEnd] = useState(false);
   useEffect(() => setKiosk(!!window.hesabDesktop), []);
   if (kiosk) {
     return (
@@ -29,6 +31,11 @@ export default function SalesPage() {
             ))}
           </div>
           <div className="min-w-0 flex-1 [&>div]:mb-0">{tab === "new" && <ShiftBar />}</div>
+          <button type="button" onClick={() => setDayEnd(true)} title="Gün sonu çekini çap et (kassa bağlanışı)"
+            className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-navy-800 shadow-sm ring-1 ring-slate-200 transition hover:ring-gold-500">
+            🧾 Gün sonu çeki
+          </button>
+          {dayEnd && <DayEndModal onClose={() => setDayEnd(false)} />}
         </div>
         <div className="min-h-0 flex-1">
           {tab === "new" ? <PosTerminal fill /> : (

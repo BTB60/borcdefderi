@@ -47,9 +47,12 @@ public class DashboardService {
     private final TenantService tenant;
     private final PaymentService payments;
     private final az.borcdefteri.notifications.NotificationService stored;
+    private final az.borcdefteri.inventory.ExpiryService expiry;
 
     public DashboardService(JdbcClient jdbc, TenantService tenant, PaymentService payments,
-                            az.borcdefteri.notifications.NotificationService stored) {
+                            az.borcdefteri.notifications.NotificationService stored,
+                            az.borcdefteri.inventory.ExpiryService expiry) {
+        this.expiry = expiry;
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.payments = payments;
@@ -263,6 +266,18 @@ public class DashboardService {
                             rs.getString("party_name") + " — " + rs.getBigDecimal("remaining_amount")
                                     + " AZN (son tarix: " + due + ")", due);
                 }).list().stream().filter(java.util.Objects::nonNull).forEach(out::add);
+
+        // Son istifadə tarixi: goods on the shelf that expire within a week (or already have)
+        if (m.isOwner() || m.permissions().contains("INVENTORY")) {
+            int[] c = expiry.counts(m.storeId());
+            if (c[0] > 0) {
+                out.add(new Notification("EXPIRY", c[1] > 0 ? "DANGER" : "WARNING",
+                        c[1] > 0 ? "Vaxtı keçmiş mal var" : "Malların son istifadə tarixi yaxınlaşır",
+                        (c[1] > 0 ? c[1] + " partiyanın vaxtı keçib" + (c[0] > c[1] ? ", " : "") : "")
+                                + (c[0] > c[1] ? (c[0] - c[1]) + " partiya 7 gün ərzində bitir" : "")
+                                + " — Anbar → Son istifadə tarixi", today));
+            }
+        }
         return out;
     }
 }

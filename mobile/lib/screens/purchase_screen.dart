@@ -163,6 +163,8 @@ class _Line {
   final Map<String, dynamic> product;
   final TextEditingController qty;
   final TextEditingController cost;
+  /// Son istifadə tarixi of this batch (optional).
+  DateTime? expiry;
 
   double get total => _r2(_n(qty.text) * _n(cost.text));
 
@@ -280,7 +282,13 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       final saved = await widget.session.api.post('/api/purchases', {
         'companyId': _companyId,
         'items': [
-          for (final l in _lines) {'productId': l.product['id'], 'quantity': _n(l.qty.text), 'unitCost': _r2(_n(l.cost.text))},
+          for (final l in _lines)
+            {
+              'productId': l.product['id'],
+              'quantity': _n(l.qty.text),
+              'unitCost': _r2(_n(l.cost.text)),
+              if (l.expiry != null) 'expiryDate': l.expiry!.toIso8601String().substring(0, 10),
+            },
         ],
         'paid': paid,
         'paymentMethod': _method,
@@ -415,6 +423,22 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                     ),
                     const SizedBox(width: 8),
                   ]),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
+                    icon: const Icon(Icons.event_outlined, size: 18),
+                    label: Text(l.expiry == null ? 'Son istifadə tarixi (istəyə bağlı)' : 'Son istifadə: ${formatDate(l.expiry)}'),
+                    onPressed: () async {
+                      final now = DateTime.now();
+                      final d = await showDatePicker(
+                        context: context,
+                        initialDate: l.expiry ?? now.add(const Duration(days: 30)),
+                        firstDate: now.subtract(const Duration(days: 365)),
+                        lastDate: now.add(const Duration(days: 365 * 10)),
+                        helpText: 'Son istifadə tarixi',
+                      );
+                      if (d != null) setState(() => l.expiry = d);
+                    },
+                  ),
                 ]),
               ),
             ),

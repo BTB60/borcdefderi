@@ -587,6 +587,6 @@ export interface Purchase {
   id: string; number: string; companyId: string | null; companyName: string | null; supplierInvoice: string | null;
   total: number; paid: number; unpaid: number; debtId: string | null; receivedOn: string; note: string | null;
   createdByName: string; createdAt: string;
-  items: { id: string; productId: string | null; name: string; quantity: number; unitCost: number; lineTotal: number; returnedQty?: number }[];
+  items: { id: string; productId: string | null; name: string; quantity: number; unitCost: number; lineTotal: number; returnedQty?: number; expiryDate?: string | null }[];
   returnedAmount?: number;
 }

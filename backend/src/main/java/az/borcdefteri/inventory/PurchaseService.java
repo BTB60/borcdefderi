@@ -44,7 +44,14 @@ public class PurchaseService {
             @NotNull @DecimalMin(value = "0.001", message = "Miqdar 0-dan böyük olmalıdır")
             @Digits(integer = 11, fraction = 3) BigDecimal quantity,
             @NotNull @DecimalMin(value = "0.00", message = "Alış qiyməti mənfi ola bilməz")
-            @Digits(integer = 12, fraction = 2) BigDecimal unitCost) {}
+            @Digits(integer = 12, fraction = 2) BigDecimal unitCost,
+            /** Son istifadə tarixi of this batch (optional). */
+            LocalDate expiryDate) {
+
+        public ItemRequest(UUID productId, BigDecimal quantity, BigDecimal unitCost) {
+            this(productId, quantity, unitCost, null);
+        }
+    }
 
     public record PurchaseRequest(
             UUID companyId,
@@ -58,7 +65,7 @@ public class PurchaseService {
             UUID clientRequestId) {}
 
     public record Item(UUID id, UUID productId, String name, BigDecimal quantity, BigDecimal unitCost, BigDecimal lineTotal,
-                       BigDecimal returnedQty) {}
+                       BigDecimal returnedQty, LocalDate expiryDate) {}
 
     public record Purchase(UUID id, String number, UUID companyId, String companyName, String supplierInvoice,
                            BigDecimal total, BigDecimal paid, BigDecimal unpaid, UUID debtId, LocalDate receivedOn, String note,
@@ -104,6 +111,9 @@ public class PurchaseService {
 
         BigDecimal total = Money.zero();
         for (ItemRequest it : req.items()) {
+            if (it.expiryDate() != null && it.expiryDate().isBefore(today.minusYears(1))) {
+                throw ApiException.badRequest("INVALID_EXPIRY", "Son istifadə tarixi düzgün deyil");
+            }
             total = total.add(Money.of(qty(it).multiply(Money.of(it.unitCost()))));
         }
         total = Money.of(total);
@@ -127,10 +137,11 @@ public class PurchaseService {
             BigDecimal q = qty(it);
             BigDecimal cost = Money.of(it.unitCost());
             jdbc.sql("""
-                    INSERT INTO purchase_items (id, purchase_id, store_id, product_id, name, quantity, unit_cost, line_total)
-                    VALUES (:id, :pur, :s, :p, :n, :q, :c, :lt)
+                    INSERT INTO purchase_items (id, purchase_id, store_id, product_id, name, quantity, unit_cost, line_total, expiry_date)
+                    VALUES (:id, :pur, :s, :p, :n, :q, :c, :lt, :exp)
                     """).param("id", UUID.randomUUID()).param("pur", id).param("s", m.storeId()).param("p", p.id())
-                    .param("n", p.name()).param("q", q).param("c", cost).param("lt", Money.of(q.multiply(cost))).update();
+                    .param("n", p.name()).param("q", q).param("c", cost).param("lt", Money.of(q.multiply(cost)))
+                    .param("exp", it.expiryDate()).update();
             // the price is averaged over the stock as it is right now (an earlier line of the same product counts)
             BigDecimal before = jdbc.sql("SELECT stock_qty FROM products WHERE id = :id").param("id", p.id()).query(BigDecimal.class).single();
             BigDecimal oldPrice = jdbc.sql("SELECT purchase_price FROM products WHERE id = :id").param("id", p.id()).query(BigDecimal.class).single();
@@ -245,11 +256,12 @@ public class PurchaseService {
 
     private Purchase load(UUID storeId, UUID id) {
         List<Item> items = jdbc.sql("""
-                SELECT id, product_id, name, quantity, unit_cost, line_total, returned_qty FROM purchase_items
+                SELECT id, product_id, name, quantity, unit_cost, line_total, returned_qty, expiry_date FROM purchase_items
                 WHERE purchase_id = :id ORDER BY name""").param("id", id)
                 .query((rs, n) -> new Item(rs.getObject("id", UUID.class), rs.getObject("product_id", UUID.class),
                         rs.getString("name"), rs.getBigDecimal("quantity"), Money.of(rs.getBigDecimal("unit_cost")),
-                        Money.of(rs.getBigDecimal("line_total")), rs.getBigDecimal("returned_qty"))).list();
+                        Money.of(rs.getBigDecimal("line_total")), rs.getBigDecimal("returned_qty"),
+                        rs.getObject("expiry_date", LocalDate.class))).list();
         return jdbc.sql(SELECT + " WHERE p.store_id = :s AND p.id = :id").param("s", storeId).param("id", id)
                 .query((rs, n) -> map(rs, items)).optional()
                 .orElseThrow(() -> ApiException.notFound("Alış tapılmadı"));

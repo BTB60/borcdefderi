@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../format.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import '../whatsapp.dart';
@@ -242,5 +243,82 @@ class _ReorderScreenState extends State<ReorderScreen> {
             ]);
           },
         ),
+      );
+}
+
+/// Son istifadə tarixi: goods on the shelf that have expired or expire within 7 / 30 / 90 days.
+class ExpiryScreen extends StatefulWidget {
+  const ExpiryScreen({super.key, required this.session});
+
+  final Session session;
+
+  @override
+  State<ExpiryScreen> createState() => _ExpiryScreenState();
+}
+
+class _ExpiryScreenState extends State<ExpiryScreen> {
+  int _days = 30;
+  late Future<List<Map<String, dynamic>>> _data = _load();
+
+  Future<List<Map<String, dynamic>>> _load() async =>
+      ((await widget.session.api.get('/api/inventory/expiring', query: {'days': '$_days'})) as List).cast<Map<String, dynamic>>();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Son istifadə tarixi')),
+        body: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: SegmentedButton<int>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: 7, label: Text('7 gün')),
+                ButtonSegment(value: 30, label: Text('30 gün')),
+                ButtonSegment(value: 90, label: Text('90 gün')),
+              ],
+              selected: {_days},
+              onSelectionChanged: (v) => setState(() {
+                _days = v.first;
+                _data = _load();
+              }),
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _data,
+              builder: (context, snap) {
+                if (snap.hasError) return ListView(children: [ErrorBanner(errorMessage(snap.error!))]);
+                if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+                final rows = snap.data!;
+                if (rows.isEmpty) {
+                  return ListView(children: [
+                    EmptyState(title: 'Vaxtı keçən mal yoxdur', text: 'Növbəti $_days gündə heç bir partiyanın vaxtı bitmir. Tarixi mal qəbulunda yazın.'),
+                  ]);
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: rows.length,
+                  itemBuilder: (_, i) {
+                    final r = rows[i];
+                    final left = (r['daysLeft'] as num).toInt();
+                    final color = left < 0 ? Colors.red : left <= 7 ? Colors.orange : Colors.blueGrey;
+                    return Card(
+                      color: left < 0 ? Colors.red.shade50 : null,
+                      child: ListTile(
+                        title: Text('${r['productName']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: Text('${r['purchaseNumber']} · rəfdə ${_q(_n(r['quantityLeft']))} ${r['unit']} · maya ${formatMoney(_n(r['costValue']))}'),
+                        trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                          Text(formatDate(DateTime.tryParse('${r['expiryDate']}')), style: const TextStyle(fontWeight: FontWeight.w600)),
+                          Text(left < 0 ? '${-left} gün keçib' : left == 0 ? 'Bu gün bitir' : '$left gün qalıb',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color.shade800)),
+                        ]),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ]),
       );
 }

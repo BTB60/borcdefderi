@@ -344,6 +344,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
             tooltip: 'Export / import',
             onSelected: (v) => v == 'reorder'
                 ? Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReorderScreen(session: widget.session)))
+                : v == 'expiry'
+                ? Navigator.of(context).push(MaterialPageRoute(builder: (_) => ExpiryScreen(session: widget.session)))
                 : v == 'bulk'
                 ? _bulkPrice()
                 : v == 'labels'
@@ -355,6 +357,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     : _share('/api/products/export?format=$v', 'mehsullar.$v', v == 'pdf' ? 'application/pdf' : _xlsx),
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'reorder', child: ListTile(leading: Icon(Icons.local_shipping_outlined), title: Text('Sifariş siyahısı'))),
+              PopupMenuItem(value: 'expiry', child: ListTile(leading: Icon(Icons.event_busy_outlined), title: Text('Son istifadə tarixi'))),
               PopupMenuItem(value: 'bulk', child: ListTile(leading: Icon(Icons.price_change_outlined), title: Text('Qiymətləri toplu dəyiş'))),
               PopupMenuItem(value: 'pdf', child: ListTile(leading: Icon(Icons.picture_as_pdf_outlined), title: Text('Bütün məhsullar — PDF'))),
               PopupMenuItem(value: 'xlsx', child: ListTile(leading: Icon(Icons.table_chart_outlined), title: Text('Bütün məhsullar — Excel'))),

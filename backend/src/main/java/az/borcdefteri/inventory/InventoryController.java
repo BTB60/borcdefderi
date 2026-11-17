@@ -17,9 +17,17 @@ import java.util.UUID;
 public class InventoryController {
 
     private final InventoryService inventory;
+    private final ExpiryService expiry;
 
-    public InventoryController(InventoryService inventory) {
+    public InventoryController(InventoryService inventory, ExpiryService expiry) {
         this.inventory = inventory;
+        this.expiry = expiry;
+    }
+
+    /** Son istifadə tarixi: batches on the shelf that expire within {@code days} days (or already have). */
+    @GetMapping("/inventory/expiring")
+    public List<ExpiryService.ExpiringBatch> expiring(@RequestParam(defaultValue = "30") int days) {
+        return expiry.expiring(days);
     }
 
     @GetMapping("/product-categories")

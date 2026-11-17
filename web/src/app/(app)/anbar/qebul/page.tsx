@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { Party, Product, Purchase } from "@/lib/types";
 
-type Line = { product: Product; quantity: string; unitCost: string };
+type Line = { product: Product; quantity: string; unitCost: string; expiryDate: string };
 
 const num = (s: string) => {
   const n = Number(String(s).replace(",", "."));
@@ -76,7 +76,7 @@ export default function PurchasesPage() {
             <thead><tr><Th>Məhsul</Th><Th className="text-right">Miqdar</Th><Th className="text-right">Qiymət</Th><Th className="text-right">Cəmi</Th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {viewing.items.map((i) => (
-                <tr key={i.id}><Td>{i.name}{i.returnedQty ? <div className="text-xs text-rose-600">qaytarılıb: {Number(i.returnedQty)}</div> : null}</Td><Td className="text-right tabular-nums">{Number(i.quantity)}</Td>
+                <tr key={i.id}><Td>{i.name}{i.expiryDate ? <div className="text-xs text-slate-500">son istifadə: {formatDate(i.expiryDate)}</div> : null}{i.returnedQty ? <div className="text-xs text-rose-600">qaytarılıb: {Number(i.returnedQty)}</div> : null}</Td><Td className="text-right tabular-nums">{Number(i.quantity)}</Td>
                   <Td className="text-right tabular-nums">{formatMoney(i.unitCost)}</Td><Td className="text-right font-semibold tabular-nums">{formatMoney(i.lineTotal)}</Td></tr>
               ))}
             </tbody>
@@ -189,7 +189,7 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
     setLines((ls) => {
       const i = ls.findIndex((l) => l.product.id === p.id);
       if (i >= 0) return ls.map((l, k) => (k === i ? { ...l, quantity: String(num(l.quantity) + 1) } : l));
-      return [...ls, { product: p, quantity: "1", unitCost: String(p.purchasePrice ?? 0) }];
+      return [...ls, { product: p, quantity: "1", unitCost: String(p.purchasePrice ?? 0), expiryDate: "" }];
     });
     setQuery("");
     searchRef.current?.focus();
@@ -216,7 +216,7 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
         method: "POST",
         json: {
           companyId: companyId || null,
-          items: lines.map((l) => ({ productId: l.product.id, quantity: num(l.quantity), unitCost: round2(num(l.unitCost)) })),
+          items: lines.map((l) => ({ productId: l.product.id, quantity: num(l.quantity), unitCost: round2(num(l.unitCost)), expiryDate: l.expiryDate || null })),
           paid: paidN, paymentMethod: method, supplierInvoice: invoice || null, dueDate: dueDate || null, note: note || null,
           clientRequestId: requestId.current,
         },
@@ -262,7 +262,7 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
       <div className="mt-3">
         {lines.length === 0 ? <EmptyState title="Məhsul əlavə edin" /> : (
           <Table>
-            <thead><tr><Th>Məhsul</Th><Th className="text-right">Miqdar</Th><Th className="text-right">Alış qiyməti</Th><Th className="text-right">Cəmi</Th><Th /></tr></thead>
+            <thead><tr><Th>Məhsul</Th><Th className="text-right">Miqdar</Th><Th className="text-right">Alış qiyməti</Th><Th>Son istifadə tarixi</Th><Th className="text-right">Cəmi</Th><Th /></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {lines.map((l, i) => (
                 <tr key={l.product.id}>
@@ -271,6 +271,8 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
                     onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, quantity: e.target.value } : x)))} /></Td>
                   <Td className="text-right"><Input className="w-28 text-right" inputMode="decimal" value={l.unitCost}
                     onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, unitCost: e.target.value } : x)))} /></Td>
+                  <Td><Input type="date" className="w-40" value={l.expiryDate} aria-label="Son istifadə tarixi" title="Boş qala bilər"
+                    onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, expiryDate: e.target.value } : x)))} /></Td>
                   <Td className="text-right font-semibold tabular-nums">{formatMoney(round2(num(l.quantity) * num(l.unitCost)))}</Td>
                   <Td><button type="button" className="text-xs text-rose-600 hover:underline" onClick={() => setLines(lines.filter((_, k) => k !== i))}>Sil</button></Td>
                 </tr>

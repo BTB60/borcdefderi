@@ -7,6 +7,7 @@ import '../theme.dart';
 import 'cash_screen.dart';
 import 'announcements.dart';
 import 'common.dart';
+import 'day_summary.dart';
 import 'swipe_actions.dart';
 import 'expenses_screen.dart';
 import 'finance_cards.dart';
@@ -63,6 +64,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: Text(widget.session.me?.storeName ?? 'Panel'),
         actions: [
+          IconButton(
+            tooltip: 'Gün sonu hesabatı',
+            icon: const Icon(Icons.summarize_outlined),
+            onPressed: () => showDaySummary(context, widget.session),
+          ),
           IconButton(
             tooltip: 'Bildirişlər',
             icon: const Icon(Icons.notifications_none),

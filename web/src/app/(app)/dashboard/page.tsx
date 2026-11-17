@@ -10,6 +10,7 @@ import { Alert, Badge, Card, EmptyState, PageHeader, Spinner, StatCard, Table, T
 import { FinanceCards } from "@/components/dashboard/FinanceCards";
 import { MoneyCards } from "@/components/dashboard/MoneyCards";
 import { PocketCard } from "@/components/pocket/Pocket";
+import { DaySummaryButton } from "@/components/dashboard/DaySummary";
 
 function BarChart({ data, label }: { data: { label: string; value: number; cash: number; card: number; other: number }[]; label: string }) {
   const max = Math.max(1, ...data.map((d) => d.value));
@@ -73,7 +74,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Panel" subtitle="Bütün rəqəmlər birbaşa veritabanından hesablanır" />
+      <PageHeader title="Panel" subtitle="Bütün rəqəmlər birbaşa veritabanından hesablanır" actions={<DaySummaryButton />} />
 
       {isOwner && <PocketCard />}
       <FinanceCards />

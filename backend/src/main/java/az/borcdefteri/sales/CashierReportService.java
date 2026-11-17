@@ -59,8 +59,10 @@ public class CashierReportService {
                     FROM sales WHERE store_id = :s AND status = 'COMPLETED' AND sold_on BETWEEN :lo AND :hi
                     GROUP BY created_by
                 ), r AS (
-                    SELECT created_by, COUNT(*) AS n, SUM(amount) AS total
-                    FROM sale_returns WHERE store_id = :s AND returned_on BETWEEN :lo AND :hi GROUP BY created_by
+                    SELECT rt.created_by, COUNT(*) AS n, SUM(rt.amount) AS total
+                    FROM sale_returns rt JOIN sales sr ON sr.id = rt.sale_id
+                    WHERE rt.store_id = :s AND rt.returned_on BETWEEN :lo AND :hi AND sr.status = 'COMPLETED'
+                    GROUP BY rt.created_by
                 ), c AS (
                     SELECT a.actor_id, COUNT(*) AS n, COALESCE(SUM(sa.total), 0) AS total
                     FROM audit_logs a LEFT JOIN sales sa ON sa.id::text = a.entity_id

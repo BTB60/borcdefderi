@@ -22,7 +22,7 @@ class CashierReportTest extends IntegrationTestBase {
 
         Map<String, Object> sale = new HashMap<>(Map.of("items", List.of(Map.of("productId", p, "quantity", "10")),
                 "paidCash", "9.00", "discount", "1.00"));
-        post(owner, "/api/sales", sale).andExpect(status().isCreated());
+        JsonNode sold = body(post(owner, "/api/sales", sale).andExpect(status().isCreated()));
         Map<String, Object> card = new HashMap<>(Map.of("items", List.of(Map.of("productId", p, "quantity", "5")), "paidCard", "5.00"));
         String cancelled = body(post(owner, "/api/sales", card).andExpect(status().isCreated())).get("id").asText();
         post(owner, "/api/sales/" + cancelled + "/cancel", Map.of("reason", "səhv")).andExpect(status().isOk());
@@ -38,6 +38,14 @@ class CashierReportTest extends IntegrationTestBase {
         assertThat(me.get("cancelledTotal").asDouble()).isEqualTo(5.0);
 
         get(owner, "/api/reports/cashiers?from=2026-12-01&to=2026-11-01").andExpect(status().isBadRequest());
+
+        // gün sonu: the same day in a few numbers
+        JsonNode day = body(get(owner, "/api/reports/day-summary").andExpect(status().isOk()));
+        assertThat(day.get("salesCount").asLong()).isEqualTo(1);
+        assertThat(day.get("salesTotal").asDouble()).isEqualTo(9.0);
+        assertThat(day.get("grossProfit").asDouble()).isEqualTo(9.0 - sold.get("costTotal").asDouble());
+        assertThat(day.get("topProducts").get(0).get("name").asText()).isEqualTo("Çörək");
+        assertThat(day.get("storeName").asText()).isEqualTo("Kassir Hesabat");
     }
 
     @Test

@@ -12,6 +12,7 @@ import '../theme.dart';
 import 'barcode_scanner.dart';
 import 'cash_screen.dart' show newRequestId;
 import 'common.dart';
+import 'online_orders_screen.dart';
 import 'shift_card.dart';
 import 'swipe_actions.dart';
 import 'finance_cards.dart' show pickParty;
@@ -230,6 +231,11 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Satış'), actions: [
+          IconButton(
+            tooltip: 'Onlayn sifarişlər',
+            icon: const Icon(Icons.storefront_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => OnlineOrdersScreen(session: widget.session))),
+          ),
           IconButton(tooltip: 'Çek printeri', icon: const Icon(Icons.print_outlined), onPressed: _printerSettings),
         ]),
         floatingActionButton: FloatingActionButton.extended(

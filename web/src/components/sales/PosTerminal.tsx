@@ -231,6 +231,26 @@ Təşəkkür edirik!`;
     setError(null);
   }, [level, priceOf]);
 
+  // Onlayn sifariş → kassa: /satis?order=<id> puts the order's goods into the receipt; the sale closes the order
+  const orderRef = useRef<{ id: string; number: string } | null>(null);
+  useEffect(() => {
+    if (!products || orderRef.current) return;
+    const id = new URLSearchParams(window.location.search).get("order");
+    if (!id) return;
+    type OnlineOrder = { id: string; number: string; customerName: string; customerPhone: string; items: { productId: string | null; quantity: number }[] };
+    api<OnlineOrder[]>("/api/online-orders").then((list) => {
+      const o = list.find((x) => x.id === id);
+      if (!o) return;
+      orderRef.current = { id: o.id, number: o.number };
+      o.items.forEach((it) => {
+        const p = products.find((pp) => pp.id === it.productId);
+        if (p) add(p, Number(it.quantity));
+      });
+      setNote(`Onlayn sifariş ${o.number} · ${o.customerName} ${o.customerPhone}`);
+      window.history.replaceState(null, "", "/satis");
+    }).catch(() => undefined);
+  }, [products, add]);
+
   /** Switching Top 1 / Top 2 re-prices everything already in the receipt. */
   function switchLevel(lv: "RETAIL" | "WHOLESALE") {
     setLevel(lv);
@@ -348,6 +368,10 @@ Təşəkkür edirik!`;
         return;
       }
       setDone({ sale: s, change });
+      if (orderRef.current) {
+        api(`/api/online-orders/${orderRef.current.id}/status`, { method: "POST", json: { status: "DONE", saleId: s.id } }).catch(() => undefined);
+        orderRef.current = null;
+      }
       api<Party[]>("/api/customers").then(setCustomers).catch(() => undefined); // fresh bonus balances
       setPayOpen(false);
       if (autoPrint) printSale(s, change);

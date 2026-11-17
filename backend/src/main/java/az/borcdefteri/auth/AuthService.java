@@ -121,7 +121,7 @@ public class AuthService {
     }
 
     private AuthResponse issue(UUID userId, String platformRole) {
-        UUID storeId = jdbc.sql("SELECT store_id FROM store_members WHERE user_id = :id")
+        UUID storeId = jdbc.sql("SELECT store_id FROM store_members WHERE user_id = :id AND is_current")
                 .param("id", userId).query(UUID.class).optional().orElse(null);
         audit.log(storeId, userId, "LOGIN", "USER", userId.toString(), "Sistemə giriş");
         return new AuthResponse(jwtService.issue(userId, platformRole), jwtService.expiresInSeconds(), me(userId));
@@ -175,7 +175,7 @@ public class AuthService {
         Map<String, Object> row = jdbc.sql("""
                 SELECT m.id, s.id AS store_id, s.name, s.status, m.role, m.active
                 FROM store_members m JOIN stores s ON s.id = m.store_id
-                WHERE m.user_id = :userId
+                WHERE m.user_id = :userId AND m.is_current
                 """).param("userId", userId).query().singleRow();
         if (!"ACTIVE".equals(row.get("status")) || !Boolean.TRUE.equals(row.get("active"))) {
             throw ApiException.forbidden("STORE_SUSPENDED", "Mağaza fəaliyyəti dayandırılıb");

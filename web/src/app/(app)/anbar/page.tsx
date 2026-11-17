@@ -13,6 +13,7 @@ import { UNIT_SUGGESTIONS, isWeighed, unitKind } from "@/lib/units";
 
 const MOVE_LABEL: Record<StockMovement["kind"], string> = {
   RECEIPT: "Anbara giriş", ISSUE: "Anbardan çıxış", SALE: "Satış", SALE_RETURN: "Satış qaytarıldı", ADJUSTMENT: "Düzəliş", COUNT: "Sayım",
+  TRANSFER_OUT: "Filiala göndərildi", TRANSFER_IN: "Filialdan gəldi",
 };
 const q = (n: number) => Number(n).toLocaleString("az-AZ", { maximumFractionDigits: 3 });
 

@@ -68,7 +68,7 @@ public class ProfileService {
                 SELECT u.id, u.email, u.full_name, u.phone, u.platform_role, u.avatar_updated_at, u.two_factor_enabled,
                        m.role, s.id AS store_id, s.name AS store_name, s.phone AS store_phone, s.address AS store_address
                 FROM users u
-                LEFT JOIN store_members m ON m.user_id = u.id
+                LEFT JOIN store_members m ON m.user_id = u.id AND m.is_current
                 LEFT JOIN stores s ON s.id = m.store_id
                 WHERE u.id = :id
                 """).param("id", userId)
@@ -167,7 +167,7 @@ public class ProfileService {
         }
         jdbc.sql("UPDATE users SET password_hash = :hash, password_changed_at = now(), must_change_password = FALSE WHERE id = :id")
                 .param("hash", passwordEncoder.encode(newPassword)).param("id", userId).update();
-        UUID storeId = jdbc.sql("SELECT store_id FROM store_members WHERE user_id = :id").param("id", userId)
+        UUID storeId = jdbc.sql("SELECT store_id FROM store_members WHERE user_id = :id AND is_current").param("id", userId)
                 .query(UUID.class).optional().orElse(null);
         audit.log(storeId, userId, "PASSWORD_CHANGED", "USER", userId.toString(), "Şifrə dəyişdirildi");
         return new AuthResponse(jwt.issue(userId, platformRole), jwt.expiresInSeconds(), auth.me(userId));

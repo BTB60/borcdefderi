@@ -546,7 +546,7 @@ export interface Product {
 }
 
 export interface StockMovement {
-  id: string; productId: string; productName: string; kind: "RECEIPT" | "ISSUE" | "SALE" | "SALE_RETURN" | "ADJUSTMENT" | "COUNT";
+  id: string; productId: string; productName: string; kind: "RECEIPT" | "ISSUE" | "SALE" | "SALE_RETURN" | "ADJUSTMENT" | "COUNT" | "TRANSFER_OUT" | "TRANSFER_IN";
   quantity: number; unitCost: number | null; balanceAfter: number; saleId: string | null; note: string | null; actorName: string; createdAt: string;
 }
 

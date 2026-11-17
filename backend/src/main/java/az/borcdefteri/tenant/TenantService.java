@@ -71,7 +71,7 @@ public class TenantService {
                         WHERE sub.store_id = s.id AND sub.status = 'ACTIVE' AND sub.end_date >= :today
                         ORDER BY sub.end_date DESC LIMIT 1) AS plan_modules
                 FROM users u
-                LEFT JOIN store_members m ON m.user_id = u.id
+                LEFT JOIN store_members m ON m.user_id = u.id AND m.is_current
                 LEFT JOIN stores s ON s.id = m.store_id
                 WHERE u.id = :userId
                 """)

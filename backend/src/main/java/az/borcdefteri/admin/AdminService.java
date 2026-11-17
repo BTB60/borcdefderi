@@ -269,7 +269,7 @@ public class AdminService {
                 SELECT u.id, u.email, u.full_name, u.phone, u.platform_role, u.enabled, u.created_at,
                        m.role AS store_role, s.name AS store_name
                 FROM users u
-                LEFT JOIN store_members m ON m.user_id = u.id
+                LEFT JOIN store_members m ON m.user_id = u.id AND m.is_current
                 LEFT JOIN stores s ON s.id = m.store_id
                 WHERE LOWER(u.email) LIKE LOWER(:q) OR LOWER(u.full_name) LIKE LOWER(:q)
                 ORDER BY u.created_at DESC LIMIT 500

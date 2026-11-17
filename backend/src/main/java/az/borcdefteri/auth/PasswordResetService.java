@@ -77,7 +77,7 @@ public class PasswordResetService {
         record U(UUID id, String fullName, String platformRole, UUID storeId) {}
         U user = jdbc.sql("""
                 SELECT u.id, u.full_name, u.platform_role, m.store_id
-                FROM users u LEFT JOIN store_members m ON m.user_id = u.id
+                FROM users u LEFT JOIN store_members m ON m.user_id = u.id AND m.is_current
                 WHERE u.email = :e AND u.enabled
                 """).param("e", normalized)
                 .query((rs, n) -> new U(rs.getObject("id", UUID.class), rs.getString("full_name"),
@@ -155,7 +155,7 @@ public class PasswordResetService {
                 SELECT r.id, r.user_id, r.created_at, u.email, u.full_name, u.phone, m.role, s.name AS store_name
                 FROM password_reset_requests r
                 JOIN users u ON u.id = r.user_id
-                LEFT JOIN store_members m ON m.user_id = u.id
+                LEFT JOIN store_members m ON m.user_id = u.id AND m.is_current
                 LEFT JOIN stores s ON s.id = m.store_id
                 WHERE r.status = 'OPEN'
                 ORDER BY r.created_at DESC LIMIT 200
@@ -228,7 +228,7 @@ public class PasswordResetService {
     }
 
     private UUID storeOf(UUID userId) {
-        return jdbc.sql("SELECT store_id FROM store_members WHERE user_id = :u").param("u", userId)
+        return jdbc.sql("SELECT store_id FROM store_members WHERE user_id = :u AND is_current").param("u", userId)
                 .query(UUID.class).optional().orElse(null);
     }
 

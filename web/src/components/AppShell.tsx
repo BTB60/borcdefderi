@@ -1,5 +1,6 @@
 "use client";
 import { AnnouncementBanner } from "@/components/AnnouncementBanner";
+import { BranchSwitcher } from "@/components/BranchSwitcher";
 import Image from "next/image";
 
 import Link from "next/link";
@@ -40,6 +41,7 @@ const STORE_NAV: NavItem[] = [
   { href: "/cib-pulu", label: "Cib pulu", icon: "M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1h1a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm13 5h3", module: "POCKET", ownerOnly: true },
   { href: "/kontragentlar", label: "Müştəri və şirkətlər", icon: "M16 11a4 4 0 1 0-8 0M3 21a9 9 0 0 1 18 0", anyOf: DEBT_PERMISSIONS },
   { href: "/hesabatlar", label: "Hesabatlar", icon: "M7 3h7l5 5v13H7V3Zm7 0v5h5M10 13h6M10 17h6", anyOf: ["REPORTS", ...DEBT_PERMISSIONS] },
+  { href: "/filiallar", label: "Filiallar", icon: "M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6", ownerOnly: true },
   { href: "/abunelik", label: "Abunəlik", icon: "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z", ownerOnly: true },
   { href: "/isciler", label: "İşçilər", icon: "M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 8a6 6 0 0 1 12 0", ownerOnly: true, module: "EMPLOYEES" },
   { href: "/fealiyyet", label: "İşçi fəaliyyəti", icon: "M4 19h16M7 16V9m5 7V5m5 11v-4", ownerOnly: true, module: "EMPLOYEES" },
@@ -298,6 +300,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div>
             <p className="font-serif text-lg font-semibold tracking-wide">HesabPro</p>
             <p className="text-xs text-white/50">{me?.storeName ?? "Platforma"}</p>
+            {isOwner && !isSuperAdmin && <BranchSwitcher />}
           </div>
         </div>
 

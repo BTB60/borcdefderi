@@ -5,6 +5,7 @@ import '../api/api_client.dart';
 import '../format.dart';
 import '../state/session.dart';
 import '../theme.dart';
+import 'cashier_report.dart';
 import 'common.dart';
 
 double _n(Object? v) => v == null ? 0 : (v as num).toDouble();
@@ -118,7 +119,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Hesabat')),
+      appBar: AppBar(title: const Text('Hesabat'), actions: [
+        TextButton.icon(
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => CashierReportScreen(session: widget.session, from: _from, to: _to))),
+          icon: const Icon(Icons.badge_outlined),
+          label: const Text('Kassirlər'),
+        ),
+      ]),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(

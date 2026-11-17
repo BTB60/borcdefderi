@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useState } from "react";
 import { Alert, Button, Card, Field, Input, PageHeader } from "@/components/ui";
 import { ApiError, download } from "@/lib/api";
@@ -48,7 +50,10 @@ export default function ReportsPage() {
 
   return (
     <>
-      <PageHeader title="Hesabatlar" subtitle="PDF və Excel faylları canlı məlumatdan hazırlanır (Azərbaycan hərfləri ilə)" />
+      <PageHeader title="Hesabatlar" subtitle="PDF və Excel faylları canlı məlumatdan hazırlanır (Azərbaycan hərfləri ilə)"
+        actions={can("REPORTS") ? <div className="flex flex-wrap gap-2">
+          <Link href="/hesabatlar/kassirler" className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-navy-800 hover:border-gold-500 hover:text-gold-600">Kassir hesabatı</Link>
+        </div> : undefined} />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       <Card className="mb-5">
         <div className="grid gap-4 sm:grid-cols-3">

@@ -38,7 +38,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
             jwtService.parse(header.substring(7).trim()).filter(this::stillValid).ifPresent(user -> {
-                String authority = "SUPER_ADMIN".equals(user.platformRole()) ? "ROLE_SUPER_ADMIN" : "ROLE_USER";
+                String authority = "SUPER_ADMIN".equals(user.platformRole()) ? "ROLE_SUPER_ADMIN"
+                        : "SUPPORT_ADMIN".equals(user.platformRole()) ? "ROLE_SUPPORT_ADMIN" : "ROLE_USER";
                 var auth = new UsernamePasswordAuthenticationToken(
                         user, null, List.of(new SimpleGrantedAuthority(authority)));
                 SecurityContextHolder.getContext().setAuthentication(auth);

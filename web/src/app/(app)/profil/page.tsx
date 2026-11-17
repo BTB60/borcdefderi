@@ -31,7 +31,7 @@ export default function SettingsPage() {
 
   if (!profile) return error ? <Alert>{error}</Alert> : <Spinner />;
 
-  const roleLabel = isSuperAdmin ? "Platforma administratoru" : profile.role === "STORE_OWNER" ? "Mağaza sahibi" : "İşçi";
+  const roleLabel = profile.platformRole === "SUPPORT_ADMIN" ? "Köməkçi admin" : isSuperAdmin ? "Platforma administratoru" : profile.role === "STORE_OWNER" ? "Mağaza sahibi" : "İşçi";
 
   return (
     <>
@@ -46,7 +46,7 @@ export default function SettingsPage() {
           {profile.role === "STORE_OWNER" && <RequisitesCard />}
           {profile.role === "STORE_OWNER" && <BonusCard />}
           {profile.role === "STORE_OWNER" && <BackupCard />}
-          <PasswordCard isAdmin={profile.platformRole === "SUPER_ADMIN"} />
+          <PasswordCard isAdmin={profile.platformRole === "SUPER_ADMIN" || profile.platformRole === "SUPPORT_ADMIN"} />
           <SecurityCard profile={profile} onChange={updated} />
         </div>
       </div>

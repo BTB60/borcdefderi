@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
-import { ADMIN_GROUPS, adminHref, adminTabFrom } from "@/lib/adminNav";
+import { ADMIN_GROUPS, SUPPORT_GROUPS, adminHref, adminTabFrom } from "@/lib/adminNav";
 import { useAuth } from "@/lib/auth";
 import { api, openProtected } from "@/lib/api";
 import { JOB_TITLE_LABEL } from "@/lib/format";
@@ -55,13 +55,13 @@ function Icon({ d, className }: { d: string; className?: string }) {
 }
 
 /** The platform admin's sections, grouped, in the blue sidebar (the admin page shows the one in ?tab=). */
-function AdminNav({ pending, onExport, exporting }: { pending: number; onExport: () => void; exporting: boolean }) {
+function AdminNav({ pending, onExport, exporting, limited }: { pending: number; onExport: () => void; exporting: boolean; limited: boolean }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const current = pathname === "/admin" ? adminTabFrom(params.get("tab")) : null;
   return (
     <>
-      {ADMIN_GROUPS.map((g) => (
+      {(limited ? SUPPORT_GROUPS : ADMIN_GROUPS).map((g) => (
         <div key={g.title || "top"} className={g.title ? "pt-4" : ""}>
           {g.title && <p className="px-4 pb-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/35">{g.title}</p>}
           {g.items.map((t) => {
@@ -94,19 +94,19 @@ function AdminNav({ pending, onExport, exporting }: { pending: number; onExport:
           <Icon d={SETTINGS_ICON} className={pathname === "/profil" ? "text-gold-400" : ""} />
           Parametrlər
         </Link>
-        <button onClick={onExport} disabled={exporting}
+        {!limited && <button onClick={onExport} disabled={exporting}
           className="group flex w-full items-center gap-3 rounded-xl px-3.5 py-2 text-left text-sm font-medium text-white/75 transition hover:bg-white/5 hover:text-white disabled:opacity-50">
           <span className="h-5 w-1 rounded-full bg-transparent group-hover:bg-white/20" />
           <Icon d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" />
           {exporting ? "Hazırlanır…" : "Excel-ə ixrac"}
-        </button>
+        </button>}
       </div>
     </>
   );
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { me, can, isLocked, isOwner, isSuperAdmin, signOut } = useAuth();
+  const { me, can, isLocked, isOwner, isPlatformAdmin: isSuperAdmin, isSupportAdmin, signOut } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -167,7 +167,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [kiosk, pathname, router]);
 
   const subscription = me?.subscription;
-  const roleLabel = isSuperAdmin ? "Platforma administratoru" : isOwner ? "Mağaza sahibi" : me?.jobTitle ? JOB_TITLE_LABEL[me.jobTitle] : "İşçi";
+  const roleLabel = isSupportAdmin ? "Köməkçi admin" : isSuperAdmin ? "Platforma administratoru" : isOwner ? "Mağaza sahibi" : me?.jobTitle ? JOB_TITLE_LABEL[me.jobTitle] : "İşçi";
 
   if (kiosk) {
     return (
@@ -209,7 +209,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5" aria-label="Əsas naviqasiya">
           {isSuperAdmin && (
             <Suspense fallback={null}>
-              <AdminNav pending={pending} onExport={exportExcel} exporting={exporting} />
+              <AdminNav pending={pending} onExport={exportExcel} exporting={exporting} limited={isSupportAdmin} />
             </Suspense>
           )}
           {!isSuperAdmin && items.map((item) => {

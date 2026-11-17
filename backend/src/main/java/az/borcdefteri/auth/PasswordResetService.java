@@ -233,7 +233,7 @@ public class PasswordResetService {
     }
 
     static void requireLength(String password, String platformRole) {
-        int min = "SUPER_ADMIN".equals(platformRole) ? 12 : 8;
+        int min = "SUPER_ADMIN".equals(platformRole) || "SUPPORT_ADMIN".equals(platformRole) ? 12 : 8;
         if (password == null || password.length() < min) {
             throw ApiException.badRequest("PASSWORD_TOO_SHORT", "Yeni şifrə ən azı " + min + " simvol olmalıdır");
         }

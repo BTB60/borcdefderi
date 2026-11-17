@@ -158,7 +158,7 @@ public class ProfileService {
         Passwords.requireBcryptLength(newPassword);
         String platformRole = jdbc.sql("SELECT platform_role FROM users WHERE id = :id").param("id", userId)
                 .query(String.class).single();
-        int min = "SUPER_ADMIN".equals(platformRole) ? 12 : 8;
+        int min = "SUPER_ADMIN".equals(platformRole) || "SUPPORT_ADMIN".equals(platformRole) ? 12 : 8;
         if (newPassword.length() < min) {
             throw ApiException.badRequest("PASSWORD_TOO_SHORT", "Yeni şifrə ən azı " + min + " simvol olmalıdır");
         }

@@ -9,6 +9,7 @@ import { periodText } from "@/lib/plans";
 import { waLink } from "@/lib/whatsapp";
 import type { AdminStore, AuditEntry, JobTitle, SubscriptionRecord } from "@/lib/types";
 import { StoreNotes, tagTone } from "@/components/admin/StoreNotes";
+import { useAuth } from "@/lib/auth";
 
 type StoreCard = {
   id: string; name: string; phone: string | null; address: string | null; status: "ACTIVE" | "SUSPENDED"; createdAt: string;
@@ -69,6 +70,7 @@ export function StoreDrawer({ store, onClose, onActivate, onExtend, onChanged, a
   onChanged: (notice: string) => void;
   actionLabels: Record<string, string>;
 }) {
+  const { isSupportAdmin } = useAuth();
   const [section, setSection] = useState<Section>("info");
   const [tags, setTags] = useState<string[]>(store.tags ?? []);
   const [card, setCard] = useState<StoreCard | null>(null);
@@ -190,7 +192,7 @@ export function StoreDrawer({ store, onClose, onActivate, onExtend, onChanged, a
     { key: "operations", label: "Əməliyyatlar" },
     { key: "activity", label: "Fəaliyyət" },
     { key: "danger", label: "Təhlükəli zona" },
-  ];
+  ].filter((s) => !isSupportAdmin || ["info", "notes", "subscription"].includes(s.key)) as { key: Section; label: string }[];
 
   return (
     <Modal open size="xl" title={store.name} onClose={onClose} footer={<Button variant="ghost" onClick={onClose}>Bağla</Button>}>
@@ -210,8 +212,8 @@ export function StoreDrawer({ store, onClose, onActivate, onExtend, onChanged, a
           <Countdown expiresAt={store.subscriptionState === "NONE" ? null : store.expiresAt} now={now} emptyText="Abunə olmayıb" />
         </div>
         <div className="flex gap-2">
-          <Button variant="gold" onClick={() => onActivate(store)}>{store.activePlan ? "Yenilə" : "Aktiv et"}</Button>
-          {store.activePlan && <Button variant="outline" onClick={() => onExtend(store)}>Uzat</Button>}
+          {!isSupportAdmin && <Button variant="gold" onClick={() => onActivate(store)}>{store.activePlan ? "Yenilə" : "Aktiv et"}</Button>}
+          {!isSupportAdmin && store.activePlan && <Button variant="outline" onClick={() => onExtend(store)}>Uzat</Button>}
         </div>
       </div>
 

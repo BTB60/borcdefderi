@@ -46,7 +46,7 @@ public class AdminService {
      * expiring = active with at most `reminder-days` left, or already expired (shown in red in the admin panel).
      */
     public List<Map<String, Object>> stores(String q) {
-        tenant.requireSuperAdmin();
+        tenant.requirePlatformAdmin();
         String like = az.borcdefteri.common.Search.contains(q);
         LocalDate today = tenant.today();
         int reminderDays = props.subscription().reminderDays();
@@ -154,7 +154,7 @@ public class AdminService {
      */
     @Transactional
     public Map<String, Object> remind(UUID storeId, String channel) {
-        tenant.requireSuperAdmin();
+        tenant.requirePlatformAdmin();
         boolean exists = jdbc.sql("SELECT COUNT(*) FROM stores WHERE id = :id").param("id", storeId)
                 .query(Long.class).single() > 0;
         if (!exists) {

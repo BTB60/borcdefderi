@@ -38,7 +38,7 @@ class MoreScreen extends StatelessWidget {
           child: ListTile(
             leading: UserAvatar(session: session, name: me.fullName, version: me.hasAvatar ? me.avatarVersion : null),
             title: Text(me.fullName, style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text('${me.email}\n${me.isOwner ? 'Mağaza sahibi' : me.isSuperAdmin ? 'Platforma administratoru' : jobTitleLabels[me.jobTitle] ?? 'İşçi'}'),
+            subtitle: Text('${me.email}\n${me.isOwner ? 'Mağaza sahibi' : me.isSupportAdmin ? 'Köməkçi admin' : me.isSuperAdmin ? 'Platforma administratoru' : jobTitleLabels[me.jobTitle] ?? 'İşçi'}'),
             isThreeLine: true,
             trailing: const Icon(Icons.settings_outlined),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProfileScreen(session: session))),

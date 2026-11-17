@@ -24,7 +24,7 @@ export default function LoginPage() {
   function enter(res: AuthResponse) {
     signIn(res);
     // the desktop till (HesabPro Kassa) opens straight on the sales screen
-    router.replace(window.hesabDesktop ? "/satis" : res.me.platformRole === "SUPER_ADMIN" ? "/admin" : "/dashboard");
+    router.replace(window.hesabDesktop ? "/satis" : res.me.platformRole === "SUPER_ADMIN" ? "/admin" : res.me.platformRole === "SUPPORT_ADMIN" ? "/admin?tab=stores" : "/dashboard");
   }
 
   async function onSubmit(e: FormEvent) {

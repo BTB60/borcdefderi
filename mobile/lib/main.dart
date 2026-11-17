@@ -78,7 +78,7 @@ class _BorcdefteriAppState extends State<BorcdefteriApp> {
           if (session.me!.mustChangePassword) {
             return ForcePasswordChangeScreen(session: session);
           }
-          if (session.me!.isSuperAdmin) {
+          if (session.me!.isPlatformAdmin) {
             return AdminHome(session: session);
           }
           if (session.subscriptionBlocked) {

@@ -168,6 +168,20 @@ public class TenantService {
                 .query(Long.class).single() > 0;
     }
 
+    /** The platform admin or a köməkçi admin (SUPPORT_ADMIN), enabled. */
+    public boolean isPlatformAdmin() {
+        return jdbc.sql("SELECT COUNT(*) FROM users WHERE id = :id AND platform_role IN ('SUPER_ADMIN', 'SUPPORT_ADMIN') AND enabled")
+                .param("id", currentUserId())
+                .query(Long.class).single() > 0;
+    }
+
+    /** For the admin calls a köməkçi admin may also make (the URL rules list them). */
+    public void requirePlatformAdmin() {
+        if (!isPlatformAdmin()) {
+            throw ApiException.forbidden("SUPER_ADMIN_ONLY", "Yalnız platforma administratoru bu əməliyyatı edə bilər");
+        }
+    }
+
     /** Platform-level check (defence in depth on top of the /api/admin/** URL rule). */
     public void requireSuperAdmin() {
         AuthenticatedUser principal = currentPrincipal();

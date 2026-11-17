@@ -62,7 +62,7 @@ class Session extends ChangeNotifier {
   /// True when the store's subscription has ended (the server then blocks every business section).
   bool get subscriptionBlocked {
     final m = me;
-    if (m == null || m.isSuperAdmin) return false;
+    if (m == null || m.isPlatformAdmin) return false;
     final sub = m.subscription;
     return sub != null && !sub.active;
   }

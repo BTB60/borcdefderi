@@ -25,10 +25,33 @@ class AdminHome extends StatefulWidget {
 }
 
 class _AdminHomeState extends State<AdminHome> {
-  int _tab = 0;
+  // a köməkçi admin has no overview (money numbers): it starts on the store list
+  late int _tab = (widget.session.me?.isSupportAdmin ?? false) ? 1 : 0;
 
   @override
   Widget build(BuildContext context) {
+    if (widget.session.me?.isSupportAdmin ?? false) {
+      final helperPages = [
+        AdminStoresScreen(session: widget.session),
+        PaymentRequestsScreen(session: widget.session),
+        ExpiringSubscriptionsScreen(session: widget.session),
+        _AdminAccount(session: widget.session),
+      ];
+      final i = (_tab - 1).clamp(0, helperPages.length - 1);
+      return Scaffold(
+        body: IndexedStack(index: i, children: helperPages),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: i,
+          onDestinationSelected: (n) => setState(() => _tab = n + 1),
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront), label: 'Mağazalar'),
+            NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Sorğular'),
+            NavigationDestination(icon: Icon(Icons.timer_outlined), selectedIcon: Icon(Icons.timer), label: 'Bitənlər'),
+            NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Hesab'),
+          ],
+        ),
+      );
+    }
     final pages = [
       AdminOverviewScreen(session: widget.session, onOpenTab: (i) => setState(() => _tab = i)),
       AdminStoresScreen(session: widget.session),

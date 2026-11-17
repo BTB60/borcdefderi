@@ -56,14 +56,14 @@ public class AdminCrmService {
     }
 
     public List<Note> notes(UUID storeId) {
-        tenant.requireSuperAdmin();
+        tenant.requirePlatformAdmin();
         return jdbc.sql(SELECT_NOTE + " WHERE n.store_id = :s ORDER BY n.created_at DESC LIMIT 200")
                 .param("s", storeId).query(this::map).list();
     }
 
     /** Open follow-ups due today or earlier: the admin's "Bu gün" list. */
     public List<Note> dueFollowUps() {
-        tenant.requireSuperAdmin();
+        tenant.requirePlatformAdmin();
         return jdbc.sql(SELECT_NOTE + """
                  WHERE n.done_at IS NULL AND n.follow_up_on IS NOT NULL AND n.follow_up_on <= :today
                  ORDER BY n.follow_up_on, n.created_at LIMIT 100
@@ -72,7 +72,7 @@ public class AdminCrmService {
 
     @Transactional
     public Note addNote(UUID storeId, String body, LocalDate followUpOn) {
-        tenant.requireSuperAdmin();
+        tenant.requirePlatformAdmin();
         requireStore(storeId);
         String text = body == null ? "" : body.trim();
         if (text.isEmpty() || text.length() > 1000) {
@@ -92,7 +92,7 @@ public class AdminCrmService {
 
     @Transactional
     public Note setDone(UUID noteId, boolean done) {
-        tenant.requireSuperAdmin();
+        tenant.requirePlatformAdmin();
         get(noteId);
         jdbc.sql("UPDATE admin_store_notes SET done_at = CASE WHEN :d THEN now() ELSE NULL END WHERE id = :id")
                 .param("d", done).param("id", noteId).update();
@@ -101,7 +101,7 @@ public class AdminCrmService {
 
     @Transactional
     public void deleteNote(UUID noteId) {
-        tenant.requireSuperAdmin();
+        tenant.requirePlatformAdmin();
         get(noteId);
         jdbc.sql("DELETE FROM admin_store_notes WHERE id = :id").param("id", noteId).update();
     }
@@ -109,7 +109,7 @@ public class AdminCrmService {
     /** Free tags, e.g. VIP / Problemli / Maraqlanmır: at most 8 tags of up to 30 characters. */
     @Transactional
     public List<String> setTags(UUID storeId, List<String> tags) {
-        tenant.requireSuperAdmin();
+        tenant.requirePlatformAdmin();
         requireStore(storeId);
         LinkedHashSet<String> clean = new LinkedHashSet<>();
         for (String t : tags == null ? List.<String>of() : tags) {

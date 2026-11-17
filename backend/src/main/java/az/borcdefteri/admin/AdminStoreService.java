@@ -142,7 +142,7 @@ public class AdminStoreService {
     // ---------- one store ----------
 
     public Map<String, Object> store(UUID storeId) {
-        tenant.requireSuperAdmin();
+        tenant.requirePlatformAdmin();
         Map<String, Object> out = jdbc.sql("""
                 SELECT s.id, s.name, s.phone, s.address, s.status, s.created_at,
                        u.id AS owner_id, u.email AS owner_email, u.full_name AS owner_name, u.phone AS owner_phone,

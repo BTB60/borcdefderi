@@ -182,6 +182,9 @@ class Me {
   /// May see any debt section (customer debts, company receivables / payables).
   bool get canAnyDebt => can('CUSTOMER_DEBTS') || can('COMPANY_RECEIVABLES') || can('COMPANY_PAYABLES');
   bool get isSuperAdmin => platformRole == 'SUPER_ADMIN';
+  /// Köməkçi admin: stores, payment requests, reminders and notes only.
+  bool get isSupportAdmin => platformRole == 'SUPPORT_ADMIN';
+  bool get isPlatformAdmin => isSuperAdmin || isSupportAdmin;
   bool can(String permission) => !lockedModules.contains(permission) && (isOwner || permissions.contains(permission));
 
   /// The owner may change / delete anything; an employee only what they recorded themselves.

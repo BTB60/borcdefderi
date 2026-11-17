@@ -51,6 +51,15 @@ public class SecurityConfig {
                         .requestMatchers("/api/health", "/actuator/health", "/api/auth/**", "/api/public/**").permitAll()
                         // Error dispatches must keep their real status (404/500), not become 401.
                         .requestMatchers("/error").permitAll()
+                        // Köməkçi admin (SUPPORT_ADMIN): only these admin calls; everything else under /api/admin stays SUPER_ADMIN
+                        .requestMatchers(HttpMethod.GET, "/api/admin/stores", "/api/admin/stores/*", "/api/admin/subscriptions",
+                                "/api/admin/subscriptions/*/receipt", "/api/admin/follow-ups", "/api/admin/stores/*/notes")
+                        .hasAnyRole("SUPER_ADMIN", "SUPPORT_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/admin/subscriptions/*/approve", "/api/admin/subscriptions/*/reject",
+                                "/api/admin/stores/*/remind", "/api/admin/stores/*/notes", "/api/admin/notes/*/done")
+                        .hasAnyRole("SUPER_ADMIN", "SUPPORT_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/admin/stores/*/tags").hasAnyRole("SUPER_ADMIN", "SUPPORT_ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/admin/notes/*").hasAnyRole("SUPER_ADMIN", "SUPPORT_ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("SUPER_ADMIN")
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex

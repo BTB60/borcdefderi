@@ -41,7 +41,7 @@ export interface Me {
   userId: string;
   email: string;
   fullName: string;
-  platformRole: "SUPER_ADMIN" | "USER";
+  platformRole: "SUPER_ADMIN" | "SUPPORT_ADMIN" | "USER";
   role: "STORE_OWNER" | "EMPLOYEE" | null;
   storeId: string | null;
   storeName: string | null;
@@ -64,7 +64,7 @@ export interface Profile {
   email: string;
   fullName: string;
   phone: string | null;
-  platformRole: "SUPER_ADMIN" | "USER";
+  platformRole: "SUPER_ADMIN" | "SUPPORT_ADMIN" | "USER";
   role: "STORE_OWNER" | "EMPLOYEE" | null;
   storeId: string | null;
   storeName: string | null;

@@ -160,7 +160,7 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
   }
 
   Future<void> _save() async {
-    final min = (widget.session.me?.isSuperAdmin ?? false) ? 12 : 8;
+    final min = (widget.session.me?.isPlatformAdmin ?? false) ? 12 : 8;
     if (_next.text.length < min) {
       setState(() => _error = 'Yeni şifrə ən azı $min simvol olmalıdır');
       return;

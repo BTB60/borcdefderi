@@ -261,7 +261,7 @@ public class SubscriptionService {
     }
 
     public ReceiptFile receiptFor(UUID subscriptionId) {
-        boolean admin = tenant.isSuperAdmin();
+        boolean admin = tenant.isPlatformAdmin();
         UUID callerStoreId = admin ? null : tenant.requireMember().storeId();
         record R(String storage, String type, String original, UUID storeId, byte[] content) {}
         R row = jdbc.sql("""
@@ -282,6 +282,7 @@ public class SubscriptionService {
     // ---------- super admin side ----------
 
     public List<SubscriptionView> listByStatus(String status, UUID storeId) {
+        tenant.requirePlatformAdmin();
         StringBuilder where = new StringBuilder(" WHERE TRUE");
         if (status != null && !status.isBlank()) {
             where.append(" AND s.status = :status");
@@ -306,7 +307,7 @@ public class SubscriptionService {
      */
     @Transactional
     public SubscriptionView approve(UUID subscriptionId) {
-        tenant.requireSuperAdmin();
+        tenant.requirePlatformAdmin();
         UUID storeId = jdbc.sql("SELECT store_id FROM subscriptions WHERE id = :id")
                 .param("id", subscriptionId).query(UUID.class).optional()
                 .orElseThrow(() -> ApiException.notFound("Abunəlik tapılmadı"));
@@ -386,7 +387,7 @@ public class SubscriptionService {
 
     @Transactional
     public SubscriptionView reject(UUID subscriptionId, String reason) {
-        tenant.requireSuperAdmin();
+        tenant.requirePlatformAdmin();
         String status = jdbc.sql("SELECT status FROM subscriptions WHERE id = :id FOR UPDATE")
                 .param("id", subscriptionId).query(String.class).optional()
                 .orElseThrow(() -> ApiException.notFound("Abunəlik tapılmadı"));

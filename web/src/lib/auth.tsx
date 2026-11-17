@@ -28,6 +28,10 @@ interface AuthContextValue {
   /** The owner may change / delete anything; an employee only what they recorded themselves. */
   mayChange: (recordedBy: string | null | undefined) => boolean;
   isSuperAdmin: boolean;
+  /** Köməkçi admin: stores, payment requests, reminders and notes only. */
+  isSupportAdmin: boolean;
+  /** Super admin or köməkçi admin: the admin panel instead of a store. */
+  isPlatformAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -84,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isOwner,
       mayChange: (by: string | null | undefined) => isOwner || (!!by && by === me?.userId),
       isSuperAdmin: me?.platformRole === "SUPER_ADMIN",
+      isSupportAdmin: me?.platformRole === "SUPPORT_ADMIN",
+      isPlatformAdmin: me?.platformRole === "SUPER_ADMIN" || me?.platformRole === "SUPPORT_ADMIN",
       // a module missing from the package is closed even for the owner
       can: (permission: Permission) =>
         !(me?.lockedModules ?? []).includes(permission as never) && (isOwner || (me?.permissions ?? []).includes(permission)),

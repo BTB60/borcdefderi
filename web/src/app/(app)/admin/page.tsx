@@ -2,7 +2,9 @@
 
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ADMIN_TABS, adminHref, adminTabFrom, type AdminTab } from "@/lib/adminNav";
+import { ADMIN_TABS, SUPPORT_TABS, adminHref, adminTabFrom, type AdminTab } from "@/lib/adminNav";
+import { SupportAdminsCard } from "@/components/admin/SupportAdmins";
+import { useAuth } from "@/lib/auth";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
 import { ApiError, api, openProtected } from "@/lib/api";
 import { Countdown, WARN_DAYS, countdown, useNow } from "@/components/Countdown";
@@ -35,7 +37,10 @@ export default function AdminPage() {
 function Admin() {
   const params = useSearchParams();
   const router = useRouter();
-  const tab = adminTabFrom(params.get("tab"));
+  const { isSupportAdmin } = useAuth();
+  const asked = adminTabFrom(params.get("tab"));
+  // a köməkçi admin only has the store / payment sections; anything else opens the store list
+  const tab = isSupportAdmin && !SUPPORT_TABS.includes(asked) ? "stores" : asked;
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => { setError(null); setNotice(null); }, [tab]);
@@ -61,7 +66,7 @@ function Admin() {
         <PageHeader
           title={current?.label ?? "Platforma idarəetməsi"}
           subtitle={tab === "overview" ? "Platformanın bugünkü vəziyyəti və görüləsi işlər" : undefined}
-          actions={<Button variant="outline" onClick={exportExcel} disabled={exporting}>{exporting ? "Hazırlanır…" : "Excel-ə ixrac"}</Button>}
+          actions={isSupportAdmin ? undefined : <Button variant="outline" onClick={exportExcel} disabled={exporting}>{exporting ? "Hazırlanır…" : "Excel-ə ixrac"}</Button>}
         />
         {error && <div className="mb-4"><Alert>{error}</Alert></div>}
         {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
@@ -660,6 +665,7 @@ function UsersTab({ onError }: { onError: (m: string | null) => void }) {
 
   return (
     <>
+      <SupportAdminsCard />
       {requests.length > 0 && (
         <Card className="mb-6 border-amber-300">
           <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Şifrə bərpası sorğuları ({requests.length})</h2>
@@ -693,7 +699,7 @@ function UsersTab({ onError }: { onError: (m: string | null) => void }) {
                 <tr key={u.id} className="hover:bg-gold-500/5">
                   <Td className="font-medium text-navy-800">{u.fullName}{u.phone && <div className="text-xs font-normal text-slate-400">{u.phone}</div>}</Td>
                   <Td>{u.email}</Td>
-                  <Td>{u.platformRole === "SUPER_ADMIN" ? <Badge tone="gold">Administrator</Badge> : <Badge tone="navy">{u.storeRole === "EMPLOYEE" ? "İşçi" : u.storeRole === "STORE_OWNER" ? "Sahib" : "—"}</Badge>}</Td>
+                  <Td>{u.platformRole === "SUPPORT_ADMIN" ? <Badge tone="sky">Köməkçi admin</Badge> : u.platformRole === "SUPER_ADMIN" ? <Badge tone="gold">Administrator</Badge> : <Badge tone="navy">{u.storeRole === "EMPLOYEE" ? "İşçi" : u.storeRole === "STORE_OWNER" ? "Sahib" : "—"}</Badge>}</Td>
                   <Td className="text-slate-500">{u.storeName ?? "—"}</Td>
                   <Td><Badge tone={u.enabled ? "emerald" : "rose"}>{u.enabled ? "Aktiv" : "Deaktiv"}</Badge></Td>
                   <Td className="text-right">

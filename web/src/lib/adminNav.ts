@@ -31,6 +31,14 @@ export const ADMIN_GROUPS: { title: string; items: { key: AdminTab; label: strin
 
 export const ADMIN_TABS = ADMIN_GROUPS.flatMap((g) => g.items);
 
+/** What a köməkçi admin (SUPPORT_ADMIN) may open. */
+export const SUPPORT_TABS: AdminTab[] = ["stores", "expiring", "subscriptions"];
+
+/** The groups as a köməkçi admin sees them. */
+export const SUPPORT_GROUPS = ADMIN_GROUPS
+  .map((g) => ({ ...g, items: g.items.filter((i) => SUPPORT_TABS.includes(i.key)) }))
+  .filter((g) => g.items.length > 0);
+
 export const adminHref = (t: AdminTab) => (t === "overview" ? "/admin" : `/admin?tab=${t}`);
 
 export function adminTabFrom(v: string | null): AdminTab {

@@ -689,18 +689,18 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
     final card = _card;
     final status = card?['status'] ?? _store['status'];
     final active = _store['activePlan'] != null;
+    // a köməkçi admin sees the store, its notes and subscriptions — no operations, log or danger zone
+    final helper = widget.session.me?.isSupportAdmin ?? false;
     return DefaultTabController(
-      length: 6,
+      length: helper ? 3 : 6,
       child: Scaffold(
         appBar: AppBar(
           title: Text('${_store['name']}'),
-          bottom: const TabBar(isScrollable: true, tabs: [
-            Tab(text: 'Ümumi'),
-            Tab(text: 'Qeydlər'),
-            Tab(text: 'Abunəlik'),
-            Tab(text: 'Əməliyyatlar'),
-            Tab(text: 'Fəaliyyət'),
-            Tab(text: 'Təhlükəli zona'),
+          bottom: TabBar(isScrollable: true, tabs: [
+            const Tab(text: 'Ümumi'),
+            const Tab(text: 'Qeydlər'),
+            const Tab(text: 'Abunəlik'),
+            if (!helper) ...const [Tab(text: 'Əməliyyatlar'), Tab(text: 'Fəaliyyət'), Tab(text: 'Təhlükəli zona')],
           ]),
         ),
         body: Column(children: [
@@ -748,9 +748,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                     AdminNotesTab(session: widget.session, storeId: _id,
                         tags: ((_store['tags'] as List?) ?? const []).cast<String>()),
                     _subsTab(active),
-                    _opsTab(),
-                    _logTab(),
-                    _dangerTab(status == 'ACTIVE'),
+                    if (!helper) ...[_opsTab(), _logTab(), _dangerTab(status == 'ACTIVE')],
                   ]),
           ),
         ]),

@@ -28,6 +28,7 @@ const STORE_NAV: NavItem[] = [
   { href: "/borclar/debitorlar", label: "Tədarükçünün bizə borcu", icon: "M3 6h18v12H3V6Zm0 4h18M7 15h4", permission: "COMPANY_RECEIVABLES" },
   { href: "/borclar/kreditorlar", label: "Bizim tədarükçüyə borcumuz", icon: "M4 4h16v16H4V4Zm4 4h8M8 12h8M8 16h5", permission: "COMPANY_PAYABLES" },
   { href: "/odenisler", label: "Ödənişlər", icon: "M4 7h16v10H4V7Zm0 3h16", anyOf: DEBT_PERMISSIONS },
+  { href: "/taksitler", label: "Taksitlər", icon: "M8 2v4m8-4v4M3 10h18M5 6h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm3 9h2m4 0h2m-8 3h2", permission: "CUSTOMER_DEBTS" },
   { href: "/xatirlatmalar", label: "Xatırlatmalar", icon: "M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9Zm4.3 13a1.94 1.94 0 0 0 3.4 0", permission: "CUSTOMER_DEBTS" },
   { href: "/satis", label: "Satış", icon: "M3 4h2l2.4 11h11.2L21 8H6.2M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", permission: "SALES" },
   { href: "/sifarisler", label: "Onlayn sifarişlər", icon: "M4 6h16l-1.5 9h-13L4 6Zm3 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm10 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM8 3h8", permission: "SALES" },

@@ -52,17 +52,20 @@ public class TelegramService {
     private final JdbcClient jdbc;
     private final TenantService tenant;
     private final DaySummaryService days;
+    private final az.borcdefteri.customers.InstallmentService installments;
     private final ObjectMapper json;
     private final String token;
     private final String username;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private long offset = 0;
 
-    public TelegramService(JdbcClient jdbc, TenantService tenant, DaySummaryService days, ObjectMapper json,
+    public TelegramService(JdbcClient jdbc, TenantService tenant, DaySummaryService days,
+                           az.borcdefteri.customers.InstallmentService installments, ObjectMapper json,
                            @Value("${app.telegram.bot-token:}") String token, @Value("${app.telegram.bot-username:}") String username) {
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.days = days;
+        this.installments = installments;
         this.json = json;
         this.token = token == null ? "" : token.trim();
         this.username = username == null ? "" : username.trim().replaceFirst("^@", "");
@@ -248,6 +251,11 @@ public class TelegramService {
             }
         }
         if (low > 0) b.append("\n📦 Bitmək üzrə olan mal: <b>").append(low).append("</b>\n");
+        var late = installments.plans(storeId, day).stream().filter(p -> p.overdue().signum() > 0).toList();
+        if (!late.isEmpty()) {
+            b.append("⏰ Gecikən taksit: <b>").append(late.size()).append(" müştəri</b>, ")
+                    .append(money(late.stream().map(p -> p.overdue()).reduce(BigDecimal.ZERO, BigDecimal::add))).append("\n");
+        }
         return b.toString();
     }
 

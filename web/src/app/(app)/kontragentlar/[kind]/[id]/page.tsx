@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Textarea, Th } from "@/components/ui";
 import { AccountModal, DIRECTION_LABEL } from "@/components/debts/AccountModals";
 import { HistoryModal, WhatsAppIcon } from "@/components/debts/DebtModals";
+import { InstallmentCard } from "@/components/debts/Installments";
 import { PaymentCancelModal, PaymentEditModal } from "@/components/payments/PaymentEditModals";
 import { ApiError, api, download } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -255,6 +256,7 @@ export default function PartyProfilePage() {
         </div>
         {isCustomer && (
           <div className="space-y-6">
+            {isCustomer && can("CUSTOMER_DEBTS") && <InstallmentCard customerId={params.id} storeName={me?.storeName ?? ""} />}
             <NotesCard base={base} />
             <PortalCard base={base} phone={party.phone} name={party.name} storeName={me?.storeName ?? ""} />
           </div>

@@ -56,7 +56,7 @@ export function TelegramCard() {
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm text-slate-700">Göndərmə saatı</label>
             <Select value={String(st.hour)} className="w-28" disabled={busy}
-              onChange={(e) => void run(async () => setSt(await api<Status>("/api/telegram", { method: "PUT", body: JSON.stringify({ hour: Number(e.target.value) }) })), "Saat yadda saxlandı")}>
+              onChange={(e) => void run(async () => setSt(await api<Status>("/api/telegram", { method: "PUT", json: { hour: Number(e.target.value) } })), "Saat yadda saxlandı")}>
               {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
             </Select>
           </div>

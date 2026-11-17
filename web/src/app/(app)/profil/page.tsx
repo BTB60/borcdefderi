@@ -6,6 +6,7 @@ import { Alert, Button, Card, Field, Input, PageHeader, Spinner, useConfirm } fr
 import { ApiError, api, download } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { SetPinModal } from "@/components/sales/SetPin";
+import { TelegramCard } from "@/components/TelegramCard";
 import type { AuthResponse, Profile } from "@/lib/types";
 
 const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
@@ -47,6 +48,7 @@ export default function SettingsPage() {
           {profile.role === "STORE_OWNER" && <RequisitesCard />}
           {profile.storeId && <PinCard />}
           {profile.role === "STORE_OWNER" && <BonusCard />}
+          {profile.role === "STORE_OWNER" && <TelegramCard />}
           {profile.role === "STORE_OWNER" && <BackupCard />}
           <PasswordCard isAdmin={profile.platformRole === "SUPER_ADMIN" || profile.platformRole === "SUPPORT_ADMIN"} />
           <SecurityCard profile={profile} onChange={updated} />

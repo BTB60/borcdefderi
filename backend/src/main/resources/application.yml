@@ -78,6 +78,10 @@ app:
     auth-requests-per-minute: ${AUTH_RATE_LIMIT_PER_MINUTE:20}
   subscription:
     reminder-days: 7
+  telegram:
+    # Telegram bot for the owner's evening report (create it with @BotFather). Empty = the feature is off.
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    bot-username: ${TELEGRAM_BOT_USERNAME:}
   password-reset:
     # Public web address used in reset links (the Vercel URL in production).
     web-url: ${APP_WEB_URL:http://localhost:3000}

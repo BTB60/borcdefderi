@@ -43,8 +43,11 @@ public class DaySummaryService {
     @GetMapping("/api/reports/day-summary")
     public DaySummary summary(@RequestParam(required = false) LocalDate date) {
         CurrentMember m = tenant.requirePermission(TenantService.PERM_REPORTS);
-        UUID s = m.storeId();
-        LocalDate day = date != null ? date : tenant.today();
+        return summaryFor(m.storeId(), m.storeName(), date != null ? date : tenant.today());
+    }
+
+    /** The same day summary for any store (the evening Telegram report, no signed-in user). */
+    public DaySummary summaryFor(UUID s, String storeName, LocalDate day) {
 
         record Sales(long n, BigDecimal total, BigDecimal cash, BigDecimal card, BigDecimal credit, BigDecimal cost) {}
         Sales sales = jdbc.sql("""
@@ -85,7 +88,7 @@ public class DaySummaryService {
                         "quantity", rs.getBigDecimal("qty").stripTrailingZeros(), "total", Money.of(rs.getBigDecimal("total")))).list();
 
         BigDecimal profit = sales.total().subtract(sales.cost()).subtract(returns.total().subtract(returns.cost()));
-        return new DaySummary(day, m.storeName(), sales.n(), Money.of(sales.total()), Money.of(sales.cash()), Money.of(sales.card()),
+        return new DaySummary(day, storeName, sales.n(), Money.of(sales.total()), Money.of(sales.cash()), Money.of(sales.card()),
                 Money.of(sales.credit()), Money.of(profit), returns.n(), Money.of(returns.total()), Money.of(expenses),
                 collected, supplierPaid, accounts, top);
     }

@@ -6,6 +6,7 @@ const { execFile } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const scale = require("./scale");
 
 const APP_URL = (process.env.HESABPRO_URL || "https://hesabpro.cloud").replace(/\/$/, "");
 const ORIGIN = new URL(APP_URL).origin;
@@ -148,6 +149,17 @@ function openDrawer() {
     const printer = settings().printer;
     if (printer) args.push("-Printer", printer);
     execFile("powershell.exe", args, { windowsHide: true, timeout: 15000 }, (err, out) => resolve(!err && String(out).includes("ok")));
+  });
+}
+
+// ---------- kabellə qoşulan tərəzi ----------
+
+let scaleReading = null;
+function restartScale() {
+  scaleReading = null;
+  scale.startScale(settings().scale, DATA, (r) => {
+    scaleReading = { ...r, at: Date.now() };
+    if (win && !win.isDestroyed()) win.webContents.send("scale-weight", scaleReading);
   });
 }
 
@@ -363,6 +375,20 @@ if (!app.requestSingleInstanceLock()) {
     if (!(w > 0 && h > 0)) return false;
     return printHtml(String(job.html), { printer: settings().labelPrinter || "", pageSize: { width: w, height: h } });
   });
+  ipcMain.handle("scale-protocols", () => scale.PROTOCOLS.map(({ id, label, baud, format }) => ({ id, label, baud, format })));
+  ipcMain.handle("scale-ports", () => scale.listPorts());
+  ipcMain.handle("get-scale", () => settings().scale || null);
+  ipcMain.handle("set-scale", (_e, cfg) => {
+    const clean = cfg && cfg.port ? {
+      port: String(cfg.port).slice(0, 20), protocol: String(cfg.protocol || "auto").slice(0, 20), baud: Number(cfg.baud) || 9600,
+      format: /^[78][NEO][12]$/.test(String(cfg.format)) ? String(cfg.format) : "8N1", unit: ["auto", "kg", "g", "lb"].includes(cfg.unit) ? cfg.unit : "auto",
+      command: String(cfg.command || "").slice(0, 60),
+    } : null;
+    saveSettings({ scale: clean });
+    restartScale();
+    return clean;
+  });
+  ipcMain.handle("scale-weight", () => scaleReading);
   ipcMain.handle("install-update", () => {
     if (updateStatus.state === "ready" && updater) {
       // closes the app, installs the new version quietly and opens it again
@@ -375,6 +401,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     protocol.handle("https", siteHandler);
     createWindow();
+    restartScale();
     // first start: the till opens with Windows (can be switched off on the till screen)
     if (!settings().autoStartSet) {
       try { app.setLoginItemSettings({ openAtLogin: true }); } catch { /* ignore */ }
@@ -388,4 +415,5 @@ if (!app.requestSingleInstanceLock()) {
     if (!process.windowsStore) startUpdater();
   });
   app.on("window-all-closed", () => app.quit());
+  app.on("will-quit", () => scale.stopScale());
 }

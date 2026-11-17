@@ -30,6 +30,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "scale.js",
       "offline.html",
       "package.json",
       "!build/**"

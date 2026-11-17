@@ -21,6 +21,16 @@ contextBridge.exposeInMainWorld("hesabDesktop", {
   setLabelPrinter: (name) => ipcRenderer.invoke("set-label-printer", name),
   printLabels: (job) => ipcRenderer.invoke("print-labels", job),
   installUpdate: () => ipcRenderer.invoke("install-update"),
+  scaleProtocols: () => ipcRenderer.invoke("scale-protocols"),
+  scalePorts: () => ipcRenderer.invoke("scale-ports"),
+  getScale: () => ipcRenderer.invoke("get-scale"),
+  setScale: (cfg) => ipcRenderer.invoke("set-scale", cfg),
+  scaleWeight: () => ipcRenderer.invoke("scale-weight"),
+  onScale: (cb) => {
+    const listener = (_e, reading) => cb(reading);
+    ipcRenderer.on("scale-weight", listener);
+    return () => ipcRenderer.removeListener("scale-weight", listener);
+  },
   onUpdate: (cb) => {
     const listener = (_e, status) => cb(status);
     ipcRenderer.on("update-status", listener);

@@ -8,6 +8,7 @@ import { desktop, receiptSettings, saveReceiptSettings, type UpdateStatus } from
 import type { Product } from "@/lib/types";
 import { SetPinModal } from "@/components/sales/SetPin";
 import { ReceiptDesigner } from "@/components/sales/ReceiptDesigner";
+import { ScaleSettings } from "@/components/sales/ScaleSettings";
 import { TillLabelsModal } from "@/components/sales/TillLabels";
 import { lockMinutes, setLockMinutes } from "@/components/sales/TillLock";
 
@@ -144,6 +145,8 @@ export function TillSettings() {
       </Section>
 
       <ReceiptDesigner />
+
+      <ScaleSettings />
 
       <Section icon="🏷" title="Etiket printeri">
         <Row title="Printer" hint="Barkod etiketləri birbaşa bu printerə gedir">

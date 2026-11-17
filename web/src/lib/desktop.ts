@@ -35,7 +35,19 @@ export interface DesktopBridge {
   getLabelPrinter?(): Promise<string | null>;
   setLabelPrinter?(name: string | null): Promise<void>;
   printLabels?(job: { html: string; widthMm: number; heightMm: number }): Promise<boolean>;
+  /** Kabellə qoşulan tərəzi (COM port): models, ports, settings and the live weight. */
+  scaleProtocols?(): Promise<ScaleProtocol[]>;
+  scalePorts?(): Promise<string[]>;
+  getScale?(): Promise<ScaleConfig | null>;
+  setScale?(cfg: ScaleConfig | null): Promise<ScaleConfig | null>;
+  scaleWeight?(): Promise<ScaleReading | null>;
+  onScale?(cb: (r: ScaleReading) => void): () => void;
 }
+
+export type ScaleProtocol = { id: string; label: string; baud: number; format: string };
+export type ScaleConfig = { port: string; protocol: string; baud: number; format: string; unit: "auto" | "kg" | "g" | "lb"; command: string };
+/** kg = weight in kilograms (null while moving), stable = the scale has settled; error = no connection. */
+export type ScaleReading = { kg?: number | null; stable?: boolean; open?: boolean; error?: string; at: number };
 
 export type UpdateStatus = { state: "idle" | "downloading" | "ready"; version: string | null; percent: number };
 

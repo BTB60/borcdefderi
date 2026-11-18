@@ -16,6 +16,7 @@ import { ExpiringTab } from "@/components/admin/ExpiringTab";
 import { OverviewTab } from "@/components/admin/OverviewTab";
 import { StoreDrawer } from "@/components/admin/StoreDrawer";
 import { GrowthTab } from "@/components/admin/GrowthTab";
+import { PlatformCostsTab } from "@/components/admin/PlatformCosts";
 import { tagTone } from "@/components/admin/StoreNotes";
 import { optionLabel } from "@/lib/plans";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
@@ -77,6 +78,7 @@ function Admin() {
       {tab === "subscriptions" && <PaymentRequestsTab onError={setError} onNotice={setNotice} />}
       {tab === "plans" && <PlansTab onError={setError} onNotice={setNotice} />}
       {tab === "revenue" && <RevenueTab onError={setError} />}
+      {tab === "costs" && <PlatformCostsTab onError={setError} onNotice={setNotice} />}
       {tab === "growth" && <GrowthTab onError={setError} onNotice={setNotice} />}
       {tab === "users" && <UsersTab onError={setError} />}
       {tab === "audit" && <AuditTab onError={setError} />}

@@ -150,8 +150,11 @@ public class TelegramService {
         JsonNode msg = update.path("message");
         long chat = msg.path("chat").path("id").asLong(0);
         String text = msg.path("text").asText("").trim();
-        if (chat == 0 || !text.startsWith("/start")) return;
-        String code = text.substring("/start".length()).trim().toUpperCase();
+        if (chat == 0) return;
+        // "/start CODE" from the link, or the code typed / pasted on its own
+        boolean bare = text.toUpperCase().matches("[A-Z0-9]{10}");
+        if (!text.startsWith("/start") && !bare) return;
+        String code = (bare ? text : text.substring("/start".length())).trim().toUpperCase();
         if (code.isEmpty()) {
             send(chat, "Salam! Mağazanızın hesabatı üçün HesabPro-da <b>Parametrlər → Telegram hesabatı</b> bölməsindən “Qoş” düyməsinə basın.");
             return;

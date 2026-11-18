@@ -47,6 +47,11 @@ class TelegramReportTest extends IntegrationTestBase {
         telegram.handle(mapper.readTree("{\"update_id\":2,\"message\":{\"chat\":{\"id\":999},\"text\":\"/start WRONGCODE1\"}}"));
         assertThat(jdbc.sql("SELECT telegram_chat_id FROM stores WHERE id = :s").param("s", store).query(Long.class).single()).isEqualTo(777001L);
 
+        // the code alone (pasted without /start) links as well
+        jdbc.sql("UPDATE stores SET telegram_chat_id = NULL, telegram_link_code = 'ZXCVBN2345' WHERE id = :s").param("s", store).update();
+        telegram.handle(mapper.readTree("{\"update_id\":3,\"message\":{\"chat\":{\"id\":777002},\"text\":\" zxcvbn2345 \"}}"));
+        assertThat(jdbc.sql("SELECT telegram_chat_id FROM stores WHERE id = :s").param("s", store).query(Long.class).single()).isEqualTo(777002L);
+
         // hour setting
         put(owner, "/api/telegram", Map.of("hour", 21)).andExpect(jsonPath("$.hour", is(21)));
         put(owner, "/api/telegram", Map.of("hour", 30)).andExpect(status().isBadRequest());

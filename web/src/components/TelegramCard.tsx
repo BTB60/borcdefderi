@@ -13,6 +13,8 @@ type Status = { configured: boolean; botUsername: string; linked: boolean; hour:
 export function TelegramCard() {
   const [st, setSt] = useState<Status | null>(null);
   const [link, setLink] = useState<string | null>(null);
+  const [code, setCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [msg, setMsg] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -77,13 +79,24 @@ export function TelegramCard() {
           </ol>
           <div className="flex flex-wrap gap-2">
             <Button variant="gold" disabled={busy} onClick={() => void run(async () => {
-              const r = await api<{ url: string }>("/api/telegram/link", { method: "POST" });
+              const r = await api<{ url: string; code: string }>("/api/telegram/link", { method: "POST" });
               setLink(r.url);
+              setCode(r.code);
               window.open(r.url, "_blank", "noopener");
             })}>Telegram-ı qoş</Button>
             {link && <a href={link} target="_blank" rel="noopener noreferrer" className="self-center text-sm font-medium text-navy-800 underline">Telegram açılmadı? Bura basın</a>}
           </div>
-          {link && <p className="text-xs text-slate-500">Telegram-da Start basandan sonra bir neçə saniyə gözləyin…</p>}
+          {link && code && (
+            <div className="rounded-xl bg-sky-50 p-3 text-sm text-slate-700 ring-1 ring-sky-200">
+              <p className="font-medium text-navy-800">Telegram açılmadı və ya Start işləmədi?</p>
+              <p className="mt-1">Telefonda Telegram-da <b>@{st.botUsername}</b> botunu tapın və bu mesajı göndərin:</p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="rounded-lg bg-white px-3 py-1.5 font-mono text-base font-semibold text-navy-800 ring-1 ring-slate-200">/start {code}</code>
+                <Button variant="outline" onClick={() => { void navigator.clipboard?.writeText(`/start ${code}`).then(() => setCopied(true)); }}>{copied ? "Kopyalandı ✓" : "Kopyala"}</Button>
+              </div>
+            </div>
+          )}
+          {link && <p className="text-xs text-slate-500">Telegram-da Start basandan və ya mesajı göndərəndən sonra bir neçə saniyə gözləyin…</p>}
         </div>
       )}
     </Card>

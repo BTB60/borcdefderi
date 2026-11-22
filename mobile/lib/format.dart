@@ -39,6 +39,7 @@ const permissionLabels = {
   'INVENTORY': 'Anbar',
   'SALES': 'Satış',
   'TILL_SETTINGS': 'Kassa parametrləri',
+  'RETURN_APPROVE': 'Qaytarmanı təsdiq (menecer)',
 };
 
 /// Sections a package may include (every menu section except the subscription page), in menu order.

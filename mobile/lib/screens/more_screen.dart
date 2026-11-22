@@ -94,7 +94,7 @@ class MoreScreen extends StatelessWidget {
             child: ListTile(
               leading: const Icon(Icons.point_of_sale, color: navy),
               title: const Text('Satış'),
-              subtitle: const Text('Yeni satış, çek, ləğv'),
+              subtitle: const Text('Yeni satış, çek, qaytarma, ləğv'),
               trailing: me.lockedFor('SALES') ? const Icon(Icons.lock_outline, color: gold) : const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => me.lockedFor('SALES') ? SubscriptionScreen(session: session) : SalesScreen(session: session))),

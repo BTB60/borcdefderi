@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, Table, Td, Th, useConfirm } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useReturnApproval } from "@/components/sales/ApprovalPin";
 import { formatDate, formatDateTime, formatMoney, todayBaku } from "@/lib/format";
 import type { CashAccount, CashKind, CashMovement, DayReport, MovementKind } from "@/lib/types";
 
@@ -45,6 +46,7 @@ export default function CashPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
+  const approval = useReturnApproval();
 
   const load = useCallback(async () => {
     setError(null);
@@ -69,9 +71,11 @@ export default function CashPage() {
     );
     if (!ok) return;
     try {
-      await api(`/api/sales/${m.saleId}/cancel`, { method: "POST", json: {} });
-      setNotice("Satış silindi");
-      load();
+      // above the store's return limit the manager approves with a PIN or the manager card
+      await approval.run((approvalPin) => api(`/api/sales/${m.saleId}/cancel`, { method: "POST", json: { approvalPin } }), () => {
+        setNotice("Satış silindi");
+        load();
+      });
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Silinmədi");
     }
@@ -94,6 +98,7 @@ export default function CashPage() {
   return (
     <>
       {confirmDialog}
+      {approval.dialog}
       <PageHeader
         title="Kassa və bank"
         subtitle="Pulun harada olduğu və hərəkəti. Köçürmə gəlir və ya xərc sayılmır."

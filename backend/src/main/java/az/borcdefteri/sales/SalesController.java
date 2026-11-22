@@ -20,13 +20,56 @@ public class SalesController {
     private final SaleReceiptService receipts;
     private final ProfitService profit;
     private final az.borcdefteri.payments.ReceiptLinks links;
+    private final ReturnApprovalService approvals;
+
+    public record ApprovalPolicyUpdate(boolean enabled,
+                                       @jakarta.validation.constraints.DecimalMin("0.00")
+                                       @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) java.math.BigDecimal limit) {}
+
+    public record ApprovalPinUpdate(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 6) String pin,
+                                    @jakarta.validation.constraints.Size(max = 72) String currentPassword) {}
 
     public SalesController(SalesService sales, SaleReceiptService receipts, ProfitService profit,
-                           az.borcdefteri.payments.ReceiptLinks links) {
+                           az.borcdefteri.payments.ReceiptLinks links, ReturnApprovalService approvals) {
         this.links = links;
         this.sales = sales;
         this.receipts = receipts;
         this.profit = profit;
+        this.approvals = approvals;
+    }
+
+    @GetMapping("/return-approval")
+    public ReturnApprovalService.Policy approvalPolicy() {
+        return approvals.policy();
+    }
+
+    @PutMapping("/return-approval/policy")
+    public ReturnApprovalService.Policy updateApprovalPolicy(@Valid @RequestBody ApprovalPolicyUpdate req) {
+        return approvals.updatePolicy(req.enabled(), req.limit());
+    }
+
+    @PutMapping("/return-approval/pin")
+    public ReturnApprovalService.Policy setApprovalPin(@Valid @RequestBody ApprovalPinUpdate req) {
+        return approvals.setPin(req.pin(), req.currentPassword());
+    }
+
+    public record ApprovalCardRequest(@jakarta.validation.constraints.Size(max = 72) String currentPassword) {}
+
+    /** Issues a new manager card (the old one stops working) and returns it as a PDF to print. */
+    @PostMapping("/return-approval/card")
+    public ResponseEntity<byte[]> issueApprovalCard(@Valid @RequestBody ApprovalCardRequest req) {
+        ExportFile f = approvals.issueCard(req.currentPassword());
+        return FileResponses.attachment(f.content(), f.contentType(), f.fileName());
+    }
+
+    @DeleteMapping("/return-approval/card")
+    public ReturnApprovalService.Policy revokeApprovalCard() {
+        return approvals.revokeCard();
+    }
+
+    @DeleteMapping("/return-approval/pin")
+    public ReturnApprovalService.Policy clearApprovalPin() {
+        return approvals.clearPin();
     }
 
     @PostMapping("/sales")

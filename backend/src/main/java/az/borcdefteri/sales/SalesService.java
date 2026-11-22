@@ -92,16 +92,18 @@ public class SalesService {
     public record ReturnRequest(
             @jakarta.validation.constraints.NotEmpty List<@jakarta.validation.Valid ReturnItem> items,
             UUID refundAccountId,
-            @jakarta.validation.constraints.Size(max = 500) String reason) {}
+            @jakarta.validation.constraints.Size(max = 500) String reason,
+            @jakarta.validation.constraints.Size(max = 200) String approvalPin) {}
 
-    public record CancelRequest(UUID refundAccountId, @jakarta.validation.constraints.Size(max = 500) String reason) {}
+    public record CancelRequest(UUID refundAccountId, @jakarta.validation.constraints.Size(max = 500) String reason,
+                                @jakarta.validation.constraints.Size(max = 200) String approvalPin) {}
 
     public record Item(UUID id, UUID productId, String name, BigDecimal quantity, BigDecimal unitPrice, BigDecimal discount,
                        BigDecimal lineTotal, BigDecimal unitCost, BigDecimal returnedQty, String unit,
                        List<String> serials, Integer warrantyMonths) {}
 
     public record ReturnView(UUID id, BigDecimal amount, BigDecimal debtReduced, BigDecimal refunded, LocalDate returnedOn,
-                             String reason, String createdByName, OffsetDateTime createdAt) {}
+                             String reason, String createdByName, OffsetDateTime createdAt, String approvedByName) {}
 
     public record Sale(UUID id, String number, UUID customerId, String customerName, String customerCode, String status,
                        BigDecimal subtotal, BigDecimal discount, BigDecimal total, BigDecimal paidCash, BigDecimal paidCard,
@@ -119,9 +121,11 @@ public class SalesService {
     private final DebtService debts;
     private final AuditService audit;
     private final BonusService bonus;
+    private final ReturnApprovalService approvals;
 
     public SalesService(JdbcClient jdbc, TenantService tenant, InventoryService inventory, CashService cash,
-                        PartyAccountService accounts, DebtService debts, AuditService audit, BonusService bonus) {
+                        PartyAccountService accounts, DebtService debts, AuditService audit, BonusService bonus,
+                        ReturnApprovalService approvals) {
         this.bonus = bonus;
         this.jdbc = jdbc;
         this.tenant = tenant;
@@ -130,6 +134,7 @@ public class SalesService {
         this.accounts = accounts;
         this.debts = debts;
         this.audit = audit;
+        this.approvals = approvals;
     }
 
     /** One IMEI / serial per unit, none twice, none sold before and not returned. */
@@ -318,7 +323,8 @@ public class SalesService {
         }
         BigDecimal maxLeft = Money.of(sale.total().subtract(sale.returnedAmount()));
         if (amount.compareTo(maxLeft) > 0) amount = maxLeft;
-        settleReturn(m, sale, amount, cost, req.refundAccountId(), req.reason());
+        UUID approvedBy = approvals.approve(m, amount, req.approvalPin());
+        settleReturn(m, sale, amount, cost, req.refundAccountId(), req.reason(), approvedBy);
         return load(m.storeId(), saleId);
     }
 
@@ -340,9 +346,11 @@ public class SalesService {
             }
         }
         BigDecimal amount = Money.of(sale.total().subtract(sale.returnedAmount()));
-        if (amount.signum() > 0) settleReturn(m, sale, amount, cost, req == null ? null : req.refundAccountId(),
-                req == null || req.reason() == null ? "Satış ləğv edildi" : req.reason());
-        else if (sale.total().signum() == 0) {
+        if (amount.signum() > 0) {
+            UUID approvedBy = approvals.approve(m, amount, req == null ? null : req.approvalPin());
+            settleReturn(m, sale, amount, cost, req == null ? null : req.refundAccountId(),
+                    req == null || req.reason() == null ? "Satış ləğv edildi" : req.reason(), approvedBy);
+        } else if (sale.total().signum() == 0) {
             bonus.reverseSale(m, sale.customerId(), sale.id(), sale.number(), sale.bonusEarned(), sale.bonusUsed(), BigDecimal.ONE);
         }
         jdbc.sql("UPDATE sales SET status = 'CANCELLED', cancelled_at = now() WHERE id = :id").param("id", saleId).update();
@@ -351,7 +359,8 @@ public class SalesService {
     }
 
     /** Lowers the sale's still-unpaid debt first, refunds the rest in money; records the return. */
-    private void settleReturn(CurrentMember m, Sale sale, BigDecimal amount, BigDecimal cost, UUID refundAccountId, String reason) {
+    private void settleReturn(CurrentMember m, Sale sale, BigDecimal amount, BigDecimal cost, UUID refundAccountId, String reason,
+                              UUID approvedBy) {
         // the same share of the sale's bonus goes back: earned bonus is taken back, spent bonus is returned
         BigDecimal share = sale.total().signum() == 0 ? BigDecimal.ONE
                 : amount.divide(sale.total(), 6, java.math.RoundingMode.HALF_UP).min(BigDecimal.ONE);
@@ -377,15 +386,16 @@ public class SalesService {
         }
         jdbc.sql("""
                 INSERT INTO sale_returns (id, sale_id, store_id, amount, cost_amount, debt_reduced, refunded, refund_account_id,
-                                          returned_on, reason, created_by)
-                VALUES (:id, :sale, :s, :a, :c, :dr, :rf, :acc, :day, :reason, :by)
+                                          returned_on, reason, created_by, approved_by)
+                VALUES (:id, :sale, :s, :a, :c, :dr, :rf, :acc, :day, :reason, :by, :appr)
                 """).param("id", UUID.randomUUID()).param("sale", sale.id()).param("s", m.storeId()).param("a", amount)
                 .param("c", Money.of(cost)).param("dr", debtReduced).param("rf", refund).param("acc", refundAccount)
                 .param("day", tenant.today()).param("reason", reason == null || reason.isBlank() ? null : reason.trim())
-                .param("by", m.userId()).update();
+                .param("by", m.userId()).param("appr", approvedBy).update();
         jdbc.sql("UPDATE sales SET returned_amount = returned_amount + :a WHERE id = :id").param("a", amount).param("id", sale.id()).update();
         audit.log(m.storeId(), m.userId(), "SALE_RETURNED", "SALE", sale.id().toString(),
-                sale.number() + ": " + amount + " AZN (borcdan " + debtReduced + ", qaytarılan pul " + refund + ")");
+                sale.number() + ": " + amount + " AZN (borcdan " + debtReduced + ", qaytarılan pul " + refund + ")"
+                        + (approvedBy != null && !approvedBy.equals(m.userId()) ? ", menecer təsdiqi ilə" : ""));
     }
 
     // ----- read -----
@@ -440,12 +450,14 @@ public class SalesService {
                         (Integer) rs.getObject("warranty_months", Integer.class)))
                 .list();
         List<ReturnView> returns = jdbc.sql("""
-                SELECT r.id, r.amount, r.debt_reduced, r.refunded, r.returned_on, r.reason, u.full_name, r.created_at
-                FROM sale_returns r JOIN users u ON u.id = r.created_by WHERE r.sale_id = :id ORDER BY r.created_at""")
+                SELECT r.id, r.amount, r.debt_reduced, r.refunded, r.returned_on, r.reason, u.full_name, r.created_at,
+                       a.full_name AS approved_by_name
+                FROM sale_returns r JOIN users u ON u.id = r.created_by LEFT JOIN users a ON a.id = r.approved_by
+                WHERE r.sale_id = :id ORDER BY r.created_at""")
                 .param("id", id).query((rs, n) -> new ReturnView(rs.getObject("id", UUID.class), Money.of(rs.getBigDecimal("amount")),
                         Money.of(rs.getBigDecimal("debt_reduced")), Money.of(rs.getBigDecimal("refunded")),
                         rs.getObject("returned_on", LocalDate.class), rs.getString("reason"), rs.getString("full_name"),
-                        rs.getObject("created_at", OffsetDateTime.class))).list();
+                        rs.getObject("created_at", OffsetDateTime.class), rs.getString("approved_by_name"))).list();
         return jdbc.sql("""
                 SELECT s.*, c.name AS customer_name, c.code AS customer_code, u.full_name AS created_by_name
                 FROM sales s LEFT JOIN customers c ON c.id = s.customer_id JOIN users u ON u.id = s.created_by

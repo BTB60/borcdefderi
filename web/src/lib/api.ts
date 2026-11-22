@@ -115,6 +115,26 @@ export function canShareFiles(): boolean {
   }
 }
 
+/** POSTs JSON and saves the file the server answers with (e.g. a freshly issued manager card PDF). */
+export async function postForFile(path: string, json: unknown, fallbackName: string) {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(`${API_URL}${path}`, { method: "POST", headers, body: JSON.stringify(json) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(res.status, body?.error ?? "DOWNLOAD_FAILED", body?.message ?? "Fayl yüklənə bilmədi");
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fallbackName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 /** Opens a protected file in a new tab (receipt preview). */
 export async function openProtected(path: string) {
   const headers = new Headers();

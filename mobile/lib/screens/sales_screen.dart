@@ -16,6 +16,7 @@ import 'online_orders_screen.dart';
 import 'shift_card.dart';
 import 'swipe_actions.dart';
 import 'finance_cards.dart' show pickParty;
+import 'return_approval.dart';
 
 double _n(Object? v) => (v as num?)?.toDouble() ?? 0;
 double _p(String s) => double.tryParse(s.trim().replaceAll(',', '.')) ?? 0;
@@ -219,10 +220,12 @@ class _SalesScreenState extends State<SalesScreen> {
         ],
       ),
     );
-    if (ok != true) return;
+    if (ok != true || !mounted) return;
     try {
-      await widget.session.api.post('/api/sales/${s['id']}/cancel', {});
-      _reload();
+      // above the store's return limit the manager approves with a PIN or the manager card
+      final done = await withReturnApproval(context,
+          (pin) => widget.session.api.post('/api/sales/${s['id']}/cancel', {'approvalPin': pin}));
+      if (done != null) _reload();
     } catch (e) {
       if (mounted) showError(context, e);
     }
@@ -941,8 +944,19 @@ class _ReturnSheetState extends State<_ReturnSheet> {
       _error = null;
     });
     try {
-      final res = await widget.session.api.post('/api/sales/${widget.saleId}/returns',
-          {'items': items, 'reason': _reason.text.trim().isEmpty ? null : _reason.text.trim()}) as Map<String, dynamic>;
+      final answer = await withReturnApproval(
+          context,
+          (pin) => widget.session.api.post('/api/sales/${widget.saleId}/returns', {
+                'items': items,
+                'reason': _reason.text.trim().isEmpty ? null : _reason.text.trim(),
+                'approvalPin': pin,
+              }));
+      if (answer == null) {
+        // the manager's PIN dialog was closed: nothing returned
+        if (mounted) setState(() => _busy = false);
+        return;
+      }
+      final res = answer as Map<String, dynamic>;
       final returns = ((res['returns'] as List?) ?? const []).cast<Map<String, dynamic>>();
       final last = returns.isEmpty ? null : returns.last;
       final parts = [

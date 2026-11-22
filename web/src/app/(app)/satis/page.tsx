@@ -7,6 +7,7 @@ import { qtyWithUnit } from "@/lib/units";
 import { TillSettings } from "@/components/sales/TillSettings";
 import { DayEndModal } from "@/components/sales/DayEnd";
 import { ShiftBar, ShiftList } from "@/components/sales/Shift";
+import { useReturnApproval } from "@/components/sales/ApprovalPin";
 import { ApiError, api, openProtected } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDate, formatDateTime, formatMoney, todayBaku } from "@/lib/format";
@@ -120,32 +121,30 @@ function SaleModal({ sale, onClose, onChanged }: { sale: Sale; onClose: () => vo
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
+  // a return above the store's limit needs a manager's PIN or card: the dialog asks and sends the request again
+  const approval = useReturnApproval();
   const active = sale.status === "COMPLETED";
 
-  async function doReturn() {
-    const items = Object.entries(ret).filter(([, v]) => num(v) > 0).map(([saleItemId, quantity]) => ({ saleItemId, quantity }));
-    if (!items.length) return;
+  async function withApproval(send: (pin: string | null) => Promise<Sale>, fallback: string) {
     setBusy(true);
     setError(null);
     try {
-      onChanged(await api<Sale>(`/api/sales/${sale.id}/returns`, { method: "POST", json: { items, reason: reason || null } }));
-      setRet({});
+      await approval.run(send, (s) => { onChanged(s); setRet({}); });
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Qaytarılmadı");
+      setError(e instanceof ApiError ? e.message : fallback);
     } finally {
       setBusy(false);
     }
   }
+
+  async function doReturn() {
+    const items = Object.entries(ret).filter(([, v]) => num(v) > 0).map(([saleItemId, quantity]) => ({ saleItemId, quantity }));
+    if (!items.length) return;
+    await withApproval((approvalPin) => api<Sale>(`/api/sales/${sale.id}/returns`, { method: "POST", json: { items, reason: reason || null, approvalPin } }), "Qaytarılmadı");
+  }
   async function cancel() {
     if (!(await confirm(<>{sale.number} ləğv edilsin? Mallar anbara qayıdır, borc azalır, ödənilən pul kassadan qaytarılır.</>, { danger: true, confirmLabel: "Ləğv et" }))) return;
-    setBusy(true);
-    try {
-      onChanged(await api<Sale>(`/api/sales/${sale.id}/cancel`, { method: "POST", json: { reason: reason || null } }));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Ləğv edilmədi");
-    } finally {
-      setBusy(false);
-    }
+    await withApproval((approvalPin) => api<Sale>(`/api/sales/${sale.id}/cancel`, { method: "POST", json: { reason: reason || null, approvalPin } }), "Ləğv edilmədi");
   }
   return (
     <Modal open size="xl" title={`Satış ${sale.number}`} onClose={onClose}
@@ -175,7 +174,7 @@ function SaleModal({ sale, onClose, onChanged }: { sale: Sale; onClose: () => vo
         {sale.discount > 0 && <div className="flex justify-between"><span>Endirim</span><span>−{formatMoney(sale.discount)}</span></div>}
         <div className="flex justify-between font-semibold"><span>Yekun</span><span>{formatMoney(sale.total)}</span></div>
         <div className="flex justify-between text-slate-500"><span>Nağd / Kart / Borc</span><span>{formatMoney(sale.paidCash)} / {formatMoney(sale.paidCard)} / {formatMoney(sale.creditAmount)}</span></div>
-        {sale.returns.map((r) => <div key={r.id} className="flex justify-between text-rose-600"><span>Qaytarma {formatDate(r.returnedOn)} (borcdan {formatMoney(r.debtReduced)}, pul {formatMoney(r.refunded)})</span><span>−{formatMoney(r.amount)}</span></div>)}
+        {sale.returns.map((r) => <div key={r.id} className="flex justify-between text-rose-600"><span>Qaytarma {formatDate(r.returnedOn)} (borcdan {formatMoney(r.debtReduced)}, pul {formatMoney(r.refunded)}){r.approvedByName && r.approvedByName !== r.createdByName ? ` · təsdiq: ${r.approvedByName}` : ""}</span><span>−{formatMoney(r.amount)}</span></div>)}
       </div>
       {active && (
         <div className="mt-4 flex flex-wrap items-end gap-2">
@@ -185,6 +184,7 @@ function SaleModal({ sale, onClose, onChanged }: { sale: Sale; onClose: () => vo
       )}
       <p className="mt-3 text-xs text-slate-400">Qaytarma əvvəlcə bu satışın ödənilməmiş borcunu azaldır, qalanı kassadan pul kimi qaytarılır.</p>
       {confirmDialog}
+      {approval.dialog}
     </Modal>
   );
 }

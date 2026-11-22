@@ -15,7 +15,10 @@ class NotificationAlerts with WidgetsBindingObserver {
 
   final Session session;
 
-  static const _channelId = 'hesabpro_alerts';
+  // Android never changes a channel's sound after it is created, so the HesabPro sound needs a new channel id.
+  static const _channelId = 'hesabpro_alerts_v2';
+  static const _oldChannelIds = ['hesabpro_alerts'];
+  static const _sound = RawResourceAndroidNotificationSound('hesabpro_alert'); // android/app/src/main/res/raw
   static const _seenKey = 'bdf_seen_notifications';
   static const _interval = Duration(minutes: 2);
 
@@ -32,12 +35,16 @@ class NotificationAlerts with WidgetsBindingObserver {
         settings: const InitializationSettings(android: AndroidInitializationSettings('ic_stat_notify')),
       );
       final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      for (final old in _oldChannelIds) {
+        await android?.deleteNotificationChannel(channelId: old).catchError((Object _) {});
+      }
       await android?.createNotificationChannel(const AndroidNotificationChannel(
         _channelId,
         'HesabPro bildirişləri',
         description: 'Borc son tarixləri və abunəlik xəbərləri',
         importance: Importance.high,
         playSound: true,
+        sound: _sound,
         enableVibration: true,
       ));
       _ready = true;
@@ -119,6 +126,7 @@ class NotificationAlerts with WidgetsBindingObserver {
             importance: Importance.high,
             priority: Priority.high,
             playSound: true,
+            sound: _sound,
             enableVibration: true,
             color: const Color(0xFF0288D1),
             styleInformation: BigTextStyleInformation(body),

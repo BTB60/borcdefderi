@@ -65,6 +65,7 @@ export const PERMISSION_LABEL: Record<Permission, string> = {
   INVENTORY: "Anbar",
   SALES: "Satış",
   TILL_SETTINGS: "Kassa parametrləri",
+  RETURN_APPROVE: "Qaytarmanı təsdiq (menecer)",
 };
 
 export const SUBSCRIPTION_STATUS_LABEL: Record<string, string> = {

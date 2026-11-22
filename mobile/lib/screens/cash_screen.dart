@@ -6,6 +6,7 @@ import '../format.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'return_approval.dart';
 import 'swipe_actions.dart';
 
 const _kindLabels = {'CASH': 'Nağd kassa', 'BANK': 'Bank hesabı', 'CARD': 'Kart hesabı'};
@@ -77,8 +78,10 @@ class _CashScreenState extends State<CashScreen> {
     );
     if (ok != true || !mounted) return;
     try {
-      await widget.session.api.post('/api/sales/${m['saleId']}/cancel', {});
-      if (!mounted) return;
+      // above the store's return limit the manager approves with a PIN or the manager card
+      final done = await withReturnApproval(context,
+          (pin) => widget.session.api.post('/api/sales/${m['saleId']}/cancel', {'approvalPin': pin}));
+      if (done == null || !mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Satış silindi')));
       _reload();
     } catch (e) {

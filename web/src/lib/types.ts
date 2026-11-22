@@ -1,7 +1,7 @@
 export type DebtType = "CUSTOMER_DEBT" | "COMPANY_RECEIVABLE" | "COMPANY_PAYABLE";
 export type DebtStatus = "OPEN" | "PARTIAL" | "PAID";
 export type PaymentMethod = "CASH" | "CARD" | "TRANSFER" | "OTHER";
-export type Permission = "CUSTOMER_DEBTS" | "COMPANY_RECEIVABLES" | "COMPANY_PAYABLES" | "REPORTS" | "CASH" | "EXPENSES" | "INVENTORY" | "SALES" | "TILL_SETTINGS";
+export type Permission = "CUSTOMER_DEBTS" | "COMPANY_RECEIVABLES" | "COMPANY_PAYABLES" | "REPORTS" | "CASH" | "EXPENSES" | "INVENTORY" | "SALES" | "TILL_SETTINGS" | "RETURN_APPROVE";
 
 export interface SubscriptionSummary {
   active: boolean;
@@ -576,7 +576,7 @@ export interface Sale {
   id: string; number: string; customerId: string | null; customerName: string | null; customerCode: string | null; status: "COMPLETED" | "CANCELLED";
   subtotal: number; discount: number; total: number; paidCash: number; paidCard: number; creditAmount: number; returnedAmount: number;
   costTotal: number; debtId: string | null; soldOn: string; note: string | null; createdByName: string; createdAt: string; items: SaleItem[];
-  returns: { id: string; amount: number; debtReduced: number; refunded: number; returnedOn: string; reason: string | null; createdByName: string; createdAt: string }[];
+  returns: { id: string; amount: number; debtReduced: number; refunded: number; returnedOn: string; reason: string | null; createdByName: string; createdAt: string; approvedByName: string | null }[];
   createdBy: string | null;
   bonusUsed?: number; bonusEarned?: number; priceLevel?: "RETAIL" | "WHOLESALE";
 }
@@ -598,4 +598,13 @@ export interface Purchase {
   createdByName: string; createdAt: string;
   items: { id: string; productId: string | null; name: string; quantity: number; unitCost: number; lineTotal: number; returnedQty?: number; expiryDate?: string | null }[];
   returnedAmount?: number;
+}
+
+/** Manager approval of sale returns (Parametrlər → Qaytarma təsdiqi). */
+export interface ReturnApprovalPolicy {
+  enabled: boolean;
+  limit: number;
+  canApprove: boolean;
+  hasPin: boolean;
+  hasCard: boolean;
 }

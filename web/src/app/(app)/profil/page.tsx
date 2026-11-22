@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Avatar } from "@/components/Avatar";
 import { Alert, Button, Card, Field, Input, PageHeader, Spinner, useConfirm } from "@/components/ui";
-import { ApiError, api, download } from "@/lib/api";
+import { ApiError, api, download, postForFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { SetPinModal } from "@/components/sales/SetPin";
 import { TelegramCard } from "@/components/TelegramCard";
-import type { AuthResponse, Profile } from "@/lib/types";
+import type { AuthResponse, Profile, ReturnApprovalPolicy } from "@/lib/types";
 
 const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
 
@@ -18,7 +18,7 @@ function errorText(e: unknown, fallback: string) {
 }
 
 export default function SettingsPage() {
-  const { refresh, isSuperAdmin } = useAuth();
+  const { refresh, isSuperAdmin, isOwner, can } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +48,7 @@ export default function SettingsPage() {
           {profile.role === "STORE_OWNER" && <RequisitesCard />}
           {profile.storeId && <PinCard />}
           {profile.role === "STORE_OWNER" && <BonusCard />}
+          {!isSuperAdmin && (isOwner || can("RETURN_APPROVE")) && <ReturnApprovalCard isOwner={isOwner} />}
           {profile.role === "STORE_OWNER" && <TelegramCard />}
           {profile.role === "STORE_OWNER" && <BackupCard />}
           <PasswordCard isAdmin={profile.platformRole === "SUPER_ADMIN" || profile.platformRole === "SUPPORT_ADMIN"} />
@@ -417,6 +418,155 @@ function SecurityCard({ profile, onChange }: { profile: Profile; onChange: (p: P
         <p className="mb-2 text-sm text-slate-600">Telefonunuz itibsə və ya başqa kompüterdə hesabınız açıq qalıbsa:</p>
         <Button variant="outline" disabled={busy} onClick={logoutAll}>Bütün digər cihazlardan çıxış</Button>
       </div>
+    </Card>
+  );
+}
+
+/** Owner: when returns need a manager's PIN. Owner and managers (RETURN_APPROVE): their own PIN. */
+function ReturnApprovalCard({ isOwner }: { isOwner: boolean }) {
+  const [policy, setPolicy] = useState<ReturnApprovalPolicy | null>(null);
+  const [rule, setRule] = useState({ enabled: false, limit: "0" });
+  const [pinForm, setPinForm] = useState({ pin: "", repeat: "", current: "" });
+  const [cardPassword, setCardPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<Msg>(null);
+  const [confirm, confirmDialog] = useConfirm();
+  const mismatch = pinForm.repeat.length > 0 && pinForm.pin !== pinForm.repeat;
+
+  function loaded(p: ReturnApprovalPolicy) {
+    setPolicy(p);
+    setRule({ enabled: p.enabled, limit: String(p.limit) });
+  }
+
+  useEffect(() => {
+    api<ReturnApprovalPolicy>("/api/return-approval").then(loaded).catch((e) => setMsg({ kind: "error", text: errorText(e, "Yüklənmədi") }));
+  }, []);
+
+  async function run(action: () => Promise<ReturnApprovalPolicy>, ok: string, fail: string) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      loaded(await action());
+      setMsg({ kind: "success", text: ok });
+      return true;
+    } catch (err) {
+      setMsg({ kind: "error", text: errorText(err, fail) });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveRule(e: FormEvent) {
+    e.preventDefault();
+    const limit = Number(rule.limit.replace(",", ".")) || 0;
+    await run(() => api("/api/return-approval/policy", { method: "PUT", json: { enabled: rule.enabled, limit } }), "Qaydalar yadda saxlanıldı", "Yadda saxlanılmadı");
+  }
+
+  async function savePin(e: FormEvent) {
+    e.preventDefault();
+    if (mismatch) return;
+    const done = await run(() => api("/api/return-approval/pin", { method: "PUT", json: { pin: pinForm.pin, currentPassword: pinForm.current } }), "PIN yadda saxlanıldı", "PIN saxlanılmadı");
+    if (done) setPinForm({ pin: "", repeat: "", current: "" });
+  }
+
+  async function removePin() {
+    if (!(await confirm(<>PIN silinsin? Bundan sonra kassirin qaytarmalarını PIN ilə təsdiq edə bilməyəcəksiniz.</>, { danger: true, confirmLabel: "Sil" }))) return;
+    await run(() => api("/api/return-approval/pin", { method: "DELETE" }), "PIN silindi", "Silinmədi");
+  }
+
+  async function issueCard(e: FormEvent) {
+    e.preventDefault();
+    if (policy?.hasCard && !(await confirm(<>Yeni kart verilsin? Köhnə kart dərhal işləməyəcək.</>, { confirmLabel: "Yeni kart" }))) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await postForFile("/api/return-approval/card", { currentPassword: cardPassword }, "menecer-karti.pdf");
+      setCardPassword("");
+      loaded(await api<ReturnApprovalPolicy>("/api/return-approval"));
+      setMsg({ kind: "success", text: "Kart yükləndi (menecer-karti.pdf). Çap edib qırıq xətt üzrə kəsin." });
+    } catch (err) {
+      setMsg({ kind: "error", text: errorText(err, "Kart verilmədi") });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeCard() {
+    if (!(await confirm(<>Kart ləğv edilsin? Bundan sonra o kartla təsdiq etmək olmayacaq.</>, { danger: true, confirmLabel: "Ləğv et" }))) return;
+    await run(() => api("/api/return-approval/card", { method: "DELETE" }), "Kart ləğv edildi", "Ləğv edilmədi");
+  }
+
+  if (!policy) return msg ? <Alert>{msg.text}</Alert> : null;
+
+  const digitsOnly = (v: string) => v.replace(/\D/g, "").slice(0, 6);
+
+  return (
+    <Card>
+      <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Qaytarma təsdiqi</h2>
+      <p className="mb-5 text-sm text-slate-500">
+        Limitdən böyük qaytarma və ya satışın ləğvi üçün kassir menecerin PIN-ini və ya kartını istəyəcək. Mağaza sahibi və
+        “Qaytarmanı təsdiq” icazəsi olan işçilər PIN-siz qaytara bilir.
+      </p>
+      {msg && <div className="mb-4"><Alert kind={msg.kind}>{msg.text}</Alert></div>}
+
+      {isOwner && (
+        <form onSubmit={saveRule} className="mb-6 space-y-4 border-b border-slate-100 pb-6">
+          <label className="flex items-center gap-2 text-sm text-navy-800">
+            <input type="checkbox" checked={rule.enabled} onChange={(e) => setRule({ ...rule, enabled: e.target.checked })} />
+            Qaytarmalar üçün menecer təsdiqi tələb olunsun
+          </label>
+          {rule.enabled && (
+            <div className="max-w-sm">
+              <Field label="Təsdiqsiz qaytarma limiti (AZN)" hint="Bu məbləğə qədər kassir özü qaytarır. 0 — hər qaytarma təsdiq tələb edir">
+                <Input inputMode="decimal" value={rule.limit} onChange={(e) => setRule({ ...rule, limit: e.target.value })} />
+              </Field>
+            </div>
+          )}
+          <Button type="submit" variant="primary" disabled={busy}>Yadda saxla</Button>
+        </form>
+      )}
+
+      <form onSubmit={savePin} className="space-y-4">
+        <p className="text-sm text-slate-600">
+          {policy.hasPin ? "Sizin təsdiq PIN-iniz təyin edilib. Dəyişmək üçün yenisini yazın." : "Kassirin qaytarmasını təsdiq etmək üçün özünüzə PIN təyin edin (4–6 rəqəm)."}
+        </p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Yeni PIN">
+            <Input type="password" inputMode="numeric" autoComplete="off" required minLength={4} maxLength={6} value={pinForm.pin} onChange={(e) => setPinForm({ ...pinForm, pin: digitsOnly(e.target.value) })} />
+          </Field>
+          <Field label="PIN (təkrar)" error={mismatch ? "PIN-lər eyni deyil" : undefined}>
+            <Input type="password" inputMode="numeric" autoComplete="off" required maxLength={6} value={pinForm.repeat} onChange={(e) => setPinForm({ ...pinForm, repeat: digitsOnly(e.target.value) })} />
+          </Field>
+          <Field label="Hesab şifrəsi">
+            <Input type="password" required autoComplete="current-password" value={pinForm.current} onChange={(e) => setPinForm({ ...pinForm, current: e.target.value })} />
+          </Field>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" variant="gold" disabled={busy || mismatch || pinForm.pin.length < 4 || !pinForm.current}>{policy.hasPin ? "PIN-i dəyiş" : "PIN təyin et"}</Button>
+          {policy.hasPin && <Button type="button" variant="ghost" disabled={busy} onClick={removePin}>PIN-i sil</Button>}
+        </div>
+      </form>
+
+      <form onSubmit={issueCard} className="mt-6 space-y-4 border-t border-slate-100 pt-6">
+        <div>
+          <h3 className="font-semibold text-navy-800">Menecer kartı</h3>
+          <p className="text-sm text-slate-600">
+            PIN yazmaq əvəzinə kassada kartın barkodunu skan edin (USB skaner və ya telefon kamerası).
+            {policy.hasCard ? " Sizin kartınız aktivdir. İtirsə, yenisini verin: köhnəsi dərhal işləməyəcək." : ""}
+          </p>
+        </div>
+        <div className="max-w-xs">
+          <Field label="Hesab şifrəsi">
+            <Input type="password" required autoComplete="current-password" value={cardPassword} onChange={(e) => setCardPassword(e.target.value)} />
+          </Field>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" variant="primary" disabled={busy || !cardPassword}>{policy.hasCard ? "Yeni kart çap et" : "Kart çap et"}</Button>
+          {policy.hasCard && <Button type="button" variant="ghost" disabled={busy} onClick={revokeCard}>Kartı ləğv et</Button>}
+        </div>
+      </form>
+      {confirmDialog}
     </Card>
   );
 }

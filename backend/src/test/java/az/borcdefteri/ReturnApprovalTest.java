@@ -12,7 +12,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Manager approval of sale returns: limit, PIN, manager card, lockout, who approved. */
+/** Manager approval of sale returns (mandatory for cashiers / sellers): PIN, manager card, lockout, who approved. */
 class ReturnApprovalTest extends IntegrationTestBase {
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -24,7 +24,6 @@ class ReturnApprovalTest extends IntegrationTestBase {
         activateSubscription(owner, "MONTHLY");
         String p = body(post(owner, "/api/products", Map.of("name", "Çay", "purchasePrice", "6.00", "salePrice", "10.00",
                 "initialStock", "50")).andExpect(status().isCreated())).get("id").asText();
-        put(owner, "/api/return-approval/policy", Map.of("enabled", true, "limit", "0")).andExpect(status().isOk());
         String kassir = cashier(owner, "SALES");
 
         // only approvers get a card, and only with their password; the card comes back as a PDF to print
@@ -79,21 +78,21 @@ class ReturnApprovalTest extends IntegrationTestBase {
     }
 
     @Test
-    void returnAboveLimitNeedsManagerPin() throws Exception {
+    void everyCashierReturnNeedsManagerPinOrCard() throws Exception {
         String owner = register("Təsdiq Bir");
         activateSubscription(owner, "MONTHLY");
         String p = body(post(owner, "/api/products", Map.of("name", "Kofe", "purchasePrice", "6.00", "salePrice", "10.00",
                 "initialStock", "50")).andExpect(status().isCreated())).get("id").asText();
         String kassir = cashier(owner, "SALES");
 
-        // off by default: the cashier returns freely
+        // mandatory in every store: even a 10 AZN return of a cashier needs the manager, with no setting to turn it off
         String[] s1 = cashSale(kassir, p);
-        post(kassir, "/api/sales/" + s1[0] + "/returns", ret(s1[1], "1", null)).andExpect(status().isOk());
+        post(kassir, "/api/sales/" + s1[0] + "/returns", ret(s1[1], "1", null))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error", is("APPROVAL_REQUIRED")))
+                .andExpect(jsonPath("$.message", containsString("kartını")));
+        get(kassir, "/api/sales/" + s1[0]).andExpect(jsonPath("$.returnedAmount", is(0.0)));
 
-        // only the owner sets the policy; the owner sets a PIN (password-protected, no trivial PINs)
-        put(kassir, "/api/return-approval/policy", Map.of("enabled", true, "limit", "15.00")).andExpect(status().isForbidden());
-        put(owner, "/api/return-approval/policy", Map.of("enabled", true, "limit", "15.00")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.enabled", is(true))).andExpect(jsonPath("$.limit", is(15.0)));
+        // approvers set a PIN (password-protected, no trivial PINs)
         put(kassir, "/api/return-approval/pin", Map.of("pin", "4826", "currentPassword", EMPLOYEE_PASSWORD))
                 .andExpect(status().isForbidden());
         put(owner, "/api/return-approval/pin", Map.of("pin", "4826", "currentPassword", "yanlis-sifre"))
@@ -104,10 +103,9 @@ class ReturnApprovalTest extends IntegrationTestBase {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.hasPin", is(true))).andExpect(jsonPath("$.canApprove", is(true)));
         get(kassir, "/api/return-approval").andExpect(jsonPath("$.canApprove", is(false))).andExpect(jsonPath("$.hasPin", is(false)));
 
-        // up to the limit: no PIN
         String[] s2 = cashSale(kassir, p);
-        post(kassir, "/api/sales/" + s2[0] + "/returns", ret(s2[1], "1", null)).andExpect(status().isOk());
-        // above: PIN required, wrong PIN refused, nothing returned
+        post(kassir, "/api/sales/" + s2[0] + "/returns", ret(s2[1], "1", "4826")).andExpect(status().isOk());
+        // PIN required, wrong PIN refused, nothing returned
         post(kassir, "/api/sales/" + s2[0] + "/returns", ret(s2[1], "2", null))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.error", is("APPROVAL_REQUIRED")));
         post(kassir, "/api/sales/" + s2[0] + "/returns", ret(s2[1], "2", "0000"))
@@ -148,7 +146,6 @@ class ReturnApprovalTest extends IntegrationTestBase {
         activateSubscription(owner, "MONTHLY");
         String p = body(post(owner, "/api/products", Map.of("name", "Şokolad", "purchasePrice", "6.00", "salePrice", "10.00",
                 "initialStock", "50")).andExpect(status().isCreated())).get("id").asText();
-        put(owner, "/api/return-approval/policy", Map.of("enabled", true, "limit", "0")).andExpect(status().isOk());
         put(owner, "/api/return-approval/pin", Map.of("pin", "5729", "currentPassword", OWNER_PASSWORD)).andExpect(status().isOk());
         String kassir = cashier(owner, "SALES");
         String[] s = cashSale(kassir, p);

@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import '../api/api_client.dart';
 import 'barcode_scanner.dart';
 
-/// Runs a return / cancel request. When the server answers APPROVAL_REQUIRED (the amount is above the store's
-/// limit), asks for a manager's PIN (or a scan of the manager card) and sends the same request again with it.
+/// Runs a return / cancel request. When the server answers APPROVAL_REQUIRED (every return of a cashier / seller),
+/// asks for a manager's PIN (or a scan of the manager card) and sends the same request again with it.
 /// Returns the server's answer, or null when the PIN dialog was closed.
 Future<T?> withReturnApproval<T>(BuildContext context, Future<T> Function(String? pin) send) async {
   try {

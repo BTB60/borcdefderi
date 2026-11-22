@@ -422,10 +422,12 @@ function SecurityCard({ profile, onChange }: { profile: Profile; onChange: (p: P
   );
 }
 
-/** Owner: when returns need a manager's PIN. Owner and managers (RETURN_APPROVE): their own PIN. */
+/**
+ * Owner and managers (RETURN_APPROVE): their own approval PIN and manager card. Every return or cancel of a
+ * cashier / seller needs one of them (mandatory in every store).
+ */
 function ReturnApprovalCard({ isOwner }: { isOwner: boolean }) {
   const [policy, setPolicy] = useState<ReturnApprovalPolicy | null>(null);
-  const [rule, setRule] = useState({ enabled: false, limit: "0" });
   const [pinForm, setPinForm] = useState({ pin: "", repeat: "", current: "" });
   const [cardPassword, setCardPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -435,7 +437,6 @@ function ReturnApprovalCard({ isOwner }: { isOwner: boolean }) {
 
   function loaded(p: ReturnApprovalPolicy) {
     setPolicy(p);
-    setRule({ enabled: p.enabled, limit: String(p.limit) });
   }
 
   useEffect(() => {
@@ -455,12 +456,6 @@ function ReturnApprovalCard({ isOwner }: { isOwner: boolean }) {
     } finally {
       setBusy(false);
     }
-  }
-
-  async function saveRule(e: FormEvent) {
-    e.preventDefault();
-    const limit = Number(rule.limit.replace(",", ".")) || 0;
-    await run(() => api("/api/return-approval/policy", { method: "PUT", json: { enabled: rule.enabled, limit } }), "Qaydalar yadda saxlanıldı", "Yadda saxlanılmadı");
   }
 
   async function savePin(e: FormEvent) {
@@ -505,27 +500,13 @@ function ReturnApprovalCard({ isOwner }: { isOwner: boolean }) {
     <Card>
       <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Qaytarma təsdiqi</h2>
       <p className="mb-5 text-sm text-slate-500">
-        Limitdən böyük qaytarma və ya satışın ləğvi üçün kassir menecerin PIN-ini və ya kartını istəyəcək. Mağaza sahibi və
-        “Qaytarmanı təsdiq” icazəsi olan işçilər PIN-siz qaytara bilir.
+        Satıcı və kassir menecerin PIN-i və ya kartı olmadan heç bir qaytarma və satış ləğvi edə bilməz. Mağaza sahibi və
+        “Qaytarmanı təsdiq” icazəsi olan işçilər özləri qaytara bilir.
       </p>
-      {msg && <div className="mb-4"><Alert kind={msg.kind}>{msg.text}</Alert></div>}
-
-      {isOwner && (
-        <form onSubmit={saveRule} className="mb-6 space-y-4 border-b border-slate-100 pb-6">
-          <label className="flex items-center gap-2 text-sm text-navy-800">
-            <input type="checkbox" checked={rule.enabled} onChange={(e) => setRule({ ...rule, enabled: e.target.checked })} />
-            Qaytarmalar üçün menecer təsdiqi tələb olunsun
-          </label>
-          {rule.enabled && (
-            <div className="max-w-sm">
-              <Field label="Təsdiqsiz qaytarma limiti (AZN)" hint="Bu məbləğə qədər kassir özü qaytarır. 0 — hər qaytarma təsdiq tələb edir">
-                <Input inputMode="decimal" value={rule.limit} onChange={(e) => setRule({ ...rule, limit: e.target.value })} />
-              </Field>
-            </div>
-          )}
-          <Button type="submit" variant="primary" disabled={busy}>Yadda saxla</Button>
-        </form>
+      {isOwner && !policy.hasPin && !policy.hasCard && (
+        <div className="mb-4"><Alert>Hələ PIN və ya kart təyin etməmisiniz: satıcılarınız qaytarma edə bilməyəcək. Aşağıda PIN təyin edin və ya kart çap edin.</Alert></div>
       )}
+      {msg && <div className="mb-4"><Alert kind={msg.kind}>{msg.text}</Alert></div>}
 
       <form onSubmit={savePin} className="space-y-4">
         <p className="text-sm text-slate-600">

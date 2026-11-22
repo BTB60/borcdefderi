@@ -72,13 +72,14 @@ public class AssistantService {
         this.dailyLimit = dailyLimit;
     }
 
+    // the shop owner only: employees (sellers, cashiers…) do not get the assistant
     public Status status() {
-        CurrentMember m = tenant.requireBusinessMember();
+        CurrentMember m = tenant.requireOwner();
         return new Status(gateway.configured(), usedToday(m), dailyLimit);
     }
 
     public ChatResponse chat(List<Turn> messages) {
-        CurrentMember m = tenant.requireBusinessMember();
+        CurrentMember m = tenant.requireOwner();
         if (!gateway.configured()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "ASSISTANT_OFF", "Köməkçi hələ qoşulmayıb");
         }

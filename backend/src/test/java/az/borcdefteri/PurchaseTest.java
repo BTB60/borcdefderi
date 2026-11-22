@@ -71,6 +71,18 @@ class PurchaseTest extends IntegrationTestBase {
         assertEquals(400.0, cashBalance(owner));
         get(owner, "/api/purchases").andExpect(jsonPath("$[0].number", is(p.get("number").asText())))
                 .andExpect(jsonPath("$[0].companyName", is("Topdan MMC")));
+
+        // "Borcu ödə" on the receipt pays its own debt; the receipt and the list follow the debt
+        post(owner, "/api/debts/" + p.get("debtId").asText() + "/payments", Map.of("amount", "40.00", "paymentMethod", "CASH"))
+                .andExpect(status().isCreated());
+        get(owner, "/api/purchases/" + p.get("id").asText())
+                .andExpect(jsonPath("$.paid", is(140.0))).andExpect(jsonPath("$.unpaid", is(100.0)));
+        get(owner, "/api/purchases").andExpect(jsonPath("$[0].paid", is(140.0))).andExpect(jsonPath("$[0].unpaid", is(100.0)));
+        assertEquals(360.0, cashBalance(owner), "the payment left the till");
+        post(owner, "/api/debts/" + p.get("debtId").asText() + "/payments", Map.of("amount", "100.00", "paymentMethod", "CASH"))
+                .andExpect(status().isCreated());
+        get(owner, "/api/purchases/" + p.get("id").asText())
+                .andExpect(jsonPath("$.paid", is(240.0))).andExpect(jsonPath("$.unpaid", is(0.0)));
     }
 
     @Test

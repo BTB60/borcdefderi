@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Avatar } from "@/components/Avatar";
 import { Alert, Button, Card, Field, Input, PageHeader, Spinner, useConfirm } from "@/components/ui";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, postForFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { AuthResponse, Profile, ReturnApprovalPolicy } from "@/lib/types";
 
@@ -233,6 +233,7 @@ function ReturnApprovalCard({ isOwner }: { isOwner: boolean }) {
   const [policy, setPolicy] = useState<ReturnApprovalPolicy | null>(null);
   const [rule, setRule] = useState({ enabled: false, limit: "0" });
   const [pinForm, setPinForm] = useState({ pin: "", repeat: "", current: "" });
+  const [cardPassword, setCardPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<Msg>(null);
   const [confirm, confirmDialog] = useConfirm();
@@ -280,6 +281,28 @@ function ReturnApprovalCard({ isOwner }: { isOwner: boolean }) {
     await run(() => api("/api/return-approval/pin", { method: "DELETE" }), "PIN silindi", "Silinmədi");
   }
 
+  async function issueCard(e: FormEvent) {
+    e.preventDefault();
+    if (policy?.hasCard && !(await confirm(<>Yeni kart verilsin? Köhnə kart dərhal işləməyəcək.</>, { confirmLabel: "Yeni kart" }))) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await postForFile("/api/return-approval/card", { currentPassword: cardPassword }, "menecer-karti.pdf");
+      setCardPassword("");
+      loaded(await api<ReturnApprovalPolicy>("/api/return-approval"));
+      setMsg({ kind: "success", text: "Kart yükləndi (menecer-karti.pdf). Çap edib qırıq xətt üzrə kəsin." });
+    } catch (err) {
+      setMsg({ kind: "error", text: errorText(err, "Kart verilmədi") });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeCard() {
+    if (!(await confirm(<>Kart ləğv edilsin? Bundan sonra o kartla təsdiq etmək olmayacaq.</>, { danger: true, confirmLabel: "Ləğv et" }))) return;
+    await run(() => api("/api/return-approval/card", { method: "DELETE" }), "Kart ləğv edildi", "Ləğv edilmədi");
+  }
+
   if (!policy) return msg ? <Alert>{msg.text}</Alert> : null;
 
   const digitsOnly = (v: string) => v.replace(/\D/g, "").slice(0, 6);
@@ -288,7 +311,7 @@ function ReturnApprovalCard({ isOwner }: { isOwner: boolean }) {
     <Card>
       <h2 className="mb-1 font-serif text-lg font-semibold text-navy-800">Qaytarma təsdiqi</h2>
       <p className="mb-5 text-sm text-slate-500">
-        Limitdən böyük qaytarma və ya satışın ləğvi üçün kassir menecerin PIN-ini istəyəcək. Mağaza sahibi və
+        Limitdən böyük qaytarma və ya satışın ləğvi üçün kassir menecerin PIN-ini və ya kartını istəyəcək. Mağaza sahibi və
         “Qaytarmanı təsdiq” icazəsi olan işçilər PIN-siz qaytara bilir.
       </p>
       {msg && <div className="mb-4"><Alert kind={msg.kind}>{msg.text}</Alert></div>}
@@ -300,9 +323,11 @@ function ReturnApprovalCard({ isOwner }: { isOwner: boolean }) {
             Qaytarmalar üçün menecer təsdiqi tələb olunsun
           </label>
           {rule.enabled && (
-            <Field label="Təsdiqsiz qaytarma limiti (AZN)" hint="Bu məbləğə qədər kassir özü qaytarır. 0 — hər qaytarma təsdiq tələb edir">
-              <Input inputMode="decimal" className="max-w-[10rem]" value={rule.limit} onChange={(e) => setRule({ ...rule, limit: e.target.value })} />
-            </Field>
+            <div className="max-w-sm">
+              <Field label="Təsdiqsiz qaytarma limiti (AZN)" hint="Bu məbləğə qədər kassir özü qaytarır. 0 — hər qaytarma təsdiq tələb edir">
+                <Input inputMode="decimal" value={rule.limit} onChange={(e) => setRule({ ...rule, limit: e.target.value })} />
+              </Field>
+            </div>
           )}
           <Button type="submit" variant="primary" disabled={busy}>Yadda saxla</Button>
         </form>
@@ -326,6 +351,25 @@ function ReturnApprovalCard({ isOwner }: { isOwner: boolean }) {
         <div className="flex flex-wrap gap-2">
           <Button type="submit" variant="gold" disabled={busy || mismatch || pinForm.pin.length < 4 || !pinForm.current}>{policy.hasPin ? "PIN-i dəyiş" : "PIN təyin et"}</Button>
           {policy.hasPin && <Button type="button" variant="ghost" disabled={busy} onClick={removePin}>PIN-i sil</Button>}
+        </div>
+      </form>
+
+      <form onSubmit={issueCard} className="mt-6 space-y-4 border-t border-slate-100 pt-6">
+        <div>
+          <h3 className="font-semibold text-navy-800">Menecer kartı</h3>
+          <p className="text-sm text-slate-600">
+            PIN yazmaq əvəzinə kassada kartın barkodunu skan edin (USB skaner və ya telefon kamerası).
+            {policy.hasCard ? " Sizin kartınız aktivdir. İtirsə, yenisini verin: köhnəsi dərhal işləməyəcək." : ""}
+          </p>
+        </div>
+        <div className="max-w-xs">
+          <Field label="Hesab şifrəsi">
+            <Input type="password" required autoComplete="current-password" value={cardPassword} onChange={(e) => setCardPassword(e.target.value)} />
+          </Field>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" variant="primary" disabled={busy || !cardPassword}>{policy.hasCard ? "Yeni kart çap et" : "Kart çap et"}</Button>
+          {policy.hasCard && <Button type="button" variant="ghost" disabled={busy} onClick={revokeCard}>Kartı ləğv et</Button>}
         </div>
       </form>
       {confirmDialog}

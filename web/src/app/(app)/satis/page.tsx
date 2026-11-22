@@ -303,7 +303,10 @@ function SaleModal({ sale, onClose, onChanged }: { sale: Sale; onClose: () => vo
   );
 }
 
-/** The manager types their PIN on the cashier's screen. Wrong PIN: the error stays here and they try again. */
+/**
+ * The manager types their PIN on the cashier's screen, or scans their manager card (a USB scanner types the code and
+ * presses Enter). Wrong PIN / card: the error stays here and they try again.
+ */
 function ApprovalPinModal({ message, send, onClose }: { message: string; send: (pin: string) => Promise<void>; onClose: () => void }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -336,9 +339,10 @@ function ApprovalPinModal({ message, send, onClose }: { message: string; send: (
       <p className="mb-3 text-sm text-slate-600">{message}</p>
       {error && <div className="mb-3"><Alert>{error}</Alert></div>}
       <form id="approval-pin" onSubmit={submit}>
-        <Field label="Menecer PIN-i">
-          <Input type="password" inputMode="numeric" autoComplete="off" autoFocus maxLength={6} pattern="[0-9]*" disabled={locked}
-            className="text-center text-2xl tracking-[0.5em]" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} />
+        <Field label="Menecer PIN-i və ya kart" hint="PIN-i yazın və ya menecer kartını skan edin">
+          <Input type="password" inputMode="numeric" autoComplete="off" autoFocus maxLength={32} disabled={locked}
+            className="text-center text-2xl tracking-[0.5em]" value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/[^0-9A-Za-z]/g, "").toUpperCase())} />
         </Field>
       </form>
     </Modal>

@@ -12,8 +12,50 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Manager approval of sale returns: limit, PIN, lockout, who approved. */
+/** Manager approval of sale returns: limit, PIN, manager card, lockout, who approved. */
 class ReturnApprovalTest extends IntegrationTestBase {
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.simple.JdbcClient jdbc;
+
+    @Test
+    void managerCardApprovesLikeThePin() throws Exception {
+        String owner = register("Kart Bir");
+        activateSubscription(owner, "MONTHLY");
+        String p = body(post(owner, "/api/products", Map.of("name", "Çay", "purchasePrice", "6.00", "salePrice", "10.00",
+                "initialStock", "50")).andExpect(status().isCreated())).get("id").asText();
+        put(owner, "/api/return-approval/policy", Map.of("enabled", true, "limit", "0")).andExpect(status().isOk());
+        String kassir = cashier(owner, "SALES");
+
+        // only approvers get a card, and only with their password; the card comes back as a PDF to print
+        post(kassir, "/api/return-approval/card", Map.of("currentPassword", EMPLOYEE_PASSWORD)).andExpect(status().isForbidden());
+        post(owner, "/api/return-approval/card", Map.of("currentPassword", "yanlis"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error", is("WRONG_PASSWORD")));
+        byte[] pdf = post(owner, "/api/return-approval/card", Map.of("currentPassword", OWNER_PASSWORD))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        assertEquals("%PDF", new String(pdf, 0, 4, java.nio.charset.StandardCharsets.US_ASCII));        get(owner, "/api/return-approval").andExpect(jsonPath("$.hasCard", is(true)));
+
+        // the printed code is random; put a known one in its place to scan it in the test
+        String code = "HPKABCDEFGH234567QR"; // HPK + 16
+        jdbc.sql("UPDATE store_members SET approval_card_hash = encode(sha256(convert_to(:c, 'UTF8')), 'hex') "
+                        + "WHERE approval_card_hash IS NOT NULL AND store_id = (SELECT store_id FROM store_members m JOIN users u "
+                        + "ON u.id = m.user_id WHERE u.full_name = 'Sahib Kart Bir')")
+                .param("c", code).update();
+
+        String[] s = cashSale(kassir, p);
+        post(kassir, "/api/sales/" + s[0] + "/returns", ret(s[1], "1", "HPKAAAAAAAAAAAAAAAA"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error", is("APPROVAL_PIN_INVALID")));
+        // a scanner may send lower case; still the same card
+        post(kassir, "/api/sales/" + s[0] + "/returns", ret(s[1], "1", code.toLowerCase()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.returns[0].approvedByName", is("Sahib Kart Bir")));
+
+        // revoked: the card stops working
+        var res = body(mvc.perform(delete("/api/return-approval/card").header("Authorization", "Bearer " + owner))
+                .andExpect(status().isOk()));
+        assertFalse(res.get("hasCard").asBoolean());
+        post(kassir, "/api/sales/" + s[0] + "/returns", ret(s[1], "1", code))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error", is("APPROVAL_PIN_INVALID")));
+    }
 
     private String cashier(String owner, String... permissions) throws Exception {
         String email = uniqueEmail("kassir");

@@ -481,4 +481,5 @@ export interface ReturnApprovalPolicy {
   limit: number;
   canApprove: boolean;
   hasPin: boolean;
+  hasCard: boolean;
 }

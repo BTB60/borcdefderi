@@ -51,6 +51,20 @@ public class SalesController {
         return approvals.setPin(req.pin(), req.currentPassword());
     }
 
+    public record ApprovalCardRequest(@jakarta.validation.constraints.Size(max = 72) String currentPassword) {}
+
+    /** Issues a new manager card (the old one stops working) and returns it as a PDF to print. */
+    @PostMapping("/return-approval/card")
+    public ResponseEntity<byte[]> issueApprovalCard(@Valid @RequestBody ApprovalCardRequest req) {
+        ExportFile f = approvals.issueCard(req.currentPassword());
+        return FileResponses.attachment(f.content(), f.contentType(), f.fileName());
+    }
+
+    @DeleteMapping("/return-approval/card")
+    public ReturnApprovalService.Policy revokeApprovalCard() {
+        return approvals.revokeCard();
+    }
+
     @DeleteMapping("/return-approval/pin")
     public ReturnApprovalService.Policy clearApprovalPin() {
         return approvals.clearPin();

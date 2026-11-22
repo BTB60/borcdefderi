@@ -5,18 +5,20 @@ import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Table, 
 import { ApiError, api } from "@/lib/api";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { Announcement, Plan, PromoCode } from "@/lib/types";
+import { AdStoriesCard } from "./AdStoriesCard";
 
 type Props = { onError: (m: string | null) => void; onNotice?: (m: string | null) => void };
 
 const err = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
-/** SUPER_ADMIN: free trial for new stores, promo codes and announcements to every store. */
+/** SUPER_ADMIN: free trial for new stores, promo codes, announcements and ad stories to every store. */
 export function GrowthTab({ onError, onNotice }: Props) {
   return (
     <div className="space-y-6">
       <TrialCard onError={onError} onNotice={onNotice} />
       <PromoCard onError={onError} onNotice={onNotice} />
       <AnnouncementsCard onError={onError} onNotice={onNotice} />
+      <AdStoriesCard onError={onError} onNotice={onNotice} />
     </div>
   );
 }

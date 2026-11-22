@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'cash_screen.dart';
+import 'ad_stories.dart';
 import 'announcements.dart';
 import 'common.dart';
 import 'day_summary.dart';
@@ -90,6 +91,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                AdStoriesBar(session: widget.session),
                 AnnouncementBanner(session: widget.session),
                 _QuickActions(session: widget.session),
                 // Cib pulu is the owner's own money: employees don't see it

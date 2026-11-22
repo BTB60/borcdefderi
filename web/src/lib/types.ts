@@ -608,3 +608,23 @@ export interface ReturnApprovalPolicy {
   hasPin: boolean;
   hasCard: boolean;
 }
+
+/** Reklam hekayəsi (platform admin): a picture story on the phone's home screen. */
+export interface AdStory {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  buttonLabel: string | null;
+  linkUrl: string | null;
+  whatsapp: string | null;
+  hasImage: boolean;
+  imageVersion: number;
+  active: boolean;
+  startsOn: string | null;
+  endsOn: string | null;
+  sortOrder: number;
+  views: number;
+  clicks: number;
+  live: boolean;
+  createdAt: string;
+}

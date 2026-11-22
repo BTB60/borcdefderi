@@ -44,8 +44,9 @@ public class ProductTransferController {
     }
 
     @GetMapping("/export")
-    public ResponseEntity<byte[]> export(@RequestParam(defaultValue = "xlsx") String format) {
-        return attach(exports.export(format));
+    public ResponseEntity<byte[]> export(@RequestParam(defaultValue = "xlsx") String format,
+                                         @RequestParam(required = false) String stock) {
+        return attach(exports.export(format, stock));
     }
 
     @GetMapping("/import-template")

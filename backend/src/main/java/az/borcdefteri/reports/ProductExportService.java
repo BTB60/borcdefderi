@@ -36,8 +36,10 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * All products of the store as Excel or PDF. The Excel sheet has exactly the columns the import reads
- * ({@link ProductImportService#HEADERS}), so an exported file can be edited and imported back.
+ * All products of the store as Excel or PDF (Anbar and Hesabatlar → "Məhsul qalığı"). The Excel sheet has exactly the
+ * columns the import reads ({@link ProductImportService#HEADERS}), so an exported file can be edited and imported back.
+ * The PDF is the stock report: quantity and value per product, low stock in amber, out of stock in red.
+ * {@code stock} narrows the list like the Anbar filter: LOW (at or below the minimum, incl. out) or OUT (zero).
  */
 @Service
 public class ProductExportService {
@@ -46,6 +48,8 @@ public class ProductExportService {
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
     private static final DateTimeFormatter FILE_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final Color NAVY = new Color(0x10, 0x1C, 0x35);
+    private static final Color RED = new Color(0xB9, 0x1C, 0x1C);
+    private static final Color AMBER = new Color(0xB4, 0x53, 0x09);
 
     private final InventoryService inventory;
     private final Clock clock;
@@ -56,14 +60,24 @@ public class ProductExportService {
     }
 
     public ExportFile export(String format) {
+        return export(format, null);
+    }
+
+    public ExportFile export(String format, String stock) {
         CurrentMember m = inventory.requireInventory();
-        List<Product> products = inventory.products(null, null, null, null);
+        String filter = stock == null || stock.isBlank() ? null : stock.trim().toUpperCase(Locale.ROOT);
+        if (filter != null && !filter.equals("LOW") && !filter.equals("OUT")) {
+            throw ApiException.badRequest("INVALID_STOCK_FILTER", "Filtr yalnız LOW və ya OUT ola bilər");
+        }
+        List<Product> products = inventory.products(null, null, filter, null);
         ZonedDateTime now = ZonedDateTime.now(clock).withZoneSameInstant(BAKU);
-        String base = "mehsullar-" + now.format(FILE_DATE);
+        String base = (filter == null ? "mehsullar-" : "OUT".equals(filter) ? "biten-mehsullar-" : "az-qalan-mehsullar-")
+                + now.format(FILE_DATE);
+        String title = filter == null ? "Anbar məhsulları" : "OUT".equals(filter) ? "Bitən məhsullar" : "Az qalan və bitən məhsullar";
         return switch (format == null ? "" : format.toLowerCase(Locale.ROOT)) {
             case "xlsx", "excel" -> new ExportFile(excel(products),
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", base + ".xlsx");
-            case "pdf" -> new ExportFile(pdf(m.storeName(), products, now), "application/pdf", base + ".pdf");
+            case "pdf" -> new ExportFile(pdf(m.storeName(), title, products, now), "application/pdf", base + ".pdf");
             default -> throw ApiException.badRequest("INVALID_FORMAT", "Format yalnız xlsx və ya pdf ola bilər");
         };
     }
@@ -134,7 +148,7 @@ public class ProductExportService {
         }
     }
 
-    private byte[] pdf(String storeName, List<Product> products, ZonedDateTime now) {
+    private byte[] pdf(String storeName, String reportTitle, List<Product> products, ZonedDateTime now) {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Document doc = new Document(PageSize.A4.rotate(), 30, 30, 36, 30);
             PdfWriter.getInstance(doc, out);
@@ -147,8 +161,11 @@ public class ProductExportService {
             Font head = new Font(boldBase, 8.5f, Font.NORMAL, Color.WHITE);
             Font bold = new Font(boldBase, 9, Font.NORMAL, Color.BLACK);
 
-            doc.add(new Paragraph(storeName + " — Anbar məhsulları", title));
-            doc.add(new Paragraph(now.format(DATE_TIME) + "   |   Məhsul sayı: " + products.size(), small));
+            long outCount = products.stream().filter(Product::outOfStock).count();
+            long low = products.stream().filter(p -> p.lowStock() && !p.outOfStock()).count();
+            doc.add(new Paragraph(storeName + " — " + reportTitle, title));
+            doc.add(new Paragraph(now.format(DATE_TIME) + "   |   Məhsul sayı: " + products.size()
+                    + "   |   Az qalan: " + low + "   |   Bitən: " + outCount, small));
             doc.add(new Paragraph(" "));
 
             String[] headers = {"Kod", "Barkod", "Məhsul", "Kateqoriya", "Vahid", "Alış", "Satış", "Qalıq", "Dəyər (alış)"};
@@ -164,10 +181,12 @@ public class ProductExportService {
             BigDecimal cost = BigDecimal.ZERO;
             BigDecimal sale = BigDecimal.ZERO;
             for (Product p : products) {
-                Font f = p.active() ? cell : new Font(base, 8.5f, Font.NORMAL, Color.GRAY);
+                Color color = !p.active() ? Color.GRAY : p.outOfStock() ? RED : p.lowStock() ? AMBER : Color.BLACK;
+                Font f = new Font(base, 8.5f, Font.NORMAL, color);
                 add(t, p.code(), f, Element.ALIGN_LEFT);
                 add(t, p.barcode() == null ? "" : p.barcode(), f, Element.ALIGN_LEFT);
-                add(t, p.name() + (p.active() ? "" : " (deaktiv)"), f, Element.ALIGN_LEFT);
+                add(t, p.name() + (!p.active() ? " (deaktiv)" : p.outOfStock() ? " (bitib)" : p.lowStock() ? " (az qalıb)" : ""),
+                        f, Element.ALIGN_LEFT);
                 add(t, p.categoryName() == null ? "" : p.categoryName(), f, Element.ALIGN_LEFT);
                 add(t, p.unit(), f, Element.ALIGN_LEFT);
                 add(t, Money.of(p.purchasePrice()).toPlainString(), f, Element.ALIGN_RIGHT);

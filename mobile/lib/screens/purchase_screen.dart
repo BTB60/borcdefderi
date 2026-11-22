@@ -305,7 +305,9 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
 
   Future<void> _save() async {
     if (_lines.isEmpty) return showError(context, 'Ən azı bir məhsul əlavə edin');
-    final paid = _r2(_n(_paid.text));
+    final onCredit = _method == 'DEBT';
+    if (onCredit && _companyId == null) return showError(context, 'Borca almaq üçün təchizatçı seçin');
+    final paid = onCredit ? 0.0 : _r2(_n(_paid.text));
     if (paid > _total) return showError(context, 'Ödənilən məbləğ alışdan çox ola bilməz');
     if (_companyId == null && paid > 0 && paid != _total) {
       return showError(context, 'Borcla və ya qismən ödənişli alış üçün təchizatçı seçin');
@@ -324,7 +326,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             },
         ],
         'paid': paid,
-        'paymentMethod': _method,
+        'paymentMethod': onCredit ? 'CASH' : _method,
         'supplierInvoice': _invoice.text.trim().isEmpty ? null : _invoice.text.trim(),
         'dueDate': _due?.toIso8601String().substring(0, 10),
         'note': _note.text.trim().isEmpty ? null : _note.text.trim(),
@@ -341,7 +343,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   @override
   Widget build(BuildContext context) {
     final matches = _matches;
-    final unpaid = _companyId == null ? 0.0 : (_total - _n(_paid.text)).clamp(0, double.infinity).toDouble();
+    final onCredit = _method == 'DEBT';
+    final unpaid = _companyId == null ? 0.0 : onCredit ? _total : (_total - _n(_paid.text)).clamp(0, double.infinity).toDouble();
     return Scaffold(
       appBar: AppBar(title: const Text('Yeni mal qəbulu'), actions: [
         IconButton(tooltip: 'Barkod skan et', icon: const Icon(Icons.qr_code_scanner), onPressed: _scan),
@@ -369,7 +372,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             ],
             onChanged: (v) => setState(() {
               _companyId = v;
-              if (v == null && _method == 'TRANSFER') _method = 'CASH';
+              if (v == null && (_method == 'TRANSFER' || _method == 'DEBT')) _method = 'CASH';
             }),
           ),
           const SizedBox(height: 12),
@@ -480,13 +483,15 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             Expanded(
               child: TextField(
                 controller: _paid,
+                enabled: !onCredit,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(labelText: 'İndi ödənilən', hintText: '0'),
+                decoration: InputDecoration(labelText: 'İndi ödənilən', hintText: '0',
+                    helperText: onCredit ? 'Borca alınır: indi heç nə ödənilmir' : null),
               ),
             ),
             const SizedBox(width: 8),
-            OutlinedButton(onPressed: () => setState(() => _paid.text = _total.toStringAsFixed(2)), child: const Text('Hamısı')),
+            OutlinedButton(onPressed: onCredit ? null : () => setState(() => _paid.text = _total.toStringAsFixed(2)), child: const Text('Hamısı')),
           ]),
           const SizedBox(height: 8),
           SegmentedButton<String>(
@@ -494,6 +499,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               const ButtonSegment(value: 'CASH', label: Text('Nağd')),
               const ButtonSegment(value: 'CARD', label: Text('Kart')),
               if (_companyId != null) const ButtonSegment(value: 'TRANSFER', label: Text('Köçürmə')),
+              // on credit: nothing paid now, the whole receipt goes to the supplier debt
+              if (_companyId != null) const ButtonSegment(value: 'DEBT', label: Text('Borc')),
             ],
             selected: {_method},
             onSelectionChanged: (s) => setState(() => _method = s.first),

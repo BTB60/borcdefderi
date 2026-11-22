@@ -238,7 +238,9 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
   async function save() {
     setError(null);
     if (lines.length === 0) { setError("Ən azı bir məhsul əlavə edin"); return; }
-    const paidN = round2(num(paid));
+    const onCredit = method === "DEBT";
+    if (onCredit && !companyId) { setError("Borca almaq üçün təchizatçı seçin"); return; }
+    const paidN = onCredit ? 0 : round2(num(paid));
     if (paidN > total) { setError("Ödənilən məbləğ alışdan çox ola bilməz"); return; }
     if (!companyId && paidN > 0 && paidN !== total) { setError("Borcla və ya qismən ödənişli alış üçün təchizatçı seçin"); return; }
     setBusy(true);
@@ -248,7 +250,7 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
         json: {
           companyId: companyId || null,
           items: lines.map((l) => ({ productId: l.product.id, quantity: num(l.quantity), unitCost: round2(num(l.unitCost)), expiryDate: l.expiryDate || null })),
-          paid: paidN, paymentMethod: method, supplierInvoice: invoice || null, dueDate: dueDate || null, note: note || null,
+          paid: paidN, paymentMethod: onCredit ? "CASH" : method, supplierInvoice: invoice || null, dueDate: dueDate || null, note: note || null,
           clientRequestId: requestId.current,
         },
       });
@@ -317,19 +319,20 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
         <div>
           <p className="text-xs text-slate-500">Cəmi</p>
           <p className="font-serif text-2xl font-semibold text-navy-800">{formatMoney(total)}</p>
-          {companyId && <p className="text-xs text-rose-600">Borca yazılacaq: {formatMoney(Math.max(0, round2(total - num(paid))))}</p>}
+          {companyId && <p className="text-xs text-rose-600">Borca yazılacaq: {formatMoney(method === "DEBT" ? total : Math.max(0, round2(total - num(paid))))}</p>}
         </div>
-        <Field label="İndi ödənilən">
+        <Field label="İndi ödənilən" hint={method === "DEBT" ? "Borca alınır: indi heç nə ödənilmir" : undefined}>
           <div className="flex gap-2">
-            <Input inputMode="decimal" value={paid} onChange={(e) => setPaid(e.target.value)} placeholder="0" />
-            <Button type="button" variant="outline" onClick={() => setPaid(String(total))}>Hamısı</Button>
+            <Input inputMode="decimal" value={method === "DEBT" ? "0" : paid} disabled={method === "DEBT"} onChange={(e) => setPaid(e.target.value)} placeholder="0" />
+            <Button type="button" variant="outline" disabled={method === "DEBT"} onClick={() => setPaid(String(total))}>Hamısı</Button>
           </div>
         </Field>
-        <Field label="Ödəniş üsulu">
+        <Field label="Ödəniş üsulu" hint={method === "DEBT" && !companyId ? "Borc üçün təchizatçı seçin" : undefined}>
           <Select value={method} onChange={(e) => setMethod(e.target.value)}>
             <option value="CASH">Nağd</option>
             <option value="CARD">Kart</option>
             {companyId && <option value="TRANSFER">Bank köçürməsi</option>}
+            <option value="DEBT">Borc (nisyə) — sonra ödənilir</option>
           </Select>
         </Field>
       </div>

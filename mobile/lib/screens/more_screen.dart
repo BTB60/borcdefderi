@@ -68,7 +68,8 @@ class MoreScreen extends StatelessWidget {
             padding: const EdgeInsets.only(top: 12),
             child: ErrorBanner('Abunəliyinizin müddəti ${sub.daysRemaining} gün sonra bitir. Abunəlik bölməsindən yeniləyin.'),
           ),
-        Card(
+        if (me.isOwner)
+          Card(
           child: ListTile(
             leading: const Icon(Icons.auto_awesome, color: navy),
             title: const Text('Köməkçi (AI)'),

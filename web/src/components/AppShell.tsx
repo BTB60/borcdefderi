@@ -17,6 +17,7 @@ import type { Notification, Permission } from "@/lib/types";
 import { cx } from "./ui";
 import { Countdown } from "./Countdown";
 import { Avatar } from "./Avatar";
+import { OrderAlerts } from "./OrderAlerts";
 
 const SETTINGS_ICON = "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.2-1.3L14.3 3h-4l-.4 2.5a7.6 7.6 0 0 0-2.2 1.3l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.6l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2.2 1.3l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.2-1.3l2.4 1 2-3.4-2-1.6c.1-.4.1-.9.1-1.3Z";
 
@@ -27,7 +28,7 @@ const DEBT_PERMISSIONS: Permission[] = ["CUSTOMER_DEBTS", "COMPANY_RECEIVABLES",
 
 const STORE_NAV: NavItem[] = [
   { href: "/dashboard", label: "Panel", icon: "M3 13h8V3H3v10Zm10 8h8V11h-8v10ZM3 21h8v-6H3v6Zm10-18v6h8V3h-8Z", permission: "REPORTS" },
-  { href: "/komekci", label: "Köməkçi (AI)", icon: "M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3Zm6 11 .9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z" },
+  { href: "/komekci", label: "Köməkçi (AI)", icon: "M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3Zm6 11 .9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z", ownerOnly: true },
   { href: "/borclar/musteriler", label: "Müştəri borcları", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0", permission: "CUSTOMER_DEBTS" },
   { href: "/borclar/debitorlar", label: "Tədarükçünün bizə borcu", icon: "M3 6h18v12H3V6Zm0 4h18M7 15h4", permission: "COMPANY_RECEIVABLES" },
   { href: "/borclar/kreditorlar", label: "Bizim tədarükçüyə borcumuz", icon: "M4 4h16v16H4V4Zm4 4h8M8 12h8M8 16h5", permission: "COMPANY_PAYABLES" },
@@ -48,7 +49,7 @@ const STORE_NAV: NavItem[] = [
   { href: "/abunelik", label: "Abunəlik", icon: "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z", ownerOnly: true },
   { href: "/isciler", label: "İşçilər", icon: "M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 8a6 6 0 0 1 12 0", ownerOnly: true, module: "EMPLOYEES" },
   { href: "/fealiyyet", label: "İşçi fəaliyyəti", icon: "M4 19h16M7 16V9m5 7V5m5 11v-4", ownerOnly: true, module: "EMPLOYEES" },
-  { href: "/tetbiqler", label: "Tətbiqi yüklə", icon: DOWNLOAD_ICON },
+  { href: "/tetbiqler", label: "Tətbiqi yüklə", icon: DOWNLOAD_ICON, ownerOnly: true },
   { href: "/profil", label: "Parametrlər", icon: SETTINGS_ICON },
 ];
 
@@ -409,6 +410,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8">{!isSuperAdmin && <AnnouncementBanner />}{children}</main>
+        {/* online orders: sound + card for whoever takes them (owner, SALES) */}
+        {me?.storeId && !isSuperAdmin && (isOwner || can("SALES")) && <OrderAlerts storeId={me.storeId} onNotes={setNotes} />}
       </div>
     </div>
   );

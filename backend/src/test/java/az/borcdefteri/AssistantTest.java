@@ -99,23 +99,19 @@ class AssistantTest extends IntegrationTestBase {
         assertTrue(FakeModel.lastContext.contains("Köməkçi Bir") && FakeModel.lastContext.contains("shop owner"));
         assertTrue(FakeModel.lastTools.contains("customer_profile"));
 
-        // an employee with only SALES: debts are refused inside the tool, not leaked
+        // employees (sellers, cashiers…) do not get the assistant at all: only the shop owner
         String email = uniqueEmail("kassir");
         post(owner, "/api/employees", Map.of("email", email, "password", EMPLOYEE_PASSWORD, "fullName", "Kassir",
-                "permissions", perms("SALES"))).andExpect(status().isCreated());
+                "permissions", perms("SALES", "REPORTS", "CUSTOMER_DEBTS"))).andExpect(status().isCreated());
         String kassir = login(email, EMPLOYEE_PASSWORD);
         FakeModel.script.clear();
-        FakeModel.script.add(new Object[]{"store_summary", Map.of()});
-        FakeModel.script.add(new Object[]{"list_debts", Map.of("type", "CUSTOMER_DEBT")});
-        FakeModel.script.add(new Object[]{"find_products", Map.of("query", "Kola")});
-        post(kassir, "/api/assistant/chat", ask("Borclar?")).andExpect(status().isOk());
-        assertTrue(FakeModel.results.get(5).content().startsWith("PERMISSION_DENIED"), "no REPORTS: " + FakeModel.results.get(5).content());
-        assertTrue(FakeModel.results.get(6).content().startsWith("PERMISSION_DENIED"), "no CUSTOMER_DEBTS: " + FakeModel.results.get(6).content());
-        assertFalse(FakeModel.results.get(7).error(), "SALES may look products up: " + FakeModel.results.get(7).content());
-        assertTrue(FakeModel.lastContext.contains("employee") && FakeModel.lastContext.contains("SALES"));
+        get(kassir, "/api/assistant").andExpect(status().isForbidden()).andExpect(jsonPath("$.error", is("OWNER_ONLY")));
+        post(kassir, "/api/assistant/chat", ask("Borclar?")).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error", is("OWNER_ONLY")));
+        assertEquals(5, FakeModel.results.size(), "nothing ran for the employee");
 
         // the counter is per store and day; the limit stops the 5th question
-        FakeModel.script.clear();
+        post(owner, "/api/assistant/chat", ask("2")).andExpect(status().isOk()).andExpect(jsonPath("$.usedToday", is(2)));
         post(owner, "/api/assistant/chat", ask("3")).andExpect(status().isOk()).andExpect(jsonPath("$.usedToday", is(3)));
         post(owner, "/api/assistant/chat", ask("4")).andExpect(status().isOk());
         post(owner, "/api/assistant/chat", ask("5")).andExpect(status().isTooManyRequests())

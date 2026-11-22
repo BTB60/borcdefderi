@@ -526,8 +526,8 @@ public class DebtService {
             }
         }
         if (q != null && !q.isBlank()) {
-            f.clause("(LOWER(COALESCE(c.name, co.name)) LIKE LOWER(:q) OR COALESCE(c.phone, co.phone, '') LIKE :q "
-                    + "OR LOWER(COALESCE(d.description, '')) LIKE LOWER(:q))", "q", az.borcdefteri.common.Search.contains(q));
+            f.clause("(search_norm(COALESCE(c.name, co.name)) LIKE search_norm(:q) OR COALESCE(c.phone, co.phone, '') LIKE :q "
+                    + "OR search_norm(COALESCE(d.description, '')) LIKE search_norm(:q))", "q", az.borcdefteri.common.Search.contains(q));
         }
         if (from != null) {
             f.clause("d.debt_date >= :from", "from", from);

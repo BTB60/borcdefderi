@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Input, PageHeader, Select, Spinner, StatCard, Table, Td, Th } from "@/components/ui";
 import { ApiError, api, download } from "@/lib/api";
+import { useDebounced } from "@/lib/useDebounced";
 import { useAuth } from "@/lib/auth";
 import { DEBT_SECTION_SLUG, DEBT_STATUS_LABEL, DEBT_TYPE_LABEL, formatDate, formatMoney } from "@/lib/format";
 import type { Debt, DebtPage, DebtStatus, DebtType } from "@/lib/types";
@@ -25,6 +26,11 @@ export default function DebtSectionPage() {
 
   const [filters, setFilters] = useState<Filters>({ status: "", q: "", from: "", to: "" });
   const [applied, setApplied] = useState<Filters>(filters);
+  const liveQ = useDebounced(filters.q);
+  useEffect(() => {
+    setPage(0);
+    setApplied((a) => (a.q === liveQ ? a : { ...a, q: liveQ }));
+  }, [liveQ]);
   const [page, setPage] = useState(0);
   const [data, setData] = useState<DebtPage | null>(null);
   const [loading, setLoading] = useState(true);

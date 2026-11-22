@@ -1,9 +1,10 @@
 package az.borcdefteri.common;
 
 /**
- * LIKE patterns for user search text. Wildcards typed by the user (% and _) are escaped, and lower-casing is
- * left to PostgreSQL (use {@code LOWER(column) LIKE LOWER(:q)}) so both sides use the same rules — Java's
- * toLowerCase turns the Azerbaijani "İ" into "i̇", which never matched names such as "İlham".
+ * LIKE patterns for user search text. Wildcards typed by the user (% and _) are escaped, and case is left to
+ * PostgreSQL: use {@code search_norm(column) LIKE search_norm(:q)} (V48) so both sides use the same rules whatever
+ * the database locale — "əli" finds "Əli", "işıq"/"işiq" find "IŞIQ". Java's toLowerCase turns the Azerbaijani
+ * "İ" into "i̇", which never matched names such as "İlham".
  */
 public final class Search {
 

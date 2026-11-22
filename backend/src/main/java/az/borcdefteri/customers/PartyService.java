@@ -138,8 +138,8 @@ public class PartyService {
                        GREATEST(MAX(d.updated_at), (SELECT MAX(pp.paid_at) FROM payments pp JOIN debts d2 ON d2.id = pp.debt_id
                                                       WHERE pp.voided_at IS NULL AND d2.""" + fkColumn + " = p.id)) AS last_activity_at "
                 + "FROM " + table + " p LEFT JOIN debts d ON d." + fkColumn + " = p.id AND d.store_id = p.store_id" + typeFilter
-                + " WHERE p.store_id = :storeId AND (LOWER(p.name) LIKE LOWER(:q) OR COALESCE(p.phone, '') LIKE :q"
-                + (customers ? " OR LOWER(p.code) LIKE LOWER(:q)" : "") + ")"
+                + " WHERE p.store_id = :storeId AND (search_norm(p.name) LIKE search_norm(:q) OR COALESCE(p.phone, '') LIKE :q"
+                + (customers ? " OR search_norm(p.code) LIKE search_norm(:q)" : "") + ")"
                 + " GROUP BY p.id, p.name, p.phone, p.note, p.created_at" + (customers ? ", p.code, p.last_contact_at, p.discount_percent, p.credit_limit, p.tax_id, p.birthday" : "")
                 + " ORDER BY p.name")
                 .param("storeId", m.storeId()).param("q", like).param("today", tenant.today())

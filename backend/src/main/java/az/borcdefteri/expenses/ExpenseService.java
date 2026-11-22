@@ -171,7 +171,7 @@ public class ExpenseService {
         if (to != null) { where.append(" AND e.expense_date <= :t"); p.put("t", to); }
         if (categoryId != null) { where.append(" AND e.category_id = :c"); p.put("c", categoryId); }
         if (q != null && !q.isBlank()) {
-            where.append(" AND (LOWER(e.title) LIKE LOWER(:q) OR LOWER(COALESCE(e.payee, '')) LIKE LOWER(:q) OR LOWER(COALESCE(e.note, '')) LIKE LOWER(:q))");
+            where.append(" AND (search_norm(e.title) LIKE search_norm(:q) OR search_norm(COALESCE(e.payee, '')) LIKE search_norm(:q) OR search_norm(COALESCE(e.note, '')) LIKE search_norm(:q))");
             p.put("q", Search.contains(q));
         }
         int safeSize = Math.min(Math.max(size, 1), 200);

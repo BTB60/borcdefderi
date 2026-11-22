@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, StatCard, Table, Td, Th, useConfirm } from "@/components/ui";
 import { API_URL, ApiError, api, download, getToken, openProtected } from "@/lib/api";
+import { useDebounced } from "@/lib/useDebounced";
 import { useAuth } from "@/lib/auth";
 import { BulkPriceModal } from "@/components/BulkPriceModal";
 import { formatDateTime, formatMoney } from "@/lib/format";
@@ -41,12 +42,14 @@ export default function InventoryPage() {
   const [confirm, confirmDialog] = useConfirm();
   const manage = isOwner || can("INVENTORY");
 
+  const searchQ = useDebounced(filter.q);
+  const { categoryId, stock: stockFilter, active } = filter;
   const load = useCallback(() => {
     const qs = new URLSearchParams();
-    Object.entries(filter).forEach(([k, v]) => v && qs.set(k, v));
+    Object.entries({ q: searchQ, categoryId, stock: stockFilter, active }).forEach(([k, v]) => v && qs.set(k, v));
     api<Product[]>(`/api/products?${qs}`).then(setItems).catch((e) => setError(e instanceof ApiError ? e.message : "Yüklənmədi"));
     api<InventorySummary>("/api/products/summary").then(setSummary).catch(() => setSummary(null));
-  }, [filter]);
+  }, [searchQ, categoryId, stockFilter, active]);
   useEffect(load, [load]);
   useEffect(() => {
     api<ProductCategory[]>("/api/product-categories").then(setCategories).catch(() => setCategories([]));

@@ -59,8 +59,9 @@ public abstract class IntegrationTestBase {
 
     static {
         try {
-            // Windows locale names may contain non-ASCII characters; initdb needs a plain C locale.
-            PG = EmbeddedPostgres.builder().setLocaleConfig("locale", "C").start();
+            // Windows locale names may contain non-ASCII characters; initdb needs a plain C locale. UTF8 like
+            // production: under the default SQL_ASCII, text functions such as translate() work on bytes.
+            PG = EmbeddedPostgres.builder().setLocaleConfig("locale", "C").setLocaleConfig("encoding", "UTF8").start();
         } catch (IOException e) {
             throw new IllegalStateException("Embedded PostgreSQL could not start", e);
         }

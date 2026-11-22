@@ -20,6 +20,8 @@ import { Avatar } from "./Avatar";
 
 const SETTINGS_ICON = "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.2-1.3L14.3 3h-4l-.4 2.5a7.6 7.6 0 0 0-2.2 1.3l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.6l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2.2 1.3l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.2-1.3l2.4 1 2-3.4-2-1.6c.1-.4.1-.9.1-1.3Z";
 
+const DOWNLOAD_ICON = "M12 3v12m0 0-4-4m4 4 4-4M5 21h14";
+
 type NavItem = { href: string; label: string; icon: string; permission?: Permission; anyOf?: Permission[]; ownerOnly?: boolean; module?: string };
 const DEBT_PERMISSIONS: Permission[] = ["CUSTOMER_DEBTS", "COMPANY_RECEIVABLES", "COMPANY_PAYABLES"];
 
@@ -46,11 +48,13 @@ const STORE_NAV: NavItem[] = [
   { href: "/abunelik", label: "Abunəlik", icon: "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z", ownerOnly: true },
   { href: "/isciler", label: "İşçilər", icon: "M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 8a6 6 0 0 1 12 0", ownerOnly: true, module: "EMPLOYEES" },
   { href: "/fealiyyet", label: "İşçi fəaliyyəti", icon: "M4 19h16M7 16V9m5 7V5m5 11v-4", ownerOnly: true, module: "EMPLOYEES" },
+  { href: "/tetbiqler", label: "Tətbiqi yüklə", icon: DOWNLOAD_ICON },
   { href: "/profil", label: "Parametrlər", icon: SETTINGS_ICON },
 ];
 
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin", label: "Platforma idarəetməsi", icon: "M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7l3-7Z" },
+  { href: "/tetbiqler", label: "Tətbiqi yüklə", icon: DOWNLOAD_ICON },
   { href: "/profil", label: "Parametrlər", icon: SETTINGS_ICON },
 ];
 

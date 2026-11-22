@@ -25,6 +25,7 @@ const DEBT_PERMISSIONS: Permission[] = ["CUSTOMER_DEBTS", "COMPANY_RECEIVABLES",
 
 const STORE_NAV: NavItem[] = [
   { href: "/dashboard", label: "Panel", icon: "M3 13h8V3H3v10Zm10 8h8V11h-8v10ZM3 21h8v-6H3v6Zm10-18v6h8V3h-8Z", permission: "REPORTS" },
+  { href: "/komekci", label: "Köməkçi (AI)", icon: "M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3Zm6 11 .9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z" },
   { href: "/borclar/musteriler", label: "Müştəri borcları", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0", permission: "CUSTOMER_DEBTS" },
   { href: "/borclar/debitorlar", label: "Tədarükçünün bizə borcu", icon: "M3 6h18v12H3V6Zm0 4h18M7 15h4", permission: "COMPANY_RECEIVABLES" },
   { href: "/borclar/kreditorlar", label: "Bizim tədarükçüyə borcumuz", icon: "M4 4h16v16H4V4Zm4 4h8M8 12h8M8 16h5", permission: "COMPANY_PAYABLES" },

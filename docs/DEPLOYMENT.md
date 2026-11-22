@@ -46,6 +46,20 @@ Kök qovluqdakı `render.yaml` Blueprint-dir (servis: `borcdefteri-api`, `rootDi
 
 Dockerfile: `backend/Dockerfile` (multi-stage, JRE 17, qeyri-root istifadəçi, HEALTHCHECK).
 
+### Köməkçi (AI) — istəyə görə
+
+Köməkçi Claude API ilə işləyir. Açar olmasa, tətbiqdə "Köməkçi hələ qoşulmayıb" yazılır, başqa heç nə dəyişmir.
+
+1. <https://console.anthropic.com> — hesab açın, ödəniş üsulu əlavə edin, **API Keys → Create Key**.
+2. Render → `borcdefderi` servisi → **Environment**:
+   - `ANTHROPIC_API_KEY` = yaratdığınız açar (gizli saxlayın, Git-ə yazmayın)
+   - istəyə görə `ASSISTANT_DAILY_LIMIT` (mağaza üzrə gündəlik sual limiti, default `50`)
+   - istəyə görə `ASSISTANT_MODEL` (default `claude-opus-5-5`)
+3. **Save, rebuild, and deploy**.
+
+Köməkçi yalnız oxuyur (borclar, satış, qalıq, kassa, hesabat) və istifadəçinin öz icazələri ilə işləyir. Mağaza üzrə
+gündəlik sual və token sayı `assistant_usage` cədvəlində saxlanılır.
+
 ## 3. Vercel (Next.js web)
 
 1. Vercel-də **Add New → Project**, repozitoriyanı seçin.

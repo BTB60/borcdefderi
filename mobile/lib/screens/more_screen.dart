@@ -7,6 +7,7 @@ import '../models/models.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'assistant_screen.dart';
 import 'cash_screen.dart';
 import 'contact_screen.dart';
 import 'employees_screen.dart';
@@ -67,6 +68,15 @@ class MoreScreen extends StatelessWidget {
             padding: const EdgeInsets.only(top: 12),
             child: ErrorBanner('Abunəliyinizin müddəti ${sub.daysRemaining} gün sonra bitir. Abunəlik bölməsindən yeniləyin.'),
           ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.auto_awesome, color: navy),
+            title: const Text('Köməkçi (AI)'),
+            subtitle: const Text('Mağazanız haqqında adi dillə soruşun'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AssistantScreen(session: session))),
+          ),
+        ),
         if (me.isOwner && (!me.lockedModules.contains('POCKET') || me.lockedFor('POCKET')))
           Card(
             child: ListTile(

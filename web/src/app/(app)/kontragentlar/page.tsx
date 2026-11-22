@@ -9,6 +9,7 @@ import { ApiError, api, download } from "@/lib/api";
 import { PartyImportModal } from "@/components/PartyImportModal";
 import { useAuth } from "@/lib/auth";
 import { formatMoney } from "@/lib/format";
+import { useDebounced } from "@/lib/useDebounced";
 import type { Party } from "@/lib/types";
 
 type Tab = "customers" | "companies";
@@ -32,7 +33,7 @@ function PartiesList() {
     canCompanies && (search.get("tip") === "sirket" || !canCustomers) ? "companies" : "customers",
   );
   const [q, setQ] = useState("");
-  const [applied, setApplied] = useState("");
+  const applied = useDebounced(q.trim());
   const [items, setItems] = useState<Party[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -41,12 +42,14 @@ function PartiesList() {
   const [reload, setReload] = useState(0);
   const [importing, setImporting] = useState(false);
 
+  useEffect(() => setItems(null), [tab]);
   useEffect(() => {
-    setItems(null);
+    let current = true; // a slower answer for an earlier letter never replaces a newer list
     const qs = applied ? `?q=${encodeURIComponent(applied)}` : "";
     api<Party[]>(`/api/${tab}${qs}`)
-      .then(setItems)
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Siyahı yüklənmədi"));
+      .then((l) => current && setItems(l))
+      .catch((e) => current && setError(e instanceof ApiError ? e.message : "Siyahı yüklənmədi"));
+    return () => { current = false; };
   }, [tab, applied, reload]);
 
   const label = tab === "customers" ? "Müştəri" : "Şirkət";
@@ -77,10 +80,9 @@ function PartiesList() {
             <button role="tab" aria-selected={tab === "companies"} onClick={() => setTab("companies")} className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === "companies" ? "bg-navy-800 text-white shadow" : "text-slate-600 hover:text-navy-800"}`}>Şirkətlər</button>
           )}
         </div>
-        <form onSubmit={(e: FormEvent) => { e.preventDefault(); setApplied(q.trim()); }} className="flex flex-1 gap-2">
-          <Input placeholder={tab === "customers" ? "Ad, telefon və ya müştəri kodu (HP-…)" : "Ad və ya telefon üzrə axtar"} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Axtarış" />
-          <Button type="submit" variant="outline">Axtar</Button>
-        </form>
+        <div className="flex-1">
+          <Input type="search" placeholder={tab === "customers" ? "Ad, telefon və ya müştəri kodu (HP-…)" : "Ad və ya telefon üzrə axtar"} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Axtarış" />
+        </div>
       </div>
 
       <Card>

@@ -216,11 +216,11 @@ public class DashboardListService {
     }
 
     private static final String PARTY_SEARCH = """
-             AND (LOWER(COALESCE(c.name, co.name)) LIKE LOWER(:q) OR COALESCE(c.phone, co.phone, '') LIKE :q
-                  OR LOWER(COALESCE(c.code, '')) LIKE LOWER(:q) OR LOWER(COALESCE(d.description, '')) LIKE LOWER(:q)
-                  OR LOWER(COALESCE(d.note, '')) LIKE LOWER(:q)
+             AND (search_norm(COALESCE(c.name, co.name)) LIKE search_norm(:q) OR COALESCE(c.phone, co.phone, '') LIKE :q
+                  OR search_norm(COALESCE(c.code, '')) LIKE search_norm(:q) OR search_norm(COALESCE(d.description, '')) LIKE search_norm(:q)
+                  OR search_norm(COALESCE(d.note, '')) LIKE search_norm(:q)
                   OR EXISTS (SELECT 1 FROM financial_transactions t WHERE t.debt_id = d.id
-                             AND LOWER(COALESCE(t.receipt_number, '')) LIKE LOWER(:q)))""";
+                             AND search_norm(COALESCE(t.receipt_number, '')) LIKE search_norm(:q)))""";
 
     private void partyQuery(Query q, boolean customer, DebtType type, Filters f, boolean hasQ) {
         q.shape = Shape.PARTY;
@@ -238,10 +238,10 @@ public class DashboardListService {
             q.params.put("to", f.to());
         }
         if (hasQ) {
-            where.append(" AND (LOWER(p.name) LIKE LOWER(:q) OR COALESCE(p.phone, '') LIKE :q OR LOWER(COALESCE(")
-                    .append(code).append(", '')) LIKE LOWER(:q) OR EXISTS (SELECT 1 FROM financial_transactions t JOIN debts dd ON dd.id = t.debt_id ")
+            where.append(" AND (search_norm(p.name) LIKE search_norm(:q) OR COALESCE(p.phone, '') LIKE :q OR search_norm(COALESCE(")
+                    .append(code).append(", '')) LIKE search_norm(:q) OR EXISTS (SELECT 1 FROM financial_transactions t JOIN debts dd ON dd.id = t.debt_id ")
                     .append("WHERE dd.").append(customer ? "customer_id" : "company_id")
-                    .append(" = p.id AND LOWER(COALESCE(t.receipt_number, '')) LIKE LOWER(:q)))");
+                    .append(" = p.id AND search_norm(COALESCE(t.receipt_number, '')) LIKE search_norm(:q)))");
         }
         q.select = "SELECT p.id AS party_id, '" + (customer ? "CUSTOMER" : "COMPANY") + "' AS party_kind, :type AS debt_type, "
                 + "p.name, " + code + " AS code, p.phone, SUM(d.amount) AS total_debt, SUM(d.paid_amount) AS paid, "

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'common.dart';
 import 'swipe_actions.dart';
 import 'debt_edit_sheet.dart';
 import 'debt_increase_sheet.dart';
+import 'finance_cards.dart' show pickParty;
 import 'payment_edit_sheet.dart';
 import 'party_profile_screen.dart';
 import 'parties_screen.dart';
@@ -73,6 +75,7 @@ class DebtListScreen extends StatefulWidget {
 
 class _DebtListScreenState extends State<DebtListScreen> {
   final _search = TextEditingController();
+  Timer? _debounce;
   String _status = '';
   String _query = '';
   late Future<DebtPage> _page;
@@ -85,6 +88,7 @@ class _DebtListScreenState extends State<DebtListScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _search.dispose();
     super.dispose();
   }
@@ -137,7 +141,17 @@ class _DebtListScreenState extends State<DebtListScreen> {
                         _reload();
                       }),
               ),
+              // the list follows the box from the first letter
+              onChanged: (v) {
+                _debounce?.cancel();
+                _debounce = Timer(const Duration(milliseconds: 350), () {
+                  if (!mounted || v == _query) return;
+                  _query = v;
+                  _reload();
+                });
+              },
               onSubmitted: (v) {
+                _debounce?.cancel();
                 _query = v;
                 _reload();
               },
@@ -850,10 +864,14 @@ class _AddDebtScreenState extends State<AddDebtScreen> {
   @override
   void initState() {
     super.initState();
-    _parties = widget.session.api
-        .get(_isCustomer ? '/api/customers' : '/api/companies')
-        .then((j) => (j as List).map((e) => Party.fromJson(e as Map<String, dynamic>)).toList());
+    _parties = _loadParties();
   }
+
+  Future<List<Party>> _loadParties() => widget.session.api
+      .get(_isCustomer ? '/api/customers' : '/api/companies')
+      .then((j) => (j as List).map((e) => Party.fromJson(e as Map<String, dynamic>)).toList());
+
+  void _reloadParties() => setState(() => _parties = _loadParties());
 
   @override
   void dispose() {
@@ -921,14 +939,34 @@ class _AddDebtScreenState extends State<AddDebtScreen> {
             key: _formKey,
             child: ListView(padding: const EdgeInsets.all(16), children: [
               if (_error != null) ErrorBanner(_error!),
-              DropdownButtonFormField<String>(
-                key: ValueKey('party-${parties.length}-$_partyId'),
+              // tap → a search sheet that filters from the first letter (name, phone, code)
+              FormField<String>(
+                key: ValueKey('party-$_partyId'),
                 initialValue: _partyId,
-                isExpanded: true,
-                decoration: InputDecoration(labelText: _isCustomer ? 'Müştəri' : 'Şirkət'),
-                items: [for (final p in parties) DropdownMenuItem(value: p.id, child: Text(p.name, overflow: TextOverflow.ellipsis))],
-                onChanged: (v) => setState(() => _partyId = v),
-                validator: (v) => v == null ? 'Seçin' : null,
+                validator: (_) => _partyId == null ? 'Seçin' : null,
+                builder: (field) {
+                  final chosen = parties.where((p) => p.id == _partyId).firstOrNull;
+                  return InkWell(
+                    onTap: _busy
+                        ? null
+                        : () async {
+                            final id = await pickParty(context, session: widget.session, isCustomer: _isCustomer);
+                            if (id == null || !mounted) return;
+                            setState(() => _partyId = id);
+                            field.didChange(id);
+                            if (!parties.any((p) => p.id == id)) _reloadParties();
+                          },
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: _isCustomer ? 'Müştəri' : 'Şirkət',
+                        errorText: field.errorText,
+                        suffixIcon: const Icon(Icons.search),
+                      ),
+                      isEmpty: chosen == null,
+                      child: Text(chosen?.name ?? (_partyId == null ? '' : '…'), overflow: TextOverflow.ellipsis),
+                    ),
+                  );
+                },
               ),
               Align(
                 alignment: Alignment.centerLeft,

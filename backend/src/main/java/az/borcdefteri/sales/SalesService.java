@@ -410,7 +410,7 @@ public class SalesService {
         if (customerId != null) { where.append(" AND s.customer_id = :c"); p.put("c", customerId); }
         if (status != null && !status.isBlank()) { where.append(" AND s.status = :status"); p.put("status", status.toUpperCase(java.util.Locale.ROOT)); }
         if (q != null && !q.isBlank()) {
-            where.append(" AND (LOWER(s.number) LIKE LOWER(:q) OR LOWER(COALESCE(c.name, '')) LIKE LOWER(:q) OR LOWER(COALESCE(c.code, '')) LIKE LOWER(:q))");
+            where.append(" AND (search_norm(s.number) LIKE search_norm(:q) OR search_norm(COALESCE(c.name, '')) LIKE search_norm(:q) OR search_norm(COALESCE(c.code, '')) LIKE search_norm(:q))");
             p.put("q", Search.contains(q));
         }
         int safeSize = Math.min(Math.max(size, 1), 200);

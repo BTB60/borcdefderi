@@ -376,18 +376,23 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
     super.dispose();
   }
 
+  int _findSeq = 0;
+
   Future<void> _find(String q) async {
+    final seq = ++_findSeq; // only the newest letter's answer is shown
     if (q.trim().isEmpty) {
       setState(() => _results = []);
       return;
     }
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (seq != _findSeq) return;
     try {
       final r = (await widget.session.api.get('/api/products', query: {'active': 'true', 'q': q.trim()}) as List).cast<Map<String, dynamic>>();
-      if (mounted) setState(() => _results = r.take(8).toList());
+      if (mounted && seq == _findSeq) setState(() => _results = r.take(8).toList());
     } catch (e) {
       if (!OfflineSales.isOffline(e)) return;
       final r = await OfflineSales.of(widget.session).search(q);
-      if (mounted) setState(() => _results = r);
+      if (mounted && seq == _findSeq) setState(() => _results = r);
     }
   }
 

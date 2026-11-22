@@ -9,6 +9,7 @@ import { DayEndModal } from "@/components/sales/DayEnd";
 import { ShiftBar, ShiftList } from "@/components/sales/Shift";
 import { useReturnApproval } from "@/components/sales/ApprovalPin";
 import { ApiError, api, openProtected } from "@/lib/api";
+import { useDebounced } from "@/lib/useDebounced";
 import { useAuth } from "@/lib/auth";
 import { formatDate, formatDateTime, formatMoney, todayBaku } from "@/lib/format";
 import type { Sale, SalePage } from "@/lib/types";
@@ -71,11 +72,13 @@ function SalesList() {
   const [data, setData] = useState<SalePage | null>(null);
   const [open, setOpen] = useState<Sale | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const q = useDebounced(filter.q);
+  const { from, to, status } = filter;
   const load = useCallback(() => {
     const qs = new URLSearchParams({ size: "100" });
-    Object.entries(filter).forEach(([k, v]) => v && qs.set(k, v));
+    Object.entries({ from, to, q, status }).forEach(([k, v]) => v && qs.set(k, v));
     api<SalePage>(`/api/sales?${qs}`).then(setData).catch((e) => setError(e instanceof ApiError ? e.message : "Yüklənmədi"));
-  }, [filter]);
+  }, [from, to, q, status]);
   useEffect(load, [load]);
   return (
     <>

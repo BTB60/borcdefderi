@@ -20,6 +20,13 @@ export function WhatsAppIcon() {
   );
 }
 
+/** Name, phone or customer code containing the typed text (case-insensitive, Azerbaijani letters too). */
+function matchParties(list: Party[], q: string): Party[] {
+  const t = q.trim().toLocaleLowerCase("az");
+  if (!t) return list;
+  return list.filter((p) => [p.name, p.phone, p.code].some((v) => v && v.toLocaleLowerCase("az").includes(t)));
+}
+
 export function DebtFormModal({ type, initialPartyId = "", onClose, onSaved }: { type: DebtType; initialPartyId?: string; onClose: () => void; onSaved: () => void }) {
   const isCustomer = type === "CUSTOMER_DEBT";
   const [parties, setParties] = useState<Party[] | null>(null);
@@ -28,9 +35,14 @@ export function DebtFormModal({ type, initialPartyId = "", onClose, onSaved }: {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [partyQ, setPartyQ] = useState("");
   useEffect(() => {
     api<Party[]>(isCustomer ? "/api/customers" : "/api/companies").then(setParties).catch(() => setParties([]));
   }, [isCustomer]);
+  const matched = matchParties(parties ?? [], partyQ);
+  // the chosen one stays in the list even when the search no longer matches it
+  const chosen = parties?.find((p) => p.id === form.partyId);
+  const visibleParties = chosen && !matched.includes(chosen) ? [chosen, ...matched] : matched;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -75,10 +87,21 @@ export function DebtFormModal({ type, initialPartyId = "", onClose, onSaved }: {
       ) : (
         <form id="debt-form" onSubmit={submit} className="space-y-4">
           <Field label={isCustomer ? "Müştəri" : "Şirkət"} error={errors.partyId}>
-            <Select required value={form.partyId} onChange={(e) => setForm({ ...form, partyId: e.target.value })}>
-              <option value="">Seçin…</option>
-              {parties?.map((p) => <option key={p.id} value={p.id}>{p.name}{p.phone ? ` · ${p.phone}` : ""}</option>)}
-            </Select>
+            <div className="space-y-2">
+              {(parties?.length ?? 0) > 8 && (
+                <Input type="search" value={partyQ} onChange={(e) => {
+                  const q = e.target.value;
+                  setPartyQ(q);
+                  // the first match is chosen right away, so typing a few letters is enough
+                  const first = matchParties(parties ?? [], q)[0];
+                  if (q.trim() && first) setForm((f) => ({ ...f, partyId: first.id }));
+                }} placeholder="Ad, telefon və ya kod yazın…" aria-label={isCustomer ? "Müştəri axtar" : "Şirkət axtar"} />
+              )}
+              <Select required value={form.partyId} onChange={(e) => setForm({ ...form, partyId: e.target.value })}>
+                <option value="">Seçin…</option>
+                {visibleParties.map((p) => <option key={p.id} value={p.id}>{p.name}{p.phone ? ` · ${p.phone}` : ""}</option>)}
+              </Select>
+            </div>
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Məbləğ (₼)" error={errors.amount}>

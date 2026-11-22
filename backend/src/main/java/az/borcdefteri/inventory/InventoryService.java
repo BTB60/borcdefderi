@@ -170,7 +170,7 @@ public class InventoryService {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("s", m.storeId());
         if (q != null && !q.isBlank()) {
-            where.append(" AND (LOWER(p.name) LIKE LOWER(:q) OR LOWER(p.code) LIKE LOWER(:q) OR COALESCE(p.barcode, '') = :exact)");
+            where.append(" AND (search_norm(p.name) LIKE search_norm(:q) OR search_norm(p.code) LIKE search_norm(:q) OR COALESCE(p.barcode, '') = :exact)");
             params.put("q", Search.contains(q));
             params.put("exact", q.trim());
         }

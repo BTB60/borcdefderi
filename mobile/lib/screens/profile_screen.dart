@@ -334,7 +334,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _section('Qaytarma təsdiq PIN-i', [
                     Text(
                         _hasPin!
-                            ? 'PIN təyin edilib. Kassir limitdən böyük qaytarma edəndə bu PIN ilə təsdiq edirsiniz. Dəyişmək üçün yenisini yazın.'
+                            ? 'PIN təyin edilib. Satıcı qaytarma edəndə bu PIN ilə təsdiq edirsiniz. Dəyişmək üçün yenisini yazın.'
                             : 'Kassirin qaytarmasını təsdiq etmək üçün özünüzə PIN təyin edin (4–6 rəqəm).',
                         style: TextStyle(color: Colors.grey.shade700)),
                     const SizedBox(height: 12),

@@ -78,18 +78,6 @@ public class ReturnApprovalService {
         return load(m);
     }
 
-    @Transactional
-    public Policy updatePolicy(boolean enabled, BigDecimal limit) {
-        CurrentMember m = tenant.requireOwner();
-        BigDecimal l = Money.of(limit == null ? BigDecimal.ZERO : limit);
-        if (l.signum() < 0) throw ApiException.badRequest("INVALID_LIMIT", "Limit mənfi ola bilməz");
-        jdbc.sql("UPDATE stores SET return_approval_enabled = :e, return_approval_limit = :l WHERE id = :s")
-                .param("e", enabled).param("l", l).param("s", m.storeId()).update();
-        audit.log(m.storeId(), m.userId(), "RETURN_APPROVAL_POLICY", "STORE", m.storeId().toString(),
-                enabled ? "Qaytarma təsdiqi aktiv, limit " + l + " AZN" : "Qaytarma təsdiqi söndürüldü");
-        return load(m);
-    }
-
     /** The approver sets their own PIN; the account password guards it against a borrowed, unlocked session. */
     @Transactional
     public Policy setPin(String pin, String currentPassword) {
@@ -149,20 +137,17 @@ public class ReturnApprovalService {
     }
 
     /**
-     * Returns who approved a return of {@code amount}: null when no approval is needed, the caller when they may
-     * approve themselves, else the manager whose PIN was typed. Throws APPROVAL_REQUIRED / APPROVAL_PIN_INVALID /
-     * APPROVAL_LOCKED otherwise.
+     * Returns who approved a return of {@code amount}. Mandatory in every store: the owner and RETURN_APPROVE holders
+     * approve their own returns; anyone else (a cashier, a seller) needs a manager's PIN or manager card for every
+     * return or cancel with money in it. Throws APPROVAL_REQUIRED / APPROVAL_PIN_INVALID / APPROVAL_LOCKED otherwise.
+     * (The store's old enabled / limit columns are no longer read.)
      */
     UUID approve(CurrentMember m, BigDecimal amount, String pin) {
-        record Store(boolean enabled, BigDecimal limit) {}
-        Store s = jdbc.sql("SELECT return_approval_enabled, return_approval_limit FROM stores WHERE id = :id")
-                .param("id", m.storeId())
-                .query((rs, n) -> new Store(rs.getBoolean(1), rs.getBigDecimal(2))).single();
         if (m.has(PERM_RETURN_APPROVE)) return m.userId();
-        if (!s.enabled() || amount.compareTo(s.limit()) <= 0) return null;
+        if (amount == null || amount.signum() <= 0) return null;
         if (pin == null || pin.isBlank()) {
             throw ApiException.forbidden("APPROVAL_REQUIRED",
-                    "Bu qaytarma (" + Money.of(amount) + " AZN) menecer təsdiqi tələb edir. Menecer PIN-ini daxil edin");
+                    "Qaytarma (" + Money.of(amount) + " AZN) menecer təsdiqi tələb edir. Menecer PIN-ini yazın və ya menecer kartını skan edin");
         }
         boolean locked = jdbc.sql("SELECT approval_locked_until > now() FROM store_members WHERE id = :id")
                 .param("id", m.memberId()).query(Boolean.class).optional().map(Boolean.TRUE::equals).orElse(false);
@@ -315,7 +300,7 @@ public class ReturnApprovalService {
                        m.approval_card_hash IS NOT NULL AS has_card
                 FROM stores s JOIN store_members m ON m.store_id = s.id WHERE m.id = :id""")
                 .param("id", m.memberId())
-                .query((rs, n) -> new Policy(rs.getBoolean(1), Money.of(rs.getBigDecimal(2)), m.has(PERM_RETURN_APPROVE),
+                .query((rs, n) -> new Policy(true, Money.zero(), m.has(PERM_RETURN_APPROVE),
                         rs.getBoolean(3), rs.getBoolean(4))).single();
     }
 }

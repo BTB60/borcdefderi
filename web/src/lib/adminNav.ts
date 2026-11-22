@@ -17,7 +17,7 @@ export const ADMIN_GROUPS: { title: string; items: { key: AdminTab; label: strin
       { key: "revenue", label: "Gəlir hesabatı", d: "M4 20V10m6 10V4m6 16v-7m6 7H2" },
       { key: "costs", label: "Platforma xərcləri", d: "M4 6h16v12H4zM4 10h16M8 15h3m5 0h0M12 3v3" },
       { key: "plans", label: "Abunəlik paketləri", d: "M4 6h16v12H4zM8 6v12M4 10h4" },
-      { key: "growth", label: "Promo, sınaq, elanlar", d: "M4 10v4l12 5V5L4 10zm12-1a3 3 0 010 6M7 14l1 5h3" },
+      { key: "growth", label: "Promo, elan, reklam", d: "M4 10v4l12 5V5L4 10zm12-1a3 3 0 010 6M7 14l1 5h3" },
     ],
   },
   {

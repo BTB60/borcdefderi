@@ -22,10 +22,6 @@ public class SalesController {
     private final az.borcdefteri.payments.ReceiptLinks links;
     private final ReturnApprovalService approvals;
 
-    public record ApprovalPolicyUpdate(boolean enabled,
-                                       @jakarta.validation.constraints.DecimalMin("0.00")
-                                       @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) java.math.BigDecimal limit) {}
-
     public record ApprovalPinUpdate(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 6) String pin,
                                     @jakarta.validation.constraints.Size(max = 72) String currentPassword) {}
 
@@ -41,11 +37,6 @@ public class SalesController {
     @GetMapping("/return-approval")
     public ReturnApprovalService.Policy approvalPolicy() {
         return approvals.policy();
-    }
-
-    @PutMapping("/return-approval/policy")
-    public ReturnApprovalService.Policy updateApprovalPolicy(@Valid @RequestBody ApprovalPolicyUpdate req) {
-        return approvals.updatePolicy(req.enabled(), req.limit());
     }
 
     @PutMapping("/return-approval/pin")

@@ -22,6 +22,7 @@ export default function ReportsPage() {
   const cust = isOwner || can("CUSTOMER_DEBTS");
   const rec = isOwner || can("COMPANY_RECEIVABLES");
   const pay = isOwner || can("COMPANY_PAYABLES");
+  const inv = can("INVENTORY");
 
   const list: Report[] = [
     { title: "Müştərilər", text: "Kod, telefon, ümumi borc, ödənilən, qalıq, status", path: "/api/reports/customers/export", file: "musteriler", formats: ["xlsx"], show: reports && cust },
@@ -32,6 +33,9 @@ export default function ReportsPage() {
     { title: "Tədarükçünün bizə borcu", text: "Seçilmiş dövr üzrə", path: "/api/reports/debts/export?type=COMPANY_RECEIVABLE", file: "alacaqlar", dated: true, show: rec },
     { title: "Bizim tədarükçüyə borcumuz", text: "Seçilmiş dövr üzrə", path: "/api/reports/debts/export?type=COMPANY_PAYABLE", file: "borcumuz", dated: true, show: pay },
     { title: "Ödənişlər — gündəlik/aylıq", text: "Seçilmiş dövr üzrə, ödəniş üsulları ilə", path: "/api/reports/payments/export?", file: "odenisler", dated: true, show: reports },
+    { title: "Məhsul qalığı", text: "Bütün məhsullar: qalıq, alış və satış qiyməti, anbar dəyəri; az qalan və bitən rənglə", path: "/api/products/export", file: "mehsul-qaligi", formats: ["xlsx", "pdf"], show: inv },
+    { title: "Az qalan və bitən məhsullar", text: "Qalığı minimuma çatan və ya bitən məhsullar — sifariş üçün", path: "/api/products/export?stock=LOW", file: "az-qalan-mehsullar", formats: ["xlsx", "pdf"], show: inv },
+    { title: "Bitən məhsullar", text: "Qalığı 0 olan məhsullar", path: "/api/products/export?stock=OUT", file: "biten-mehsullar", formats: ["xlsx", "pdf"], show: inv },
   ];
 
   async function get(r: Report, format: "xlsx" | "pdf") {

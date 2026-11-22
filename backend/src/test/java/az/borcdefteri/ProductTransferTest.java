@@ -45,6 +45,47 @@ class ProductTransferTest extends IntegrationTestBase {
     }
 
     @Test
+    void stockReportFiltersLowAndOutOfStock() throws Exception {
+        String owner = register("Qalıq Bir");
+        activateSubscription(owner, "MONTHLY");
+        for (String[] p : new String[][]{{"Bol mal", "40"}, {"Az mal", "3"}, {"Bitən mal", null}}) {
+            Map<String, Object> b = new HashMap<>(Map.of("name", p[0], "purchasePrice", "1.00", "salePrice", "2.00", "minStock", "5"));
+            if (p[1] != null) b.put("initialStock", p[1]);
+            post(owner, "/api/products", b).andExpect(status().isCreated());
+        }
+
+        // LOW: at or below the minimum, the out-of-stock one included
+        byte[] low = get(owner, "/api/products/export?format=xlsx&stock=LOW").andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Content-Disposition", containsString("az-qalan-mehsullar-")))
+                .andReturn().getResponse().getContentAsByteArray();
+        try (Workbook wb = WorkbookFactory.create(new ByteArrayInputStream(low))) {
+            Sheet s = wb.getSheetAt(0);
+            assertEquals(2, s.getLastRowNum());
+            java.util.Set<String> names = new java.util.HashSet<>();
+            for (int i = 1; i <= s.getLastRowNum(); i++) names.add(s.getRow(i).getCell(2).getStringCellValue());
+            assertEquals(java.util.Set.of("Az mal", "Bitən mal"), names);
+        }
+        byte[] out = get(owner, "/api/products/export?format=xlsx&stock=out").andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        try (Workbook wb = WorkbookFactory.create(new ByteArrayInputStream(out))) {
+            assertEquals(1, wb.getSheetAt(0).getLastRowNum());
+            assertEquals("Bitən mal", wb.getSheetAt(0).getRow(1).getCell(2).getStringCellValue());
+        }
+        byte[] pdf = get(owner, "/api/products/export?format=pdf&stock=LOW").andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        assertEquals("%PDF", new String(pdf, 0, 4));
+        // without a filter: every product, as before
+        byte[] all = get(owner, "/api/products/export?format=xlsx").andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        try (Workbook wb = WorkbookFactory.create(new ByteArrayInputStream(all))) {
+            assertEquals(3, wb.getSheetAt(0).getLastRowNum());
+        }
+        get(owner, "/api/products/export?format=xlsx&stock=ALL").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("INVALID_STOCK_FILTER")));
+    }
+
+    @Test
     void exportEditImportRoundTrip() throws Exception {
         String owner = register("Import Bir");
         activateSubscription(owner, "MONTHLY");

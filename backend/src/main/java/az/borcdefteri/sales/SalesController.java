@@ -19,11 +19,41 @@ public class SalesController {
     private final SalesService sales;
     private final SaleReceiptService receipts;
     private final ProfitService profit;
+    private final ReturnApprovalService approvals;
 
-    public SalesController(SalesService sales, SaleReceiptService receipts, ProfitService profit) {
+    public record ApprovalPolicyUpdate(boolean enabled,
+                                       @jakarta.validation.constraints.DecimalMin("0.00")
+                                       @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) java.math.BigDecimal limit) {}
+
+    public record ApprovalPinUpdate(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 6) String pin,
+                                    @jakarta.validation.constraints.Size(max = 72) String currentPassword) {}
+
+    public SalesController(SalesService sales, SaleReceiptService receipts, ProfitService profit,
+                           ReturnApprovalService approvals) {
         this.sales = sales;
         this.receipts = receipts;
         this.profit = profit;
+        this.approvals = approvals;
+    }
+
+    @GetMapping("/return-approval")
+    public ReturnApprovalService.Policy approvalPolicy() {
+        return approvals.policy();
+    }
+
+    @PutMapping("/return-approval/policy")
+    public ReturnApprovalService.Policy updateApprovalPolicy(@Valid @RequestBody ApprovalPolicyUpdate req) {
+        return approvals.updatePolicy(req.enabled(), req.limit());
+    }
+
+    @PutMapping("/return-approval/pin")
+    public ReturnApprovalService.Policy setApprovalPin(@Valid @RequestBody ApprovalPinUpdate req) {
+        return approvals.setPin(req.pin(), req.currentPassword());
+    }
+
+    @DeleteMapping("/return-approval/pin")
+    public ReturnApprovalService.Policy clearApprovalPin() {
+        return approvals.clearPin();
     }
 
     @PostMapping("/sales")

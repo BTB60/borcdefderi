@@ -38,6 +38,7 @@ const permissionLabels = {
   'EXPENSES': 'Xərclər və büdcə',
   'INVENTORY': 'Anbar',
   'SALES': 'Satış',
+  'RETURN_APPROVE': 'Qaytarmanı təsdiq (menecer)',
 };
 
 /// Maps a server error code to a friendly message when the server text is not enough.

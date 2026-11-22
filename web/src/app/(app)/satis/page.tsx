@@ -231,32 +231,35 @@ function SaleModal({ sale, onClose, onChanged }: { sale: Sale; onClose: () => vo
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
+  // a return above the store's limit needs a manager's PIN: the server says so, we ask and send the same request again
+  const [pinAsk, setPinAsk] = useState<{ message: string; send: (pin: string) => Promise<void> } | null>(null);
   const active = sale.status === "COMPLETED";
 
-  async function doReturn() {
-    const items = Object.entries(ret).filter(([, v]) => num(v) > 0).map(([saleItemId, quantity]) => ({ saleItemId, quantity }));
-    if (!items.length) return;
+  async function withApproval(send: (pin: string | null) => Promise<Sale>, fallback: string) {
     setBusy(true);
     setError(null);
     try {
-      onChanged(await api<Sale>(`/api/sales/${sale.id}/returns`, { method: "POST", json: { items, reason: reason || null } }));
+      onChanged(await send(null));
       setRet({});
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Qaytarılmadı");
+      if (e instanceof ApiError && e.code === "APPROVAL_REQUIRED") {
+        setPinAsk({ message: e.message, send: async (pin) => { onChanged(await send(pin)); setRet({}); } });
+      } else {
+        setError(e instanceof ApiError ? e.message : fallback);
+      }
     } finally {
       setBusy(false);
     }
   }
+
+  async function doReturn() {
+    const items = Object.entries(ret).filter(([, v]) => num(v) > 0).map(([saleItemId, quantity]) => ({ saleItemId, quantity }));
+    if (!items.length) return;
+    await withApproval((approvalPin) => api<Sale>(`/api/sales/${sale.id}/returns`, { method: "POST", json: { items, reason: reason || null, approvalPin } }), "Qaytarılmadı");
+  }
   async function cancel() {
     if (!(await confirm(<>{sale.number} ləğv edilsin? Mallar anbara qayıdır, borc azalır, ödənilən pul kassadan qaytarılır.</>, { danger: true, confirmLabel: "Ləğv et" }))) return;
-    setBusy(true);
-    try {
-      onChanged(await api<Sale>(`/api/sales/${sale.id}/cancel`, { method: "POST", json: { reason: reason || null } }));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Ləğv edilmədi");
-    } finally {
-      setBusy(false);
-    }
+    await withApproval((approvalPin) => api<Sale>(`/api/sales/${sale.id}/cancel`, { method: "POST", json: { reason: reason || null, approvalPin } }), "Ləğv edilmədi");
   }
   return (
     <Modal open size="xl" title={`Satış ${sale.number}`} onClose={onClose}
@@ -285,7 +288,7 @@ function SaleModal({ sale, onClose, onChanged }: { sale: Sale; onClose: () => vo
         {sale.discount > 0 && <div className="flex justify-between"><span>Endirim</span><span>−{formatMoney(sale.discount)}</span></div>}
         <div className="flex justify-between font-semibold"><span>Yekun</span><span>{formatMoney(sale.total)}</span></div>
         <div className="flex justify-between text-slate-500"><span>Nağd / Kart / Borc</span><span>{formatMoney(sale.paidCash)} / {formatMoney(sale.paidCard)} / {formatMoney(sale.creditAmount)}</span></div>
-        {sale.returns.map((r) => <div key={r.id} className="flex justify-between text-rose-600"><span>Qaytarma {formatDate(r.returnedOn)} (borcdan {formatMoney(r.debtReduced)}, pul {formatMoney(r.refunded)})</span><span>−{formatMoney(r.amount)}</span></div>)}
+        {sale.returns.map((r) => <div key={r.id} className="flex justify-between text-rose-600"><span>Qaytarma {formatDate(r.returnedOn)} (borcdan {formatMoney(r.debtReduced)}, pul {formatMoney(r.refunded)}){r.approvedByName && r.approvedByName !== r.createdByName ? ` · təsdiq: ${r.approvedByName}` : ""}</span><span>−{formatMoney(r.amount)}</span></div>)}
       </div>
       {active && (
         <div className="mt-4 flex flex-wrap items-end gap-2">
@@ -295,6 +298,49 @@ function SaleModal({ sale, onClose, onChanged }: { sale: Sale; onClose: () => vo
       )}
       <p className="mt-3 text-xs text-slate-400">Qaytarma əvvəlcə bu satışın ödənilməmiş borcunu azaldır, qalanı kassadan pul kimi qaytarılır.</p>
       {confirmDialog}
+      {pinAsk && <ApprovalPinModal message={pinAsk.message} send={pinAsk.send} onClose={() => setPinAsk(null)} />}
+    </Modal>
+  );
+}
+
+/** The manager types their PIN on the cashier's screen. Wrong PIN: the error stays here and they try again. */
+function ApprovalPinModal({ message, send, onClose }: { message: string; send: (pin: string) => Promise<void>; onClose: () => void }) {
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [locked, setLocked] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (pin.length < 4) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await send(pin);
+      onClose();
+    } catch (err) {
+      setPin("");
+      setError(err instanceof ApiError ? err.message : "Təsdiqlənmədi");
+      if (err instanceof ApiError && err.code === "APPROVAL_LOCKED") setLocked(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open title="Menecer təsdiqi" onClose={onClose}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>İmtina</Button>
+        <Button variant="primary" type="submit" form="approval-pin" disabled={busy || locked || pin.length < 4}>{busy ? "Yoxlanılır…" : "Təsdiq et"}</Button>
+      </>}>
+      <p className="mb-3 text-sm text-slate-600">{message}</p>
+      {error && <div className="mb-3"><Alert>{error}</Alert></div>}
+      <form id="approval-pin" onSubmit={submit}>
+        <Field label="Menecer PIN-i">
+          <Input type="password" inputMode="numeric" autoComplete="off" autoFocus maxLength={6} pattern="[0-9]*" disabled={locked}
+            className="text-center text-2xl tracking-[0.5em]" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} />
+        </Field>
+      </form>
     </Modal>
   );
 }

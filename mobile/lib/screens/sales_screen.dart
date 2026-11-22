@@ -10,6 +10,7 @@ import 'barcode_scanner.dart';
 import 'cash_screen.dart' show newRequestId;
 import 'common.dart';
 import 'finance_cards.dart' show pickParty;
+import 'return_approval.dart';
 
 double _n(Object? v) => (v as num?)?.toDouble() ?? 0;
 double _p(String s) => double.tryParse(s.trim().replaceAll(',', '.')) ?? 0;
@@ -67,10 +68,11 @@ class _SalesScreenState extends State<SalesScreen> {
         ],
       ),
     );
-    if (ok != true) return;
+    if (ok != true || !mounted) return;
     try {
-      await widget.session.api.post('/api/sales/${s['id']}/cancel', {});
-      _reload();
+      final done = await withReturnApproval(context,
+          (pin) => widget.session.api.post('/api/sales/${s['id']}/cancel', {'approvalPin': pin}));
+      if (done != null) _reload();
     } catch (e) {
       if (mounted) showError(context, e);
     }

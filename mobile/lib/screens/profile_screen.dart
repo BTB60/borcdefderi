@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../api/api_client.dart';
@@ -70,6 +69,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _current = TextEditingController();
   final _next = TextEditingController();
   final _repeat = TextEditingController();
+  final _pin = TextEditingController();
+  final _pinPassword = TextEditingController();
+  bool? _hasPin; // null: this user does not approve returns
 
   ApiClient get _api => widget.session.api;
 
@@ -82,7 +84,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
-    for (final c in [_fullName, _phone, _email, _emailPassword, _storeName, _storePhone, _storeAddress, _current, _next, _repeat]) {
+    for (final c in [_fullName, _phone, _email, _emailPassword, _storeName, _storePhone, _storeAddress, _current, _next, _repeat, _pin, _pinPassword]) {
       c.dispose();
     }
     super.dispose();
@@ -93,7 +95,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _fill(Profile.fromJson(await _api.get('/api/profile') as Map<String, dynamic>));
     } catch (e) {
       setState(() => _error = errorMessage(e));
+      return;
     }
+    final me = widget.session.me;
+    if (me != null && me.can('RETURN_APPROVE') && !(_profile?.isSuperAdmin ?? false)) {
+      try {
+        final p = await _api.get('/api/return-approval') as Map<String, dynamic>;
+        if (mounted) setState(() => _hasPin = p['hasPin'] == true);
+      } catch (_) {
+        // no subscription etc.: the PIN section simply stays hidden
+      }
+    }
+  }
+
+  Future<void> _savePin() async {
+    if (!RegExp(r'^\d{4,6}$').hasMatch(_pin.text)) {
+      showError(context, const ApiException(0, 'INVALID_PIN', 'PIN 4–6 rəqəmdən ibarət olmalıdır'));
+      return;
+    }
+    await _run(() async {
+      final p = await _api.put('/api/return-approval/pin', {'pin': _pin.text, 'currentPassword': _pinPassword.text})
+          as Map<String, dynamic>;
+      _pin.clear();
+      _pinPassword.clear();
+      setState(() => _hasPin = p['hasPin'] == true);
+    }, 'Təsdiq PIN-i yadda saxlanıldı');
   }
 
   void _fill(Profile p) {
@@ -278,6 +304,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     TextField(controller: _storeAddress, decoration: const InputDecoration(labelText: 'Ünvan')),
                     const SizedBox(height: 12),
                     FilledButton(onPressed: _saveStore, child: const Text('Yadda saxla')),
+                  ]),
+                if (_hasPin != null)
+                  _section('Qaytarma təsdiq PIN-i', [
+                    Text(
+                        _hasPin!
+                            ? 'PIN təyin edilib. Kassir limitdən böyük qaytarma edəndə bu PIN ilə təsdiq edirsiniz. Dəyişmək üçün yenisini yazın.'
+                            : 'Kassirin qaytarmasını təsdiq etmək üçün özünüzə PIN təyin edin (4–6 rəqəm).',
+                        style: TextStyle(color: Colors.grey.shade700)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _pin,
+                      obscureText: true,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(labelText: 'Yeni PIN', counterText: ''),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(controller: _pinPassword, obscureText: true, decoration: const InputDecoration(labelText: 'Hesab şifrəsi')),
+                    const SizedBox(height: 12),
+                    FilledButton(onPressed: _savePin, child: Text(_hasPin! ? 'PIN-i dəyiş' : 'PIN təyin et')),
                   ]),
                 _section('Şifrəni dəyiş', [
                   TextField(controller: _current, obscureText: true, decoration: const InputDecoration(labelText: 'Cari şifrə')),

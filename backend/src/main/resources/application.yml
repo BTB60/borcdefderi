@@ -78,6 +78,12 @@ app:
     auth-requests-per-minute: ${AUTH_RATE_LIMIT_PER_MINUTE:20}
   subscription:
     reminder-days: 7
+  assistant:
+    # Köməkçi (AI): Claude API key from the Anthropic Console. Empty = the assistant is off.
+    api-key: ${ANTHROPIC_API_KEY:}
+    model: ${ASSISTANT_MODEL:claude-opus-5-5}
+    # questions per store per day (cost guard)
+    daily-limit: ${ASSISTANT_DAILY_LIMIT:50}
   telegram:
     # Telegram bot for the owner's evening report (create it with @BotFather). Empty = the feature is off.
     bot-token: ${TELEGRAM_BOT_TOKEN:}

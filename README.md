@@ -89,3 +89,4 @@ Backend-in `CORS_ALLOWED_ORIGINS` dəyərinə `http://localhost:3000` əlavə ed
 - [API referansı](docs/API.md)
 - [Deployment (Neon, Render, Vercel)](docs/DEPLOYMENT.md)
 - [Verilənlər bazası ehtiyat nüsxəsi və bərpa](docs/BACKUP.md)
+- [Kompüter tətbiqini Microsoft Store-a yerləşdirmə](docs/DESKTOP_STORE.md)

@@ -6,7 +6,8 @@ import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
-import type { Party, Product, Purchase } from "@/lib/types";
+import { PaymentModal } from "@/components/debts/DebtModals";
+import type { Debt, Party, Product, Purchase } from "@/lib/types";
 
 type Line = { product: Product; quantity: string; unitCost: string; expiryDate: string };
 
@@ -19,8 +20,21 @@ const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? c
 
 /** Mal qəbulu: goods from a supplier in one document (stock, purchase price and supplier debt at once). */
 export default function PurchasesPage() {
-  const { isOwner, can } = useAuth();
+  const { isOwner, can, me } = useAuth();
   const manage = isOwner || can("INVENTORY");
+  const canPay = isOwner || can("COMPANY_PAYABLES");
+  const [paying, setPaying] = useState<{ debt: Debt; purchaseId: string } | null>(null);
+
+  /** "Borcu ödə": the receipt's own supplier debt, paid with the usual payment form. */
+  async function payDebt(p: Purchase) {
+    if (!p.debtId) return;
+    setError(null);
+    try {
+      setPaying({ debt: await api<Debt>(`/api/debts/${p.debtId}`), purchaseId: p.id });
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Borc açılmadı");
+    }
+  }
   const [items, setItems] = useState<Purchase[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [viewing, setViewing] = useState<Purchase | null>(null);
@@ -44,7 +58,7 @@ export default function PurchasesPage() {
       <Card>
         {!items ? <Spinner /> : items.length === 0 ? <EmptyState title="Hələ mal qəbulu yoxdur" /> : (
           <Table>
-            <thead className="bg-slate-50/70"><tr><Th>Nömrə</Th><Th>Tarix</Th><Th>Təchizatçı</Th><Th>Qaimə</Th><Th className="text-right">Məbləğ</Th><Th className="text-right">Ödənildi</Th><Th className="text-right">Borc</Th><Th>İşçi</Th></tr></thead>
+            <thead className="bg-slate-50/70"><tr><Th>Nömrə</Th><Th>Tarix</Th><Th>Təchizatçı</Th><Th>Qaimə</Th><Th className="text-right">Məbləğ</Th><Th className="text-right">Ödənildi</Th><Th className="text-right">Borc</Th><Th>İşçi</Th>{canPay && <Th />}</tr></thead>
             <tbody className="divide-y divide-slate-100">
               {items.map((p) => (
                 <tr key={p.id} className="cursor-pointer hover:bg-slate-50" onClick={() => api<Purchase>(`/api/purchases/${p.id}`).then(setViewing)}>
@@ -56,6 +70,11 @@ export default function PurchasesPage() {
                   <Td className="text-right tabular-nums text-emerald-700">{formatMoney(p.paid)}</Td>
                   <Td className="text-right tabular-nums">{p.unpaid > 0 ? <span className="text-rose-600">{formatMoney(p.unpaid)}</span> : "—"}</Td>
                   <Td className="text-xs">{p.createdByName}</Td>
+                  {canPay && <Td className="text-right">
+                    {p.unpaid > 0 && p.debtId && (
+                      <Button variant="outline" onClick={(e) => { e.stopPropagation(); payDebt(p); }}>Borcu ödə</Button>
+                    )}
+                  </Td>}
                 </tr>
               ))}
             </tbody>
@@ -85,11 +104,23 @@ export default function PurchasesPage() {
             <Badge tone="navy">Cəmi {formatMoney(viewing.total)}</Badge>
             <Badge tone="emerald">Ödənildi {formatMoney(viewing.paid)}</Badge>
             {viewing.unpaid > 0 && <Badge tone="rose">Borc {formatMoney(viewing.unpaid)}</Badge>}
+            {canPay && viewing.unpaid > 0 && viewing.debtId && <Button variant="gold" onClick={() => payDebt(viewing)}>Borcu ödə</Button>}
             {!!viewing.returnedAmount && <Badge tone="amber">Qaytarılıb {formatMoney(viewing.returnedAmount)}</Badge>}
           </div>
           {viewing.note && <p className="mt-3 text-sm text-slate-500">{viewing.note}</p>}
           <ReturnToSupplier purchase={viewing} onDone={(p, msg) => { setViewing(p); setNotice(msg); load(); }} />
         </Modal>
+      )}
+      {paying && (
+        <PaymentModal debt={paying.debt} storeName={me?.storeName ?? ""} canNotify={false}
+          onClose={() => setPaying(null)}
+          onSaved={() => {
+            const id = paying.purchaseId;
+            setPaying(null);
+            setNotice("Təchizatçıya ödəniş qeyd edildi");
+            load();
+            if (viewing?.id === id) api<Purchase>(`/api/purchases/${id}`).then(setViewing).catch(() => undefined);
+          }} />
       )}
     </>
   );

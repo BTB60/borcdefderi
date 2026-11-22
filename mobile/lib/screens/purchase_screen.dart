@@ -5,6 +5,8 @@ import '../state/session.dart';
 import '../theme.dart';
 import 'barcode_scanner.dart';
 import 'cash_screen.dart' show newRequestId;
+import 'debts_screen.dart' show PaymentSheet;
+import '../models/models.dart' show Debt;
 import 'common.dart';
 import 'stock_tools.dart';
 
@@ -72,10 +74,20 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             const Divider(),
             _total('Cəmi', _n(p['total']), navy),
             _total('Ödənildi', _n(p['paid']), Colors.green.shade700),
-            if (_n(p['unpaid']) > 0) _total('Borca yazıldı', _n(p['unpaid']), Colors.red.shade700),
+            if (_n(p['unpaid']) > 0) _total('Qalan borc', _n(p['unpaid']), Colors.red.shade700),
             if (p['note'] != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('${p['note']}')),
             if (_n(p['returnedAmount']) > 0) _total('Tədarükçüyə qaytarılıb', _n(p['returnedAmount']), Colors.orange.shade800),
             const SizedBox(height: 12),
+            if (_n(p['unpaid']) > 0 && p['debtId'] != null && widget.session.me!.can('COMPANY_PAYABLES')) ...[
+              FilledButton.icon(
+                onPressed: () async {
+                  if (await _payDebt(ctx, '${p['debtId']}') && ctx.mounted) Navigator.pop(ctx);
+                },
+                icon: const Icon(Icons.payments_outlined),
+                label: Text('Borcu ödə · ${formatMoney(_n(p['unpaid']))}'),
+              ),
+              const SizedBox(height: 8),
+            ],
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade700),
               onPressed: () async {
@@ -94,6 +106,27 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       );
     } catch (e) {
       if (mounted) showError(context, e);
+    }
+  }
+
+  /// "Borcu ödə": pays this receipt's own supplier debt with the usual payment sheet. True when a payment was made.
+  Future<bool> _payDebt(BuildContext ctx, String debtId) async {
+    try {
+      final debt = Debt.fromJson(await widget.session.api.get('/api/debts/$debtId') as Map<String, dynamic>);
+      if (!ctx.mounted) return false;
+      final payment = await showModalBottomSheet<Map<String, dynamic>>(
+        context: ctx,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (_) => PaymentSheet(session: widget.session, debt: debt),
+      );
+      if (payment == null || !mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Təchizatçıya ödəniş qeyd edildi')));
+      _reload();
+      return true;
+    } catch (e) {
+      if (mounted) showError(context, e);
+      return false;
     }
   }
 

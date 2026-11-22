@@ -269,15 +269,23 @@ public class PurchaseService {
 
     private static final String SELECT = """
             SELECT p.id, p.number, p.company_id, c.name AS company_name, p.supplier_invoice, p.total, p.paid, p.debt_id,
-                   p.received_on, p.note, u.full_name AS created_by_name, p.created_at, p.returned_amount
-            FROM purchases p LEFT JOIN companies c ON c.id = p.company_id JOIN users u ON u.id = p.created_by""";
+                   p.received_on, p.note, u.full_name AS created_by_name, p.created_at, p.returned_amount,
+                   d.paid_amount AS debt_paid, d.remaining_amount AS debt_remaining
+            FROM purchases p LEFT JOIN companies c ON c.id = p.company_id JOIN users u ON u.id = p.created_by
+            LEFT JOIN debts d ON d.id = p.debt_id""";
 
     private static Purchase map(java.sql.ResultSet rs, List<Item> items) throws java.sql.SQLException {
         BigDecimal total = Money.of(rs.getBigDecimal("total"));
         BigDecimal paid = Money.of(rs.getBigDecimal("paid"));
+        BigDecimal unpaid = rs.getObject("company_id") != null ? Money.of(total.subtract(paid)) : Money.zero();
+        // with a supplier debt the debt is the truth: later payments (here or in "Bizim tədarükçüyə borcumuz") and
+        // returns to the supplier show on the receipt
+        if (rs.getBigDecimal("debt_remaining") != null) {
+            paid = Money.of(rs.getBigDecimal("debt_paid"));
+            unpaid = Money.of(rs.getBigDecimal("debt_remaining"));
+        }
         return new Purchase(rs.getObject("id", UUID.class), rs.getString("number"), rs.getObject("company_id", UUID.class),
-                rs.getString("company_name"), rs.getString("supplier_invoice"), total, paid,
-                rs.getObject("company_id") != null ? Money.of(total.subtract(paid)) : Money.zero(),
+                rs.getString("company_name"), rs.getString("supplier_invoice"), total, paid, unpaid,
                 rs.getObject("debt_id", UUID.class), rs.getObject("received_on", LocalDate.class), rs.getString("note"),
                 rs.getString("created_by_name"), rs.getObject("created_at", OffsetDateTime.class), items,
                 Money.of(rs.getBigDecimal("returned_amount")));

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Input, Modal, Spinner } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
-import { desktop, paperCss, receiptSettings } from "@/lib/desktop";
+import { desktop, paperCss, receiptSettings, printOnTill } from "@/lib/desktop";
 import { formatMoney, todayBaku } from "@/lib/format";
 
 type Summary = {
@@ -78,8 +78,8 @@ export function DayEndModal({ onClose }: { onClose: () => void }) {
     if (!html) return;
     const app = desktop();
     if (app) {
-      const ok = await app.printHtml(html);
-      setNote(ok ? "Gün sonu çeki printerə göndərildi" : "Çap alınmadı — printeri yoxlayın");
+      const problem = await printOnTill(app, html);
+      setNote(problem ? `Çap alınmadı: ${problem}` : "Gün sonu çeki printerə göndərildi");
       return;
     }
     const frame = document.createElement("iframe");

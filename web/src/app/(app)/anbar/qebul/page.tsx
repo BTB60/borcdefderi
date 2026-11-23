@@ -392,9 +392,10 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
         <Field label="Son ödəmə tarixi"><Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} disabled={!companyId} /></Field>
       </div>
 
-      <div className="relative mt-4">
-        <Input ref={searchRef} autoFocus value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onSearchKey}
+      <div className="relative mt-4 flex gap-2">
+        <Input ref={searchRef} autoFocus value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onSearchKey} className="flex-1"
           placeholder="Məhsul adı, kodu və ya barkodu (skaner ilə oxudun və Enter)" />
+        <Button type="button" variant="outline" className="shrink-0" onClick={() => setCreatingProduct(query.trim())}>+ Yeni məhsul</Button>
         {query.trim() && matches.length === 0 && (
           <div className="absolute z-10 mt-1 w-full rounded-xl bg-white p-3 text-sm shadow-lg ring-1 ring-slate-200">
             “{query.trim()}” tapılmadı.{" "}

@@ -62,6 +62,40 @@ export function desktop(): DesktopBridge | undefined {
   return typeof window === "undefined" ? undefined : window.hesabDesktop;
 }
 
+/** Printers that only make a file (PDF, XPS, OneNote, fax): a receipt "printed" there never comes out on paper. */
+export function isVirtualPrinter(name: string | null | undefined): boolean {
+  return !!name && /pdf|xps|onenote|fax|send to|to file/i.test(name);
+}
+
+/**
+ * Why receipts would not come out of the chosen printer, or null when it looks fine: Windows sees no printer,
+ * the chosen one is gone (unplugged, renamed), or it is a "print to file" printer.
+ */
+export async function printerProblem(app: DesktopBridge): Promise<string | null> {
+  try {
+    const [printers, chosen] = await Promise.all([app.getPrinters(), app.getPrinter()]);
+    if (printers.length === 0) return "Windows heç bir printer görmür. Çek printerini qoşun və drayverini quraşdırın.";
+    if (chosen && !printers.some((p) => p.name === chosen)) {
+      return `Seçilmiş printer “${chosen}” tapılmadı (söndürülüb və ya ayrılıb). Kassa → Parametrlər → Çek printeri bölməsində yenisini seçin.`;
+    }
+    const target = chosen || printers.find((p) => p.isDefault)?.name || null;
+    if (isVirtualPrinter(target)) {
+      return `Çek “${target}”-ə göndərilir — bu, real printer deyil, kağız çıxmır. Kassa → Parametrlər → Çek printeri bölməsində çek printerini seçin.`;
+    }
+    return null;
+  } catch {
+    return null; // an older app without the printer list: just try
+  }
+}
+
+/** Prints on the till and says what went wrong (null = sent to the printer). */
+export async function printOnTill(app: DesktopBridge, html: string): Promise<string | null> {
+  const problem = await printerProblem(app);
+  if (problem) return problem;
+  const ok = await app.printHtml(html).catch(() => false);
+  return ok ? null : "Printer cavab vermədi. Printerin yanılı olduğunu, kağızın və kabelin yerində olduğunu yoxlayın.";
+}
+
 /** True when the request never reached the server (no internet / server asleep), not when it answered with an error. */
 export function isNetworkError(e: unknown): boolean {
   return e instanceof TypeError;

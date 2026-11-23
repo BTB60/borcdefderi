@@ -17,6 +17,7 @@ type Delivery = {
   cancelReason: string | null; trackToken: string; createdByName: string;
 };
 type Courier = { userId: string; fullName: string; phone: string | null; activeDeliveries: number };
+type CourierCash = { courierUserId: string | null; courierName: string; deliveries: number; amount: number };
 type CourierSummary = { courierUserId: string | null; courierName: string; delivered: number; active: number; cancelled: number; fees: number; collected: number };
 
 const DELIVERY_STATUS: Record<Status, { label: string; tone: "slate" | "sky" | "amber" | "emerald" | "rose" }> = {
@@ -37,6 +38,8 @@ export default function DeliveriesPage() {
   const [tab, setTab] = useState<"ACTIVE" | "DELIVERED" | "CANCELLED" | "REPORT">("ACTIVE");
   const [items, setItems] = useState<Delivery[] | null>(null);
   const [report, setReport] = useState<CourierSummary[] | null>(null);
+  const [held, setHeld] = useState<CourierCash[] | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [couriers, setCouriers] = useState<Courier[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -44,7 +47,12 @@ export default function DeliveriesPage() {
 
   const fail = (e: unknown) => setError(e instanceof ApiError ? e.message : "Alınmadı");
   const load = useCallback(() => {
-    if (tab === "REPORT") { setReport(null); api<CourierSummary[]>("/api/deliveries/summary").then(setReport).catch(fail); return; }
+    if (tab === "REPORT") {
+      setReport(null);
+      api<CourierSummary[]>("/api/deliveries/summary").then(setReport).catch(fail);
+      api<CourierCash[]>("/api/deliveries/courier-cash").then(setHeld).catch(() => setHeld([]));
+      return;
+    }
     setItems(null);
     api<Delivery[]>(`/api/deliveries?status=${tab}`).then(setItems).catch(fail);
   }, [tab]);
@@ -52,6 +60,20 @@ export default function DeliveriesPage() {
   useEffect(() => { if (manager) api<Courier[]>("/api/deliveries/couriers").then(setCouriers).catch(() => setCouriers([])); }, [manager]);
 
   if (!manager && !courierOnly) return <Card><EmptyState title="Bu bölmə üçün icazəniz yoxdur" /></Card>;
+
+  /** Kuryer pulu təhvil verdi: everything the courier holds goes into the cash desk. */
+  async function handOver(c: CourierCash) {
+    setError(null);
+    try {
+      const r = await api<{ amount: number; deliveries: number }>("/api/deliveries/handover", {
+        method: "POST", json: c.courierUserId ? { courierUserId: c.courierUserId } : { courierName: c.courierName },
+      });
+      setNotice(`${c.courierName}: ${formatMoney(r.amount)} kassaya mədaxil edildi (${r.deliveries} çatdırılma)`);
+      load();
+    } catch (e) {
+      fail(e);
+    }
+  }
 
   async function act(d: Delivery, action: "pick-up" | "deliver" | "cancel", json?: unknown) {
     setError(null);
@@ -97,6 +119,7 @@ export default function DeliveriesPage() {
         subtitle={courierOnly ? "Sizə verilən sifarişlər. Götürəndə “Yola çıxdım”, təhvil verəndə “Çatdırdım” basın." : "Sifarişi kuryerə verin, statusu izləyin, müştəriyə izləmə linki göndərin."}
         actions={manager ? <Button onClick={() => setCreating(true)}>+ Yeni çatdırılma</Button> : undefined} />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
+      {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
       <div className="mb-4 inline-flex flex-wrap rounded-xl bg-slate-100 p-1" role="tablist">
         {tabs.map(([k, l]) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
@@ -105,6 +128,22 @@ export default function DeliveriesPage() {
       </div>
 
       {tab === "REPORT" ? (
+        <>
+        <Card className="mb-4">
+          <h2 className="mb-1 font-semibold text-navy-800">Kuryerlərdə olan pul</h2>
+          <p className="mb-3 text-sm text-slate-500">Çatdırılanda müştəridən alınıb, hələ kassaya təhvil verilməyib.</p>
+          {!held ? <Spinner /> : held.length === 0 ? <p className="text-sm text-slate-500">Kuryerlərdə pul qalmayıb.</p> : (
+            <div className="divide-y divide-slate-100">
+              {held.map((c) => (
+                <div key={(c.courierUserId ?? "") + c.courierName} className="flex flex-wrap items-center gap-3 py-2 text-sm">
+                  <span className="flex-1 font-medium text-navy-800">{c.courierName}<span className="ml-2 text-xs font-normal text-slate-500">{c.deliveries} çatdırılma</span></span>
+                  <span className="font-serif text-lg font-semibold tabular-nums">{formatMoney(c.amount)}</span>
+                  {(isOwner || can("CASH")) && <Button variant="gold" className="px-3 py-1.5" onClick={() => handOver(c)}>Pulu təhvil aldım</Button>}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
         <Card>
           <p className="mb-3 text-sm text-slate-500">Bu ay üzrə. “Alınan” — kuryerin müştəridən aldığı nağd pul (mağazaya təhvil verməlidir).</p>
           {!report ? <Spinner /> : report.length === 0 ? <EmptyState title="Bu ay kuryerə verilən sifariş yoxdur" /> : (
@@ -125,6 +164,7 @@ export default function DeliveriesPage() {
             </Table>
           )}
         </Card>
+        </>
       ) : !items ? <Spinner /> : items.length === 0 ? (
         <Card><EmptyState title={tab === "ACTIVE" ? "Aktiv çatdırılma yoxdur" : "Siyahı boşdur"} /></Card>
       ) : (

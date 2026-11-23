@@ -50,6 +50,7 @@ const STORE_NAV: NavItem[] = [
   { href: "/filiallar", label: "Filiallar", icon: "M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6", ownerOnly: true },
   { href: "/abunelik", label: "Abunəlik", icon: "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z", ownerOnly: true },
   { href: "/isciler", label: "İşçilər", icon: "M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 8a6 6 0 0 1 12 0", ownerOnly: true, module: "EMPLOYEES" },
+  { href: "/maas", label: "İşçi maaşı", icon: "M3 7h18v10H3V7Zm9 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM6 10v4m12-4v4", ownerOnly: true, module: "EMPLOYEES" },
   { href: "/davamiyyet", label: "Davamiyyət", icon: "M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" },
   { href: "/fealiyyet", label: "İşçi fəaliyyəti", icon: "M4 19h16M7 16V9m5 7V5m5 11v-4", ownerOnly: true, module: "EMPLOYEES" },
   { href: "/tetbiqler", label: "Tətbiqi yüklə", icon: DOWNLOAD_ICON, ownerOnly: true },

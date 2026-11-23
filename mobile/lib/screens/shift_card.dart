@@ -9,7 +9,7 @@ double _n(Object? v) => (v as num?)?.toDouble() ?? 0;
 
 const _kind = {
   'SALE': 'Satış (nağd)', 'SALE_REFUND': 'Qaytarılan pul', 'DEBT_COLLECTION': 'Borc ödənişi', 'SUPPLIER_PAYMENT': 'Tədarükçüyə ödəniş',
-  'EXPENSE': 'Xərc', 'DEPOSIT': 'Mədaxil', 'WITHDRAWAL': 'Məxaric', 'PURCHASE': 'Mal alışı', 'TRANSFER_IN': 'Köçürmə (daxil)',
+  'EXPENSE': 'Xərc', 'DEPOSIT': 'Mədaxil', 'WITHDRAWAL': 'Məxaric', 'PURCHASE': 'Mal alışı', 'COURIER_HANDOVER': 'Kuryer pulu', 'TRANSFER_IN': 'Köçürmə (daxil)',
   'TRANSFER_OUT': 'Köçürmə (çıxış)', 'COUNT_ADJUSTMENT': 'Sayım fərqi', 'PAYMENT_REVERSAL': 'Ödəniş ləğvi', 'EXPENSE_REVERSAL': 'Xərc qaytarıldı',
 };
 

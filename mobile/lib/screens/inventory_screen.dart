@@ -501,11 +501,32 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 }
 
+/// Mal qəbulu: the full product card for a product that is not in the store yet. Its "Məhsul Sayı" is the quantity of
+/// the receipt line (the stock comes in with the receipt). Returns the new product and that quantity.
+Future<({Map<String, dynamic> product, double qty})?> createProductForReceipt(BuildContext context, Session session,
+    {String? barcode, String? name, String? supplierId}) async {
+  final r = await showModalBottomSheet<Object>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    useSafeArea: true,
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(bottom: sheetBottomInset(ctx)),
+      child: _ProductSheet(session: session, barcode: barcode, name: name, supplierId: supplierId, forReceipt: true),
+    ),
+  );
+  return r is ({Map<String, dynamic> product, double qty}) ? r : null;
+}
+
 class _ProductSheet extends StatefulWidget {
-  const _ProductSheet({required this.session, this.barcode, this.product});
+  const _ProductSheet({required this.session, this.barcode, this.product, this.name, this.supplierId, this.forReceipt = false});
 
   final Session session;
   final String? barcode;
+  final String? name;
+  final String? supplierId;
+  /// Made from a goods receipt: the count goes to the receipt line, not to the opening stock.
+  final bool forReceipt;
   /// Editing an existing product (null = a new one).
   final Map<String, dynamic>? product;
 
@@ -523,6 +544,8 @@ class _ProductSheetState extends State<_ProductSheet> {
   final _unit = TextEditingController(text: 'ədəd');
   final _old = TextEditingController();
   final _wholesale = TextEditingController();
+  final _warranty = TextEditingController();
+  bool _serial = false;
   ({Uint8List bytes, bool png})? _image;
   bool _busy = false;
   String? _error;
@@ -533,7 +556,13 @@ class _ProductSheetState extends State<_ProductSheet> {
   void initState() {
     super.initState();
     final p = widget.product;
-    if (p == null) return;
+    if (p == null) {
+      if (widget.name != null) _name.text = widget.name!;
+      if (widget.forReceipt) _stock.text = '1';
+      return;
+    }
+    _serial = p['trackSerial'] == true;
+    _warranty.text = p['warrantyMonths'] == null ? '' : '${p['warrantyMonths']}';
     String money(Object? v) => v == null ? '' : _n(v).toStringAsFixed(2);
     _name.text = '${p['name'] ?? ''}';
     _barcode.text = '${p['barcode'] ?? ''}';
@@ -547,7 +576,7 @@ class _ProductSheetState extends State<_ProductSheet> {
 
   @override
   void dispose() {
-    for (final c in [_name, _barcode, _buy, _sell, _stock, _min, _unit, _old, _wholesale]) {
+    for (final c in [_name, _barcode, _buy, _sell, _stock, _min, _unit, _old, _wholesale, _warranty]) {
       c.dispose();
     }
     super.dispose();
@@ -579,6 +608,8 @@ class _ProductSheetState extends State<_ProductSheet> {
           // empty = remove (0), as the server expects
           'oldPrice': _d(_old).isEmpty ? '0' : _d(_old),
           'wholesalePrice': _d(_wholesale).isEmpty ? '0' : _d(_wholesale),
+          'trackSerial': _serial,
+          'warrantyMonths': int.tryParse(_warranty.text.trim()) ?? 0,
         });
         if (_image != null) await _uploadProductImage(widget.session, '${cur['id']}', _image!);
         if (mounted) Navigator.pop(context, '${_name.text.trim()}: dəyişikliklər saxlanıldı');
@@ -597,19 +628,28 @@ class _ProductSheetState extends State<_ProductSheet> {
         'salePrice': _d(_sell),
         'unit': _unit.text.trim(),
         'minStock': _d(_min).isEmpty ? '0' : _d(_min),
-        'initialStock': _d(_stock).isEmpty ? null : _d(_stock),
+        'initialStock': widget.forReceipt || _d(_stock).isEmpty ? null : _d(_stock),
+        'supplierId': widget.supplierId,
+        'trackSerial': _serial,
+        'warrantyMonths': int.tryParse(_warranty.text.trim()) ?? 0,
         'oldPrice': _d(_old).isEmpty ? null : _d(_old),
         'wholesalePrice': _d(_wholesale).isEmpty ? null : _d(_wholesale),
       }) as Map<String, dynamic>;
       var msg = 'Məhsul əlavə edildi: ${p['code']}';
+      var saved = p;
       if (_image != null) {
         try {
-          await _uploadProductImage(widget.session, '${p['id']}', _image!);
+          saved = await _uploadProductImage(widget.session, '${p['id']}', _image!);
         } catch (e) {
           msg = '$msg. Şəkil yüklənmədi: ${errorMessage(e)}';
         }
       }
-      if (mounted) Navigator.pop(context, msg);
+      if (!mounted) return;
+      if (widget.forReceipt) {
+        Navigator.pop(context, (product: saved, qty: double.tryParse(_d(_stock)) ?? 1));
+      } else {
+        Navigator.pop(context, msg);
+      }
     } catch (e) {
       if (mounted) setState(() => _error = errorMessage(e));
     } finally {
@@ -765,7 +805,8 @@ class _ProductSheetState extends State<_ProductSheet> {
               child: TextField(
                 controller: _stock,
                 keyboardType: _decimal,
-                decoration: const InputDecoration(labelText: 'Məhsul Sayı', hintText: '0'),
+                decoration: InputDecoration(labelText: 'Məhsul Sayı', hintText: '0',
+                    helperText: widget.forReceipt ? 'Qaiməyə bu say ilə düşür' : null),
               ),
             ),
             const SizedBox(width: 12),
@@ -785,6 +826,19 @@ class _ProductSheetState extends State<_ProductSheet> {
             prefixIcon: Icon(Icons.notifications_active_outlined),
           ),
         ),
+        _section('Zəmanət və IMEI'),
+        TextField(
+          controller: _warranty,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Zəmanət (ay)', helperText: 'Boş = zəmanət yoxdur', prefixIcon: Icon(Icons.verified_outlined)),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _serial,
+          onChanged: (v) => setState(() => _serial = v),
+          title: const Text('IMEI / seriya nömrəsi soruşulsun'),
+          subtitle: const Text('Telefon, elektronika: kassada hər ədədin nömrəsi oxudulur'),
+        ),
         const SizedBox(height: 24),
         SizedBox(
           height: 52,
@@ -793,7 +847,7 @@ class _ProductSheetState extends State<_ProductSheet> {
             icon: _busy
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.check),
-            label: const Text('Məhsulu saxla', style: TextStyle(fontSize: 16)),
+            label: Text(widget.forReceipt ? 'Yarat və qaiməyə əlavə et' : 'Məhsulu saxla', style: const TextStyle(fontSize: 16)),
           ),
         ),
       ]);

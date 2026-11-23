@@ -8,6 +8,7 @@ import 'cash_screen.dart' show newRequestId;
 import 'debts_screen.dart' show PaymentSheet;
 import '../models/models.dart' show Debt;
 import 'common.dart';
+import 'inventory_screen.dart';
 import 'stock_tools.dart';
 
 double _n(Object? v) => v is num ? v.toDouble() : double.tryParse('${v ?? ''}'.replaceAll(',', '.')) ?? 0;
@@ -253,11 +254,16 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 class _Line {
   _Line(this.product)
       : qty = TextEditingController(text: '1'),
-        cost = TextEditingController(text: _n(product['purchasePrice']).toStringAsFixed(2));
+        cost = TextEditingController(text: _n(product['purchasePrice']).toStringAsFixed(2)),
+        sell = TextEditingController(text: _n(product['salePrice']).toStringAsFixed(2));
 
   final Map<String, dynamic> product;
   final TextEditingController qty;
   final TextEditingController cost;
+  /// New sale price, saved with the receipt when it differs.
+  final TextEditingController sell;
+
+  bool get priceChanged => _r2(_n(sell.text)) != _r2(_n(product['salePrice']));
   /// Son istifadə tarixi of this batch (optional).
   DateTime? expiry;
 
@@ -266,6 +272,7 @@ class _Line {
   void dispose() {
     qty.dispose();
     cost.dispose();
+    sell.dispose();
   }
 }
 
@@ -329,16 +336,27 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
 
   double get _total => _r2(_lines.fold<double>(0, (s, l) => s + l.total));
 
-  void _add(Map<String, dynamic> p) {
+  void _add(Map<String, dynamic> p, [double qty = 1]) {
     setState(() {
       final i = _lines.indexWhere((l) => l.product['id'] == p['id']);
       if (i >= 0) {
-        _lines[i].qty.text = _q(_n(_lines[i].qty.text) + 1);
+        _lines[i].qty.text = _q(_n(_lines[i].qty.text) + qty);
       } else {
-        _lines.add(_Line(p));
+        _lines.add(_Line(p)..qty.text = _q(qty));
       }
       _search.clear();
     });
+  }
+
+  /// A product that is not in the store yet: the full product card, then straight into the receipt.
+  Future<void> _newProduct({String? code}) async {
+    final q = code ?? _search.text.trim();
+    final looksLikeCode = RegExp(r'^[0-9A-Za-z-]{4,64}$').hasMatch(q) && RegExp(r'\d').hasMatch(q);
+    final r = await createProductForReceipt(context, widget.session,
+        barcode: looksLikeCode ? q : null, name: q.isNotEmpty && !looksLikeCode ? q : null, supplierId: _companyId);
+    if (r == null || !mounted) return;
+    setState(() => _products = [..._products, r.product]);
+    _add(r.product, r.qty > 0 ? r.qty : 1);
   }
 
   List<Map<String, dynamic>> get _matches {
@@ -351,18 +369,27 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   }
 
   Future<void> _scan() async {
+    final unknown = <String>[];
     await Navigator.of(context).push(MaterialPageRoute(
       fullscreenDialog: true,
       builder: (_) => BarcodeScannerScreen(
         title: 'Gələn malı skan edin',
         onCode: (code) async {
           final p = _products.where((x) => x['barcode'] == code || x['code'] == code).firstOrNull;
-          if (p == null) return 'Tapılmadı: $code';
+          if (p == null) {
+            if (!unknown.contains(code)) unknown.add(code);
+            return 'Yeni məhsul: $code — skan bitəndə kartını dolduracaqsınız';
+          }
           _add(p);
           return '${p['name']} əlavə edildi';
         },
       ),
     ));
+    // unknown barcodes become new products one by one, with the full card
+    for (final code in unknown) {
+      if (!mounted) return;
+      await _newProduct(code: code);
+    }
   }
 
   Future<void> _save() async {
@@ -409,6 +436,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               'productId': l.product['id'],
               'quantity': _n(l.qty.text),
               'unitCost': _r2(_n(l.cost.text)),
+              if (l.priceChanged) 'salePrice': _r2(_n(l.sell.text)),
               if (l.expiry != null) 'expiryDate': l.expiry!.toIso8601String().substring(0, 10),
             },
         ],
@@ -486,6 +514,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 _add(exact.first);
               } else if (matches.length == 1) {
                 _add(matches.first);
+              } else if (q.trim().isNotEmpty && matches.isEmpty) {
+                _newProduct();
               }
             },
             decoration: InputDecoration(
@@ -504,6 +534,18 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               onTap: () => _add(p),
             ),
           const SizedBox(height: 8),
+          if (_search.text.trim().isNotEmpty && matches.isEmpty)
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.add_box_outlined, color: gold),
+              title: Text('“${_search.text.trim()}” tapılmadı'),
+              subtitle: const Text('Yeni məhsul kimi əlavə et'),
+              onTap: _newProduct,
+            ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(onPressed: () => _newProduct(code: ''), icon: const Icon(Icons.add), label: const Text('Yeni məhsul')),
+          ),
           if (_lines.isEmpty) const EmptyState(title: 'Məhsul əlavə edin', text: 'Axtarın və ya barkodu skan edin'),
           for (final l in _lines)
             Card(
@@ -544,6 +586,33 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                       width: 90,
                       child: Text(formatMoney(l.total), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w800)),
                     ),
+                    const SizedBox(width: 8),
+                  ]),
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: l.sell,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          labelText: 'Satış qiyməti',
+                          isDense: true,
+                          helperText: l.priceChanged ? 'əvvəl ${formatMoney(_n(l.product['salePrice']))}' : null,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Builder(builder: (_) {
+                      final cost = _n(l.cost.text), sell = _n(l.sell.text);
+                      if (cost <= 0 || sell <= 0) return const SizedBox(width: 90);
+                      final loss = sell <= cost;
+                      return SizedBox(
+                        width: 90,
+                        child: Text('${loss ? 'zərər! ' : ''}${((sell - cost) / cost * 100).round()}%',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(color: loss ? Colors.red.shade700 : Colors.grey.shade600, fontWeight: loss ? FontWeight.w700 : null)),
+                      );
+                    }),
                     const SizedBox(width: 8),
                   ]),
                   TextButton.icon(

@@ -340,6 +340,11 @@ Təşəkkür edirik!`;
     if (!q) return;
     const exact = (products ?? []).find((p) => p.barcode === q || p.code.toLowerCase() === q.toLowerCase());
     if (exact) { pick(exact); setSearch(""); return; }
+    // a bonus card (the customer's code, e.g. HP-000123) or the customer's phone picks the customer
+    const digits = q.replace(/\D/g, "");
+    const card = customers.find((c) => (c.code && c.code.toLowerCase() === q.toLowerCase())
+      || (digits.length >= 9 && (c.phone ?? "").replace(/\D/g, "").endsWith(digits.slice(-9))));
+    if (card) { pickCustomer(card); setSearch(""); return; }
     // scale label (tərəzi barkodu): 2X PPPPP WWWWW C — product code (PLU) and weight in grams
     const weighed = /^2\d(\d{5})(\d{5})\d$/.exec(q);
     if (weighed) {

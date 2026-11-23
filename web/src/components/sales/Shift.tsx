@@ -17,7 +17,7 @@ export type ShiftReport = {
 const KIND: Record<string, string> = {
   SALE: "Satış (nağd)", SALE_REFUND: "Qaytarılan pul", DEBT_COLLECTION: "Borc ödənişi", SUPPLIER_PAYMENT: "Təchizatçıya ödəniş",
   EXPENSE: "Xərc", DEPOSIT: "Mədaxil", WITHDRAWAL: "Məxaric", OPENING: "Açılış", TRANSFER_IN: "Köçürmə (daxil)",
-  TRANSFER_OUT: "Köçürmə (çıxış)", PURCHASE: "Mal alışı", COUNT_ADJUSTMENT: "Sayım fərqi", PAYMENT_REVERSAL: "Ödəniş ləğvi",
+  TRANSFER_OUT: "Köçürmə (çıxış)", PURCHASE: "Mal alışı", COURIER_HANDOVER: "Kuryer pulu", COUNT_ADJUSTMENT: "Sayım fərqi", PAYMENT_REVERSAL: "Ödəniş ləğvi",
   EXPENSE_REVERSAL: "Xərc qaytarıldı",
 };
 

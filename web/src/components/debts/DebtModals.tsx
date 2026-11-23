@@ -83,7 +83,7 @@ export function DebtFormModal({ type, initialPartyId = "", onClose, onSaved }: {
     <Modal open title={`Borc əlavə et — ${DEBT_TYPE_LABEL[type]}`} onClose={onClose} footer={footer}>
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       {parties && parties.length === 0 ? (
-        <EmptyState title={`Əvvəlcə ${isCustomer ? "müştəri" : "şirkət"} əlavə edin`} text="Müştəri və şirkət bölməsindən qeyd yaradın." />
+        <EmptyState title={`Əvvəlcə ${isCustomer ? "müştəri" : "tədarükçü"} əlavə edin`} text="“Müştəri və tədarükçülər” bölməsindən qeyd yaradın." />
       ) : (
         <form id="debt-form" onSubmit={submit} className="space-y-4">
           <Field label={isCustomer ? "Müştəri" : "Şirkət"} error={errors.partyId}>

@@ -268,7 +268,7 @@ export function PickPartyModal({ isCustomer, title, onPick, onClose }: { isCusto
       <Input autoFocus placeholder={isCustomer ? "Ad, telefon və ya müştəri kodu" : "Şirkət adı və ya telefon"} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Axtarış" />
       {error && <div className="mt-3"><Alert>{error}</Alert></div>}
       {!items && !error && <Spinner />}
-      {items && items.length === 0 && <p className="mt-4 text-sm text-slate-500">Tapılmadı. Əvvəlcə “Müştəri və şirkətlər” bölməsində əlavə edin.</p>}
+      {items && items.length === 0 && <p className="mt-4 text-sm text-slate-500">Tapılmadı. Əvvəlcə “Müştəri və tədarükçülər” bölməsində əlavə edin.</p>}
       <ul className="mt-3 max-h-80 divide-y divide-slate-100 overflow-y-auto">
         {items?.map((p) => (
           <li key={p.id}>

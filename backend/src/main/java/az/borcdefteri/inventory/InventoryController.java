@@ -75,6 +75,18 @@ public class InventoryController {
         return inventory.product(id);
     }
 
+    /** Ölçü / rəng variantları of a model product. */
+    @GetMapping("/products/{id}/variants")
+    public List<InventoryService.Product> variants(@PathVariable UUID id) {
+        return inventory.variants(id);
+    }
+
+    @PostMapping("/products/{id}/variants")
+    @ResponseStatus(HttpStatus.CREATED)
+    public List<InventoryService.Product> createVariants(@PathVariable UUID id, @Valid @RequestBody InventoryService.VariantsRequest req) {
+        return inventory.createVariants(id, req);
+    }
+
     @PostMapping("/products")
     @ResponseStatus(HttpStatus.CREATED)
     public InventoryService.Product create(@Valid @RequestBody InventoryService.ProductRequest req) {

@@ -88,6 +88,22 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               ),
               const SizedBox(height: 8),
             ],
+            if (widget.session.me!.can('COMPANY_PAYABLES')) ...[
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final updated = await _changeSupplier(ctx, p);
+                  if (updated == null || !ctx.mounted) return;
+                  Navigator.pop(ctx);
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('${updated['number']}: tədarükçü “${updated['companyName']}” olaraq dəyişdirildi')));
+                  _reload();
+                },
+                icon: const Icon(Icons.swap_horiz),
+                label: Text(p['companyId'] == null ? 'Tədarükçü təyin et' : 'Tədarükçünü dəyiş'),
+              ),
+              const SizedBox(height: 8),
+            ],
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade700),
               onPressed: () async {
@@ -106,6 +122,52 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       );
     } catch (e) {
       if (mounted) showError(context, e);
+    }
+  }
+
+  /// Tədarükçünü dəyiş: the receipt (and what is still owed for it) moves to the right supplier; goods and stock stay.
+  Future<Map<String, dynamic>?> _changeSupplier(BuildContext ctx, Map<String, dynamic> p) async {
+    try {
+      final suppliers = ((await widget.session.api.get('/api/companies')) as List).cast<Map<String, dynamic>>()
+          .where((s) => '${s['id']}' != '${p['companyId']}').toList();
+      if (!ctx.mounted) return null;
+      String? target;
+      final ok = await showDialog<bool>(
+        context: ctx,
+        builder: (dctx) => StatefulBuilder(
+          builder: (dctx, set) {
+            final name = suppliers.where((s) => '${s['id']}' == target).map((s) => '${s['name']}').firstOrNull;
+            final owed = p['companyId'] == null ? 0.0 : _n(p['unpaid']).clamp(0, _n(p['total']) - _n(p['returnedAmount'])).toDouble();
+            return AlertDialog(
+              title: const Text('Tədarükçünü dəyiş'),
+              content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${p['number']}: ${p['companyName'] ?? 'Təchizatçısız'}'),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: target,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Düzgün tədarükçü'),
+                  items: [for (final s in suppliers) DropdownMenuItem(value: '${s['id']}', child: Text('${s['name']}'))],
+                  onChanged: (v) => set(() => target = v),
+                ),
+                const SizedBox(height: 8),
+                if (name != null && owed > 0)
+                  Text('Bu qaimənin borcu (${formatMoney(owed)}) ${p['companyName']} hesabından çıxıb $name hesabına keçəcək.'),
+                Text('Mal, anbar qalığı və qiymətlər dəyişmir.', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+              ]),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('Ləğv et')),
+                FilledButton(onPressed: target == null ? null : () => Navigator.pop(dctx, true), child: const Text('Dəyiş')),
+              ],
+            );
+          },
+        ),
+      );
+      if (ok != true || target == null) return null;
+      return await widget.session.api.post('/api/purchases/${p['id']}/supplier', {'companyId': target}) as Map<String, dynamic>;
+    } catch (e) {
+      if (ctx.mounted) showError(ctx, e);
+      return null;
     }
   }
 
@@ -312,6 +374,31 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     if (_companyId == null && paid > 0 && paid != _total) {
       return showError(context, 'Borcla və ya qismən ödənişli alış üçün təchizatçı seçin');
     }
+    final supplier = _suppliers.where((s) => '${s['id']}' == _companyId).map((s) => '${s['name']}').firstOrNull;
+    final owed = _companyId == null ? 0.0 : _r2(_total - paid);
+    const methods = {'CASH': 'nağd', 'CARD': 'kartla', 'TRANSFER': 'bank köçürməsi'};
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Qaiməni yekunlaşdır'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${supplier ?? 'Təchizatçısız'}${_invoice.text.trim().isEmpty ? '' : ' · qaimə ${_invoice.text.trim()}'}',
+              style: const TextStyle(fontWeight: FontWeight.w800, color: navy, fontSize: 16)),
+          const SizedBox(height: 6),
+          Text('${_lines.length} məhsul · cəmi ${formatMoney(_total)}'),
+          Text(onCredit ? 'Hamısı borca' : 'İndi ödənilir: ${formatMoney(paid)} (${methods[_method] ?? _method})'),
+          if (owed > 0) Text('$supplier borcunuza yazılacaq: ${formatMoney(owed)}',
+              style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Text('Mallar anbara yüklənəcək. Təchizatçı düzgündür?', style: TextStyle(color: Colors.grey.shade600)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ləğv et')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Bəli, anbara yüklə')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
     setState(() => _busy = true);
     try {
       final saved = await widget.session.api.post('/api/purchases', {
@@ -355,7 +442,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
           child: FilledButton.icon(
             onPressed: _busy || _lines.isEmpty ? null : _save,
             icon: const Icon(Icons.check),
-            label: Text(_busy ? 'Saxlanılır…' : 'Qəbul et · ${formatMoney(_total)}'),
+            label: Text(_busy ? 'Saxlanılır…' : 'Qaiməni yekunlaşdır · ${formatMoney(_total)}'),
           ),
         ),
       ),

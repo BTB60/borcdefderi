@@ -24,12 +24,16 @@ Aşağı panel (icazəyə görə): **Panel** (sahib və ya REPORTS), **Borclar**
 | Satış | `sales_screen.dart`, `barcode_scanner.dart` | Səbət, endirim, nağd/kart/nisyə, kamera ilə ardıcıl barkod skanı, çek, ləğv |
 | Anbar | `inventory_screen.dart` | Məhsullar **şəkillə**; yazdıqca axtarış; skan → məhsul kartı (böyük şəkil, qiymət, qalıq); giriş/çıxış/düzəliş; yeni məhsul (barkod skanı + kamera/qalereyadan şəkil); şəkil dəyişmə; yuxarıda **Sayım** düyməsi |
 | Anbar sayımı | `stock_count_screen.dart` | Sayımların siyahısı (+/− nəticə); **Yeni sayım** (bütün məhsullar və ya kateqoriya); məhsula toxun və ya **skan et** → sayılan miqdar (ardıcıl skan); sistem / sayılan / fərq (miqdar və ₼); filtr: sayılmayanlar, fərqi olanlar; **Tamamla** → fərqlər qalığa yazılır, sayım bağlanır; **sayım hesabatı** PDF/Excel paylaşma |
+| Variantlar (ölçü / rəng) | `variants_sheet.dart` | Anbarda məhsul kartı → **Ölçü / rəng**: ölçüləri və rəngləri vergüllə yazmaq; hər birləşmə ayrıca məhsuldur (öz kodu, barkodu, qiyməti, qalığı) |
+| Çatdırılma | `deliveries_screen.dart` | Satış icazəsi olan: yeni çatdırılma, kuryerə ver (vəzifəsi **Kuryer** olan işçi və ya kənar kuryer), ləğv. Kuryer yalnız özünə verilənləri görür: **Yola çıxdım**, **Çatdırdım** (qapıda alınan məbləğ), zəng, xəritə. Müştəriyə WhatsApp ilə izləmə linki (`/izle/<token>`) |
+| Davamiyyət | `attendance_screen.dart` | Hamı üçün **Gəldim / Getdim**; sahib bu ay hər işçinin gəldiyi günləri, gecikmələri, iş saatını görür və iş başlama saatını təyin edir |
 | Kassa və bank | `cash_screen.dart` | Balans, mədaxil, məxaric, köçürmə, gün sonu |
 | Xərclər | `expenses_screen.dart` | Xərc, təkrarlanan xərc, büdcə |
 | İşçilər | `employees_screen.dart` | Sahib üçün: işçi əlavə et, icazələr, şifrə sıfırlama |
 | Abunəlik | `subscription_screen.dart` | Paketlər, M10/kart ödənişi, "Ödəniş etdim" |
 | Abunəlik bitib | `subscription_expired_screen.dart` | Abunəlik aktiv deyilsə əsas ekran əvəzinə açılır (server 402 `SUBSCRIPTION_REQUIRED` qaytaranda da); hər dəqiqə və tətbiq önə gələndə statusu yoxlayır, ödəniş təsdiqlənəndə özü açılır |
 | Əlaqə | `contact_screen.dart` | Dəstək: WhatsApp, zəng, əlavə nömrə (platforma admininin `/api/public/contact` ayarlarından) |
+| Borc xatırlatmaları | `reminders_screen.dart` | Bir toxunuşla WhatsApp / SMS; SMS xidməti qoşulubsa **Hamısını SMS ilə göndər** və parametrlərdə **Avtomatik SMS** |
 | Profil, bildirişlər | `profile_screen.dart`, `notifications_screen.dart`, `state/notification_alerts.dart` | Profil şəkli, şəxsi/mağaza məlumatı, şifrə; bildiriş səsi |
 
 İcazələr (`Me.can`): `CUSTOMER_DEBTS`, `COMPANY_RECEIVABLES`, `COMPANY_PAYABLES`, `REPORTS`, `SALES`, `INVENTORY`, `CASH`, `EXPENSES`. Mağaza sahibi hamısını görür.

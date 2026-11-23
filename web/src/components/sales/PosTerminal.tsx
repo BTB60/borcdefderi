@@ -1,10 +1,11 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Alert, Button, Modal, cx } from "@/components/ui";
 import { API_URL, ApiError, api, getToken, openProtected } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { desktop, isNetworkError, receiptHtml, receiptSettings, saveReceiptSettings } from "@/lib/desktop";
+import { desktop, isNetworkError, printOnTill, receiptHtml, receiptSettings, saveReceiptSettings } from "@/lib/desktop";
 import { formatMoney } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
 import { SetPinModal } from "@/components/sales/SetPin";
@@ -167,6 +168,7 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
   const [flash, setFlash] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ sale: Sale; change: number; offline?: boolean } | null>(null);
+  const [printError, setPrintError] = useState<string | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [autoPrint, setAutoPrint] = useState(true);
   useEffect(() => {
@@ -230,7 +232,7 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
   const printSale = useCallback((sale: Sale, change = 0, offline = false) => {
     const d = desktop();
     if (d) {
-      void d.printHtml(receiptHtml(sale, { name: me?.storeName ?? null }, { change, offline }));
+      void printOnTill(d, receiptHtml(sale, { name: me?.storeName ?? null }, { change, offline })).then(setPrintError);
       return;
     }
     if (!offline) void printReceipt(sale.id);
@@ -587,6 +589,14 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
 
   return (
     <div className={fill ? "grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_440px] lg:grid-rows-[minmax(0,1fr)]" : "grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]"}>
+      {printError && typeof document !== "undefined" && createPortal(
+        <div role="alert" className="fixed inset-x-0 top-3 z-[1000] mx-auto flex w-[min(640px,calc(100%-32px))] items-start gap-3 rounded-2xl bg-rose-600 px-4 py-3 text-sm text-white shadow-xl">
+          <span aria-hidden="true" className="text-lg leading-none">🖨</span>
+          <span className="flex-1"><b>Çek çap olunmadı.</b> {printError}</span>
+          <button type="button" onClick={() => setPrintError(null)} className="font-semibold underline">Bağla</button>
+        </div>,
+        document.body,
+      )}
       {/* ---------------- catalogue ---------------- */}
       <section className={cx("min-w-0 rounded-2xl bg-white p-4 shadow-card ring-1 ring-slate-200/70 sm:p-5", fill && "flex min-h-0 flex-col")}>
         <form onSubmit={onSearchEnter} className="relative">

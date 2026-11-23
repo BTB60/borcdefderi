@@ -88,6 +88,23 @@ app:
     # Telegram bot for the owner's evening report (create it with @BotFather). Empty = the feature is off.
     bot-token: ${TELEGRAM_BOT_TOKEN:}
     bot-username: ${TELEGRAM_BOT_USERNAME:}
+  sms:
+    # Avtomatik SMS. Empty provider = off (reminders are then sent by hand, as before).
+    #  http   - any SMS provider with an HTTP API: SMS_HTTP_URL may hold {to}, {text} and {sender} (URL-encoded);
+    #           with SMS_HTTP_METHOD=POST, SMS_HTTP_BODY is sent (same placeholders, JSON-escaped when it starts with "{",
+    #           otherwise URL-encoded) with SMS_HTTP_CONTENT_TYPE; SMS_HTTP_AUTH goes into the Authorization header.
+    #  twilio - SMS_TWILIO_SID, SMS_TWILIO_TOKEN; the sender is SMS_SENDER.
+    provider: ${SMS_PROVIDER:}
+    sender: ${SMS_SENDER:HesabPro}
+    http-url: ${SMS_HTTP_URL:}
+    http-method: ${SMS_HTTP_METHOD:GET}
+    http-body: ${SMS_HTTP_BODY:}
+    http-content-type: ${SMS_HTTP_CONTENT_TYPE:application/json}
+    http-auth: ${SMS_HTTP_AUTH:}
+    twilio-sid: ${SMS_TWILIO_SID:}
+    twilio-token: ${SMS_TWILIO_TOKEN:}
+    # SMS per store per month (cost guard)
+    monthly-limit: ${SMS_MONTHLY_LIMIT:300}
   password-reset:
     # Public web address used in reset links (the Vercel URL in production).
     web-url: ${APP_WEB_URL:http://localhost:3000}

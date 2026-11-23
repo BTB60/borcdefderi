@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Button, Card, Select } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { desktop, receiptSettings, saveReceiptSettings, type UpdateStatus } from "@/lib/desktop";
+import { desktop, isVirtualPrinter, printOnTill, receiptSettings, saveReceiptSettings, type UpdateStatus } from "@/lib/desktop";
 import type { Product } from "@/lib/types";
 import { SetPinModal } from "@/components/sales/SetPin";
 import { ReceiptDesigner } from "@/components/sales/ReceiptDesigner";
@@ -67,6 +67,10 @@ export function TillSettings() {
   const [pinOpen, setPinOpen] = useState(false);
   const [labels, setLabels] = useState<Product[] | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [printerWarning, setPrinterWarning] = useState<string | null>(null);
+  const effective = printer || printers.find((p) => p.isDefault)?.name || "";
+  const virtual = isVirtualPrinter(effective);
+  const missing = !!printer && printers.length > 0 && !printers.some((p) => p.name === printer);
 
   useEffect(() => {
     const r = receiptSettings();
@@ -95,9 +99,10 @@ export function TillSettings() {
 
   async function testReceipt() {
     if (!app) return;
-    const ok = await app.printHtml(`<!doctype html><html><head><meta charset="utf-8"><style>@page{size:${paper}mm auto;margin:0}body{width:${paper === "58" ? 50 : 72}mm;margin:0 auto;padding:4mm 0;font:12px 'Segoe UI',Arial;text-align:center}</style></head>
+    const problem = await printOnTill(app, `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:${paper}mm auto;margin:0}body{width:${paper === "58" ? 50 : 72}mm;margin:0 auto;padding:4mm 0;font:12px 'Segoe UI',Arial;text-align:center}</style></head>
       <body><b>${me?.storeName ?? "HesabPro"}</b><br>Sınaq çeki<br>${new Date().toLocaleString()}<br>----------------<br>${footer || ""}</body></html>`);
-    flash(ok ? "Sınaq çeki göndərildi" : "Çap alınmadı — printeri yoxlayın");
+    setPrinterWarning(problem);
+    flash(problem ? "Çap alınmadı" : "Sınaq çeki göndərildi");
   }
 
   async function openLabels() {
@@ -136,8 +141,16 @@ export function TillSettings() {
 
       <Section icon="🖨" title="Çek printeri">
         <Row title="Printer" hint="Satış çeki və Z-hesabat buraya çıxır">
-          <Select value={printer} onChange={(e) => { setPrinter(e.target.value); void app?.setPrinter(e.target.value || null); }} className="w-56">{printerOptions}</Select>
+          <Select value={printer} onChange={(e) => { setPrinter(e.target.value); setPrinterWarning(null); void app?.setPrinter(e.target.value || null); }} className="w-56">{printerOptions}</Select>
         </Row>
+        {app && (printers.length === 0 || virtual || missing || printerWarning) && (
+          <div role="alert" className="my-2 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-800 ring-1 ring-rose-200">
+            {printers.length === 0 ? "Windows heç bir printer görmür. Çek printerini qoşun və drayverini quraşdırın."
+              : missing ? `Seçilmiş printer “${printer}” tapılmadı — söndürülüb və ya ayrılıb.`
+              : virtual ? `“${effective}” real printer deyil (fayla çap edir), çek kağıza çıxmayacaq. Siyahıdan çek printerini seçin.`
+              : printerWarning}
+          </div>
+        )}
         <Row title="Satışdan sonra çeki avtomatik çap et">
           <Toggle label="Avtomatik çap" on={autoPrint} onChange={(v) => { setAutoPrint(v); store(AUTO_PRINT_KEY, String(v)); }} />
         </Row>

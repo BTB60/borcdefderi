@@ -7,6 +7,8 @@ import { ApiError, api, download, postForFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { SetPinModal } from "@/components/sales/SetPin";
 import { TelegramCard } from "@/components/TelegramCard";
+import { ReceiptDesigner } from "@/components/sales/ReceiptDesigner";
+import { LabelDesignCard } from "@/components/inventory/LabelDesigner";
 import type { AuthResponse, Profile, ReturnApprovalPolicy } from "@/lib/types";
 
 const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
@@ -18,7 +20,7 @@ function errorText(e: unknown, fallback: string) {
 }
 
 export default function SettingsPage() {
-  const { refresh, isSuperAdmin, isOwner, can } = useAuth();
+  const { refresh, isSuperAdmin, isOwner, can, me } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +50,12 @@ export default function SettingsPage() {
           {profile.role === "STORE_OWNER" && <RequisitesCard />}
           {profile.storeId && <PinCard />}
           {profile.role === "STORE_OWNER" && <BonusCard />}
+          {profile.storeId && !isSuperAdmin && (isOwner || can("TILL_SETTINGS")) && (
+            <>
+              <ReceiptDesigner />
+              <LabelDesignCard storeName={me?.storeName ?? undefined} />
+            </>
+          )}
           {!isSuperAdmin && (isOwner || can("RETURN_APPROVE")) && <ReturnApprovalCard isOwner={isOwner} />}
           {profile.role === "STORE_OWNER" && <TelegramCard />}
           {profile.role === "STORE_OWNER" && <BackupCard />}

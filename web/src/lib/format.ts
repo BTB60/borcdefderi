@@ -95,6 +95,7 @@ export const JOB_TITLE_LABEL: Record<import("./types").JobTitle, string> = {
   STOREKEEPER: "Anbardar",
   ACCOUNTANT: "Mühasib",
   SELLER: "Satıcı",
+  COURIER: "Kuryer",
   OTHER: "Digər",
 };
 
@@ -104,6 +105,8 @@ export const JOB_TITLE_PERMISSIONS: Record<import("./types").JobTitle, import(".
   STOREKEEPER: ["INVENTORY"],
   ACCOUNTANT: ["REPORTS", "CASH", "EXPENSES", "CUSTOMER_DEBTS", "COMPANY_RECEIVABLES", "COMPANY_PAYABLES"],
   SELLER: ["SALES", "CUSTOMER_DEBTS"],
+  // a courier sees only the deliveries given to them (Çatdırılma), no other section
+  COURIER: [],
   OTHER: [],
 };
 

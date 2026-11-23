@@ -28,6 +28,12 @@ public class ReminderController {
         return Map.of("ok", true);
     }
 
+    /** Sends every pending reminder by SMS now (needs the platform's SMS provider). */
+    @PostMapping("/reminders/send-sms")
+    public Map<String, Integer> sendSms() {
+        return Map.of("sent", reminders.sendAllBySms());
+    }
+
     @PostMapping("/reminders/{id}/skip")
     public Map<String, Boolean> skip(@PathVariable UUID id) {
         reminders.skip(id);

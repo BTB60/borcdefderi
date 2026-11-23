@@ -370,7 +370,7 @@ export type PlanModule =
   | "CUSTOMER_DEBTS" | "COMPANY_RECEIVABLES" | "COMPANY_PAYABLES" | "REPORTS"
   | "SALES" | "INVENTORY" | "CASH" | "EXPENSES" | "POCKET" | "EMPLOYEES";
 
-export type JobTitle = "CASHIER" | "STOREKEEPER" | "ACCOUNTANT" | "SELLER" | "OTHER";
+export type JobTitle = "CASHIER" | "STOREKEEPER" | "ACCOUNTANT" | "SELLER" | "COURIER" | "OTHER";
 
 export interface Employee {
   jobTitle?: JobTitle | null;
@@ -543,6 +543,12 @@ export interface Product {
   trackSerial?: boolean;
   /** Zəmanət, months. */
   warrantyMonths?: number | null;
+  /** Variant (ölçü / rəng): the model product it belongs to. */
+  parentId?: string | null;
+  variantSize?: string | null;
+  variantColor?: string | null;
+  /** Model product: how many variants it has. */
+  variantCount?: number;
 }
 
 export interface StockMovement {

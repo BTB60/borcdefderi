@@ -43,12 +43,15 @@ public class ReminderService {
     private final TenantService tenant;
     private final NotificationService notifications;
     private final AuditService audit;
+    private final SmsService sms;
 
-    public ReminderService(JdbcClient jdbc, TenantService tenant, NotificationService notifications, AuditService audit) {
+    public ReminderService(JdbcClient jdbc, TenantService tenant, NotificationService notifications, AuditService audit,
+                           SmsService sms) {
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.notifications = notifications;
         this.audit = audit;
+        this.sms = sms;
     }
 
     // ----- generation -----
@@ -59,7 +62,13 @@ public class ReminderService {
         for (UUID s : stores) {
             try {
                 int n = generate(s, tenant.today());
-                if (n > 0) {
+                int sent = sms.autoRemindersOn(s) ? sendBySms(s) : 0;
+                int left = n - sent;
+                if (sent > 0) {
+                    notifications.create(s, "DEBT_REMINDERS", "Borc xatırlatmaları",
+                            sent + " müştəriyə borc xatırlatması SMS ilə avtomatik göndərildi."
+                                    + (left > 0 ? " " + left + " xatırlatmanı “Xatırlatmalar” bölməsindən özünüz göndərin." : ""));
+                } else if (n > 0) {
                     notifications.create(s, "DEBT_REMINDERS", "Borc xatırlatmaları",
                             n + " müştəriyə borc xatırlatması göndərilməlidir. “Xatırlatmalar” bölməsindən bir toxunuşla göndərin.");
                 }
@@ -108,6 +117,51 @@ public class ReminderService {
                     .param("a", amount).param("due", overdue ? d.firstOverdue() : d.firstSoon()).param("day", today).update();
         }
         return created;
+    }
+
+    // ----- automatic SMS -----
+
+    /**
+     * Sends every pending reminder of the store by SMS (customers with a phone) and marks it sent. Returns how many
+     * went out. Each SMS is committed on its own, so a provider error stops nothing already sent.
+     */
+    public int sendBySms(UUID storeId) {
+        record Pending(UUID id, UUID customerId, String name, String phone, String kind, BigDecimal amount, LocalDate due,
+                       BigDecimal openNow) {}
+        String[] store = jdbc.sql("SELECT name, COALESCE(phone, '') FROM stores WHERE id = :s").param("s", storeId)
+                .query((rs, n) -> new String[]{rs.getString(1), rs.getString(2)}).single();
+        LocalDate today = tenant.today();
+        List<Pending> pending = jdbc.sql("""
+                SELECT r.id, r.customer_id, c.name, c.phone, r.kind, r.amount, r.due_date,
+                       (SELECT COALESCE(SUM(d.remaining_amount), 0) FROM debts d
+                        WHERE d.customer_id = r.customer_id AND d.debt_type = 'CUSTOMER_DEBT') AS open_now
+                FROM debt_reminders r JOIN customers c ON c.id = r.customer_id
+                WHERE r.store_id = :s AND r.status = 'PENDING' AND c.phone IS NOT NULL AND btrim(c.phone) <> ''
+                ORDER BY r.remind_on DESC LIMIT 300""").param("s", storeId)
+                .query((rs, n) -> new Pending(rs.getObject("id", UUID.class), rs.getObject("customer_id", UUID.class),
+                        rs.getString("name"), rs.getString("phone"), rs.getString("kind"), Money.of(rs.getBigDecimal("amount")),
+                        rs.getObject("due_date", LocalDate.class), Money.of(rs.getBigDecimal("open_now")))).list();
+        int sent = 0;
+        for (Pending p : pending) {
+            if (p.openNow().signum() <= 0) continue; // paid since the reminder was made
+            String text = message(p.name(), store[0], store[1], p.kind(), p.openNow(), p.due(), today);
+            if (!sms.send(storeId, p.phone(), text, "DEBT_REMINDER", p.id())) continue;
+            jdbc.sql("UPDATE debt_reminders SET status = 'SENT', channel = 'SMS', handled_at = now() WHERE id = :id AND status = 'PENDING'")
+                    .param("id", p.id()).update();
+            jdbc.sql("UPDATE customers SET last_contact_at = now() WHERE id = :c").param("c", p.customerId()).update();
+            sent++;
+        }
+        return sent;
+    }
+
+    /** "Hamısını SMS ilə göndər": the pending list goes out by SMS now. */
+    public int sendAllBySms() {
+        CurrentMember m = requireAccess();
+        if (!sms.configured()) throw ApiException.conflict("SMS_OFF", "SMS xidməti hələ qoşulmayıb. Administratorla əlaqə saxlayın");
+        generate(m.storeId(), tenant.today());
+        int sent = sendBySms(m.storeId());
+        if (sent > 0) audit.log(m.storeId(), m.userId(), "REMINDERS_SMS", "STORE", m.storeId().toString(), sent + " SMS");
+        return sent;
     }
 
     // ----- list / handle -----

@@ -279,7 +279,7 @@ function ProductModal({ product, categories, suppliers, onCategory, onClose, onS
         <Field label="Top 2 — pərakəndə satış qiyməti (₼)" hint="Kassa həmişə bu qiymətlə satır"><Input required type="number" min="0" step="0.01" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} /></Field>
         <Field label="Endirimdən əvvəlki qiymət (₼)" hint="Boş = endirim yoxdur. Barkod etiketində xətli göstərilir"><Input type="number" min="0" step="0.01" value={form.oldPrice} onChange={(e) => setForm({ ...form, oldPrice: e.target.value })} /></Field>
         <Field label="Minimum stok" hint="Bundan az olanda xəbərdarlıq"><Input type="number" min="0" step="0.001" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: e.target.value })} /></Field>
-        {!product && <Field label="Başlanğıc qalıq"><Input type="number" min="0" step="0.001" value={form.initialStock} onChange={(e) => setForm({ ...form, initialStock: e.target.value })} /></Field>}
+        {!product && <Field label="Məhsul Sayı"><Input type="number" min="0" step="0.001" value={form.initialStock} onChange={(e) => setForm({ ...form, initialStock: e.target.value })} /></Field>}
         <Field label="Zəmanət (ay)" hint="Boş = zəmanət yoxdur. Çekdə və zəmanət axtarışında görünür">
           <Input type="number" min="0" max="120" step="1" value={form.warrantyMonths} onChange={(e) => setForm({ ...form, warrantyMonths: e.target.value })} />
         </Field>

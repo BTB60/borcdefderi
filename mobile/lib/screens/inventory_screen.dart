@@ -765,7 +765,7 @@ class _ProductSheetState extends State<_ProductSheet> {
               child: TextField(
                 controller: _stock,
                 keyboardType: _decimal,
-                decoration: const InputDecoration(labelText: 'Başlanğıc qalıq', hintText: '0'),
+                decoration: const InputDecoration(labelText: 'Məhsul Sayı', hintText: '0'),
               ),
             ),
             const SizedBox(width: 12),

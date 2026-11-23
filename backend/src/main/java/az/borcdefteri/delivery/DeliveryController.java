@@ -39,6 +39,18 @@ public class DeliveryController {
         return deliveries.summary(from, to);
     }
 
+    /** Cash couriers still hold (collected at the door, not handed in). */
+    @GetMapping("/deliveries/courier-cash")
+    public List<DeliveryService.CourierCash> courierCash() {
+        return deliveries.courierCash();
+    }
+
+    /** Kuryer pulu təhvil verdi: the courier's collected cash goes into the cash desk. */
+    @PostMapping("/deliveries/handover")
+    public DeliveryService.HandoverResult handOver(@Valid @RequestBody DeliveryService.HandoverRequest req) {
+        return deliveries.handOver(req);
+    }
+
     @GetMapping("/deliveries/{id}")
     public DeliveryService.Delivery get(@PathVariable UUID id) {
         return deliveries.get(id);

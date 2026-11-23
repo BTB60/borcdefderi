@@ -51,7 +51,9 @@ public class CustomerPortalService {
     public record PortalView(String storeName, String storePhone, String storeAddress, String customerName,
                              String customerCode, BigDecimal totalDebt, BigDecimal paid, BigDecimal remaining,
                              List<PortalDebt> debts, List<PortalEntry> history, OffsetDateTime expiresAt,
-                             OffsetDateTime generatedAt) {}
+                             OffsetDateTime generatedAt,
+                             /** Bonus kartı: the customer's bonus balance and the store's bonus percent. */
+                             BigDecimal bonusBalance, BigDecimal bonusPercent) {}
 
     /** Resolved link: which store and customer it shows. */
     public record Resolved(UUID storeId, UUID customerId, OffsetDateTime expiresAt) {}
@@ -189,7 +191,10 @@ public class CustomerPortalService {
                     e.receiptNumber(), e.note()));
         }
         return new PortalView(h.storeName(), h.storePhone(), h.storeAddress(), h.name(), h.code(), Money.of(total),
-                Money.of(paid), Money.of(rem), debts, entries, r.expiresAt(), OffsetDateTime.now(clock));
+                Money.of(paid), Money.of(rem), debts, entries, r.expiresAt(), OffsetDateTime.now(clock),
+                Money.of(jdbc.sql("SELECT COALESCE(SUM(amount), 0) FROM customer_bonus_entries WHERE customer_id = :c")
+                        .param("c", r.customerId()).query(BigDecimal.class).single()),
+                jdbc.sql("SELECT bonus_percent FROM stores WHERE id = :s").param("s", r.storeId()).query(BigDecimal.class).single());
     }
 
     private String webUrl() {

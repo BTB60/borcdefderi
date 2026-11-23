@@ -1,5 +1,6 @@
 "use client";
 
+import { printLoyaltyCard } from "@/components/LoyaltyCard";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
@@ -175,6 +176,10 @@ export default function PartyProfilePage() {
         {writable.length > 0 && <QuickButton onClick={() => setAccount("charge")} icon={svg("M12 5v14M5 12h14")} label="Borc əlavə et" tone="bg-violet-50 text-violet-700" />}
         {writable.length > 0 && <QuickButton onClick={() => setAccount("pay")} icon={svg("M4 7h16v10H4V7Zm0 3h16")} label={isCustomer ? "Ödəniş qəbul et" : "Ödəniş"} tone="bg-teal-50 text-teal-700" />}
         <QuickButton onClick={() => download(`${base}/statement`, "cixaris.pdf").catch((e) => setError(e instanceof ApiError ? e.message : "PDF hazırlanmadı"))} icon={svg("M7 3h7l5 5v13H7V3Zm7 0v5h5")} label="PDF hesabat" tone="bg-rose-50 text-rose-700" />
+        {isCustomer && party.code && (
+          <QuickButton onClick={() => { if (!printLoyaltyCard({ store: me?.storeName ?? "", name: party.name, code: party.code! })) setError("Pəncərə açılmadı — brauzerdə pop-up icazəsi verin"); }}
+            icon={svg("M3 6h18v12H3V6Zm0 4h18M7 15h3")} label="Bonus kartı çap et" tone="bg-amber-50 text-amber-700" />
+        )}
         <QuickButton onClick={() => setEditing(true)} icon={svg("M4 20h4L19 9l-4-4L4 16v4Z")} label="Redaktə et" />
       </section>
 

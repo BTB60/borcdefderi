@@ -36,7 +36,17 @@ public class DeliveryService {
                            BigDecimal collectAmount, BigDecimal collectedAmount, OffsetDateTime scheduledFor,
                            OffsetDateTime createdAt, OffsetDateTime assignedAt, OffsetDateTime pickedUpAt,
                            OffsetDateTime deliveredAt, OffsetDateTime cancelledAt, String cancelReason,
-                           String trackToken, String createdByName) {}
+                           String trackToken, String createdByName,
+                           /** When the courier handed the collected cash in (null = still with the courier). */
+                           OffsetDateTime handedOverAt) {}
+
+    /** Cash a courier still holds: delivered, collected at the door, not handed in yet. */
+    public record CourierCash(UUID courierUserId, String courierName, long deliveries, BigDecimal amount) {}
+
+    /** Kuryer pulu təhvil verdi: one courier (an employee by id, or an outside one by name). */
+    public record HandoverRequest(UUID courierUserId, @jakarta.validation.constraints.Size(max = 150) String courierName) {}
+
+    public record HandoverResult(BigDecimal amount, long deliveries, UUID cashTransactionId) {}
 
     public record CreateRequest(
             UUID saleId,
@@ -80,11 +90,13 @@ public class DeliveryService {
     private final JdbcClient jdbc;
     private final TenantService tenant;
     private final AuditService audit;
+    private final az.borcdefteri.cash.CashService cash;
 
-    public DeliveryService(JdbcClient jdbc, TenantService tenant, AuditService audit) {
+    public DeliveryService(JdbcClient jdbc, TenantService tenant, AuditService audit, az.borcdefteri.cash.CashService cash) {
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.audit = audit;
+        this.cash = cash;
     }
 
     /** Sales staff, or a member who has deliveries assigned / is a courier. */
@@ -167,6 +179,51 @@ public class DeliveryService {
                 .query((rs, n) -> new CourierSummary(rs.getObject("courier_user_id", UUID.class), rs.getString("name"),
                         rs.getLong("delivered"), rs.getLong("active"), rs.getLong("cancelled"),
                         Money.of(rs.getBigDecimal("fees")), Money.of(rs.getBigDecimal("collected")))).list();
+    }
+
+    // ---------- courier cash ----------
+
+    /** Per courier: the cash taken at the door and not yet handed in (all time, not only this month). */
+    public List<CourierCash> courierCash() {
+        CurrentMember m = requireManager();
+        return jdbc.sql("""
+                SELECT d.courier_user_id, COALESCE(u.full_name, d.courier_name) AS name, COUNT(*) AS n,
+                       COALESCE(SUM(d.collected_amount), 0) AS amount
+                FROM deliveries d LEFT JOIN users u ON u.id = d.courier_user_id
+                WHERE d.store_id = :s AND d.status = 'DELIVERED' AND d.handed_over_at IS NULL AND d.collected_amount > 0
+                GROUP BY d.courier_user_id, COALESCE(u.full_name, d.courier_name)
+                ORDER BY amount DESC""").param("s", m.storeId())
+                .query((rs, n) -> new CourierCash(rs.getObject("courier_user_id", UUID.class), rs.getString("name"),
+                        rs.getLong("n"), Money.of(rs.getBigDecimal("amount")))).list();
+    }
+
+    /**
+     * Kuryer pulu təhvil verdi: all the cash a courier still holds goes into the store's cash desk (one IN entry) and
+     * those deliveries are marked handed in.
+     */
+    @Transactional
+    public HandoverResult handOver(HandoverRequest req) {
+        CurrentMember m = requireManager();
+        if (!m.has("CASH")) throw ApiException.forbidden("PERMISSION_DENIED", "Pulu kassaya yazmaq üçün “Kassa” icazəsi lazımdır");
+        String name = blank(req.courierName());
+        if (req.courierUserId() == null && name == null) throw ApiException.badRequest("COURIER_REQUIRED", "Kuryeri seçin");
+        String who = req.courierUserId() != null ? "d.courier_user_id = :c" : "d.courier_user_id IS NULL AND d.courier_name = :c";
+        List<UUID> ids = jdbc.sql("SELECT d.id FROM deliveries d WHERE d.store_id = :s AND " + who
+                        + " AND d.status = 'DELIVERED' AND d.handed_over_at IS NULL AND d.collected_amount > 0 FOR UPDATE")
+                .param("s", m.storeId()).param("c", req.courierUserId() != null ? req.courierUserId() : name).query(UUID.class).list();
+        if (ids.isEmpty()) throw ApiException.conflict("NOTHING_TO_HAND_OVER", "Bu kuryerdə təhvil veriləcək pul yoxdur");
+        BigDecimal amount = Money.of(jdbc.sql("SELECT COALESCE(SUM(collected_amount), 0) FROM deliveries WHERE id IN (:ids)")
+                .param("ids", ids).query(BigDecimal.class).single());
+        String courier = req.courierUserId() != null
+                ? jdbc.sql("SELECT full_name FROM users WHERE id = :u").param("u", req.courierUserId()).query(String.class).optional().orElse("Kuryer")
+                : name;
+        UUID account = cash.accountFor(m.storeId(), "CASH", null, m.userId());
+        UUID tx = cash.post(m.storeId(), account, "IN", amount, "COURIER_HANDOVER", tenant.today(), null, null,
+                "Kuryer pulu: " + courier + " (" + ids.size() + " çatdırılma)", m.userId());
+        jdbc.sql("UPDATE deliveries SET handed_over_at = now(), handed_over_by = :by WHERE id IN (:ids)")
+                .param("by", m.userId()).param("ids", ids).update();
+        audit.log(m.storeId(), m.userId(), "COURIER_CASH_HANDED_OVER", "DELIVERY", null, courier + ": " + amount + " AZN, " + ids.size() + " çatdırılma");
+        return new HandoverResult(amount, ids.size(), tx);
     }
 
     // ---------- create / move ----------
@@ -364,6 +421,6 @@ public class DeliveryService {
                 rs.getObject("created_at", OffsetDateTime.class), rs.getObject("assigned_at", OffsetDateTime.class),
                 rs.getObject("picked_up_at", OffsetDateTime.class), rs.getObject("delivered_at", OffsetDateTime.class),
                 rs.getObject("cancelled_at", OffsetDateTime.class), rs.getString("cancel_reason"), rs.getString("track_token"),
-                rs.getString("created_by_name"));
+                rs.getString("created_by_name"), rs.getObject("handed_over_at", OffsetDateTime.class));
     }
 }

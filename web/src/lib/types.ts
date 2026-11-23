@@ -253,6 +253,8 @@ export interface PortalView {
   debts: { debtDate: string; dueDate: string | null; amount: number; paid: number; remaining: number; status: DebtStatus; overdueDays: number }[];
   history: { date: string | null; type: LedgerEntry["type"]; amount: number; balanceAfter: number; paymentMethod: PaymentMethod | null; receiptNumber: string | null; note: string | null }[];
   expiresAt: string | null; generatedAt: string;
+  /** Bonus kartı. */
+  bonusBalance?: number; bonusPercent?: number;
 }
 
 export interface Activity {
@@ -487,7 +489,7 @@ export interface CashAccount { id: string; name: string; kind: CashKind; isDefau
 
 export type MovementKind =
   | "OPENING" | "DEPOSIT" | "WITHDRAWAL" | "TRANSFER_IN" | "TRANSFER_OUT" | "DEBT_COLLECTION" | "SUPPLIER_PAYMENT"
-  | "EXPENSE" | "EXPENSE_REVERSAL" | "SALE" | "SALE_REFUND" | "COUNT_ADJUSTMENT" | "PAYMENT_REVERSAL" | "PURCHASE";
+  | "EXPENSE" | "EXPENSE_REVERSAL" | "SALE" | "SALE_REFUND" | "COUNT_ADJUSTMENT" | "PAYMENT_REVERSAL" | "PURCHASE" | "COURIER_HANDOVER";
 
 export interface CashMovement {
   id: string; accountId: string; accountName: string; direction: "IN" | "OUT"; amount: number; kind: MovementKind;
@@ -598,6 +600,15 @@ export interface Pnl {
 export interface MonthPoint { month: string; netSales: number; costOfGoods: number; expenses: number; netResult: number }
 
 /** Mal qəbulu: goods bought from a supplier in one document. */
+/** Tədarükçüyə sifariş. */
+export interface PurchaseOrder {
+  id: string; number: string; companyId: string | null; companyName: string | null; companyPhone: string | null;
+  status: "OPEN" | "PARTIAL" | "RECEIVED" | "CANCELLED"; note: string | null; createdByName: string; createdAt: string;
+  items: { id: string; productId: string | null; name: string; code: string | null; unit: string | null; quantity: number;
+    receivedQty: number; missingQty: number; purchasePrice: number | null }[];
+  missingLines: number;
+}
+
 export interface Purchase {
   id: string; number: string; companyId: string | null; companyName: string | null; supplierInvoice: string | null;
   total: number; paid: number; unpaid: number; debtId: string | null; receivedOn: string; note: string | null;

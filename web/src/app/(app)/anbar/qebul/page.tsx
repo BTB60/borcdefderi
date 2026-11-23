@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, Table, Td, Th, useConfirm } from "@/components/ui";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, openProtected } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { PaymentModal } from "@/components/debts/DebtModals";
-import type { Debt, Party, Product, ProductCategory, Purchase } from "@/lib/types";
+import type { Debt, Party, Product, ProductCategory, Purchase, PurchaseOrder } from "@/lib/types";
+import { loadLabelDesign } from "@/components/inventory/LabelDesigner";
 import { ProductModal } from "@/components/inventory/ProductModal";
 
 type Line = { product: Product; quantity: string; unitCost: string; expiryDate: string; salePrice: string };
@@ -48,12 +49,48 @@ export default function PurchasesPage() {
   }
   const [items, setItems] = useState<Purchase[] | null>(null);
   const [creating, setCreating] = useState(false);
+  const [orders, setOrders] = useState<PurchaseOrder[] | null>(null);
+  const [receiving, setReceiving] = useState<PurchaseOrder | null>(null);
+  const [labelsFor, setLabelsFor] = useState<{ id: string; qty: number }[] | null>(null);
+  // ?order=<id> (from Sifariş siyahısı); read on the client so the page needs no Suspense boundary
+  const [orderParam, setOrderParam] = useState<string | null>(null);
+  useEffect(() => { setOrderParam(new URLSearchParams(window.location.search).get("order")); }, []);
   const [viewing, setViewing] = useState<Purchase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const load = () => api<Purchase[]>("/api/purchases").then(setItems).catch((e) => setError(e instanceof ApiError ? e.message : "Yüklənmədi"));
+  const load = () => {
+    api<PurchaseOrder[]>("/api/purchase-orders").then(setOrders).catch(() => setOrders([]));
+    return api<Purchase[]>("/api/purchases").then(setItems).catch((e) => setError(e instanceof ApiError ? e.message : "Yüklənmədi"));
+  };
   useEffect(() => { if (manage) load(); }, [manage]);
+  // "Sifariş siyahısı → mal gələndə qəbul et" opens the receipt for that order
+  useEffect(() => {
+    if (!manage || !orderParam) return;
+    api<PurchaseOrder>(`/api/purchase-orders/${orderParam}`).then((o) => { if (o.status === "OPEN" || o.status === "PARTIAL") setReceiving(o); }).catch(() => undefined);
+  }, [manage, orderParam]);
+
+  async function cancelOrder(o: PurchaseOrder) {
+    try {
+      await api(`/api/purchase-orders/${o.id}/cancel`, { method: "POST" });
+      setNotice(`${o.number} ləğv edildi`);
+      load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Alınmadı");
+    }
+  }
+
+  /** Price labels in the store's barcode design, for the goods whose sale price changed with the receipt. */
+  async function printLabels(list: { id: string; qty: number }[], perUnit: boolean) {
+    const d = loadLabelDesign();
+    const qs = new URLSearchParams({ size: "custom", w: String(d.w), h: String(d.h), barcode: String(d.barcode), font: String(d.font), show: d.show.join(",") });
+    qs.set("items", list.map((x) => `${x.id}:${perUnit ? Math.max(1, Math.min(500, Math.ceil(x.qty))) : 1}`).join(","));
+    try {
+      await openProtected(`/api/products/labels?${qs}`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Etiketlər hazırlanmadı");
+    }
+  }
 
   if (!manage) return <Card><EmptyState title="Mal qəbulu üçün icazəniz yoxdur" /></Card>;
 
@@ -65,6 +102,33 @@ export default function PurchasesPage() {
           <Button variant="gold" onClick={() => setCreating(true)}>+ Yeni mal qəbulu</Button>
         </div>} />
       {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
+      {labelsFor && labelsFor.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
+          <span className="flex-1">🏷 {labelsFor.length} məhsulun satış qiyməti dəyişdi — rəfdəki etiketləri yeniləyin.</span>
+          <Button variant="gold" className="px-3 py-1.5" onClick={() => printLabels(labelsFor, false)}>Qiyməti dəyişən {labelsFor.length} məhsulun etiketini çap et</Button>
+          <Button variant="outline" className="px-3 py-1.5" onClick={() => printLabels(labelsFor, true)}>Hər ədədə bir etiket</Button>
+          <button type="button" className="text-xs underline" onClick={() => setLabelsFor(null)}>Bağla</button>
+        </div>
+      )}
+      {orders && orders.length > 0 && (
+        <Card className="mb-4">
+          <h2 className="mb-2 font-semibold text-navy-800">Gözlənilən sifarişlər</h2>
+          <div className="divide-y divide-slate-100">
+            {orders.map((o) => (
+              <div key={o.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
+                <span className="font-semibold text-navy-800">{o.number}</span>
+                <span>{o.companyName ?? "Təchizatçısız"}</span>
+                <Badge tone={o.status === "PARTIAL" ? "amber" : "sky"}>{o.status === "PARTIAL" ? "Qismən gəlib" : "Gözlənilir"}</Badge>
+                <span className="min-w-0 flex-1 truncate text-xs text-slate-500" title={o.items.filter((i) => i.missingQty > 0).map((i) => `${i.name}: ${Number(i.missingQty)}`).join(", ")}>
+                  Gəlməyib: {o.items.filter((i) => i.missingQty > 0).map((i) => `${i.name} ${Number(i.missingQty)} ${i.unit ?? ""}`).join(", ")}
+                </span>
+                <Button variant="gold" className="px-3 py-1.5" onClick={() => setReceiving(o)}>Mal gəldi → qaiməyə çevir</Button>
+                <Button variant="ghost" className="px-3 py-1.5 text-rose-600" onClick={() => cancelOrder(o)}>Ləğv et</Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       <Card>
         {!items ? <Spinner /> : items.length === 0 ? <EmptyState title="Hələ mal qəbulu yoxdur" /> : (
@@ -92,9 +156,11 @@ export default function PurchasesPage() {
           </Table>
         )}
       </Card>
-      {creating && <PurchaseForm onClose={() => setCreating(false)} onSaved={(p) => {
+      {(creating || receiving) && <PurchaseForm order={receiving} onClose={() => { setCreating(false); setReceiving(null); }} onSaved={(p, changed) => {
         setCreating(false);
+        setReceiving(null);
         setNotice(`${p.number} qəbul edildi: ${p.items.length} məhsul, ${formatMoney(p.total)}`);
+        setLabelsFor(changed.length ? changed : null);
         load();
       }} />}
       {viewing && (
@@ -263,7 +329,7 @@ function ReturnToSupplier({ purchase, onDone }: { purchase: Purchase; onDone: (p
   );
 }
 
-function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: Purchase) => void }) {
+function PurchaseForm({ order, onClose, onSaved }: { order?: PurchaseOrder | null; onClose: () => void; onSaved: (p: Purchase, changedPrices: { id: string; qty: number }[]) => void }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Party[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -287,17 +353,32 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
     api<Product[]>("/api/products?active=true").then(setProducts).catch(() => setProducts([]));
     api<Party[]>("/api/companies").then(setSuppliers).catch(() => setSuppliers([]));
     api<ProductCategory[]>("/api/product-categories").then(setCategories).catch(() => setCategories([]));
-    // a receipt left half done (window closed, connection lost) comes back
-    const d = readDraft();
+    // a receipt left half done (window closed, connection lost) comes back; a receipt for an order starts from the order
+    const d = order ? null : readDraft();
     if (d && d.lines?.length) {
       setCompanyId(d.companyId); setInvoice(d.invoice); setDueDate(d.dueDate); setPaid(d.paid); setMethod(d.method); setNote(d.note);
       setLines(d.lines.map((l) => ({ ...l, salePrice: l.salePrice ?? String(l.product.salePrice ?? "") })));
       setRestored(d.savedAt);
     }
+  // once, when the form opens (the order does not change while it is open)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
+    if (order) return; // an order is its own draft
     writeDraft(lines.length ? { companyId, invoice, dueDate, paid, method, note, lines, savedAt: new Date().toISOString() } : null);
-  }, [companyId, invoice, dueDate, paid, method, note, lines]);
+  }, [order, companyId, invoice, dueDate, paid, method, note, lines]);
+  // the order's missing goods, once the products are loaded
+  const filledFromOrder = useRef(false);
+  useEffect(() => {
+    if (!order || filledFromOrder.current || products.length === 0) return;
+    filledFromOrder.current = true;
+    setCompanyId(order.companyId ?? "");
+    setNote(`Sifariş ${order.number}`);
+    setLines(order.items.filter((i) => i.missingQty > 0 && i.productId).flatMap((i) => {
+      const p = products.find((x) => x.id === i.productId);
+      return p ? [{ product: p, quantity: String(Number(i.missingQty)), unitCost: String(p.purchasePrice ?? 0), expiryDate: "", salePrice: String(p.salePrice ?? "") }] : [];
+    }));
+  }, [order, products]);
 
   function clearDraft() {
     setLines([]); setCompanyId(""); setInvoice(""); setDueDate(""); setPaid(""); setMethod("CASH"); setNote("");
@@ -365,10 +446,11 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
           })),
           paid: paidN, paymentMethod: onCredit ? "CASH" : method, supplierInvoice: invoice || null, dueDate: dueDate || null, note: note || null,
           clientRequestId: requestId.current,
+          purchaseOrderId: order?.id ?? null,
         },
       });
-      writeDraft(null);
-      onSaved(saved);
+      if (!order) writeDraft(null);
+      onSaved(saved, changed.map((l) => ({ id: l.product.id, qty: num(l.quantity) })));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Yadda saxlanmadı");
     } finally {
@@ -377,7 +459,7 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
   }
 
   return (
-    <Modal open title="Yeni mal qəbulu" onClose={onClose} size="xl">
+    <Modal open title={order ? `Mal qəbulu — sifariş ${order.number}` : "Yeni mal qəbulu"} onClose={onClose} size="xl">
       {restored && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <span>Yarımçıq qalmış qaimə bərpa edildi ({formatDateTime(restored)}).</span>

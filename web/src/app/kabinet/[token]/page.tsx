@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { API_URL, ApiError, api } from "@/lib/api";
 import { DEBT_STATUS_LABEL, METHOD_LABEL, formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { PortalView } from "@/lib/types";
+import { LoyaltyCardView } from "@/components/LoyaltyCard";
 
 const TYPE_LABEL: Record<string, string> = {
   DEBT_CREATED: "Borc yazıldı",
@@ -46,6 +47,10 @@ export default function CustomerPortalPage() {
         {!data && !error && <p className="text-center text-sm text-slate-500">Yüklənir…</p>}
         {data && (
           <>
+            {data.customerCode && (
+              <LoyaltyCardView store={data.storeName} name={data.customerName} code={data.customerCode}
+                balance={data.bonusBalance ?? 0} percent={data.bonusPercent} />
+            )}
             <section className="mb-5 rounded-3xl bg-gradient-to-br from-navy-800 to-violet-900 p-6 text-white shadow-xl">
               <p className="text-sm text-white/70">{data.storeName}{data.storePhone ? ` · ${data.storePhone}` : ""}</p>
               <h1 className="mt-1 font-serif text-2xl font-semibold">{data.customerName}</h1>

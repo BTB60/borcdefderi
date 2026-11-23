@@ -72,7 +72,15 @@ public class PurchaseService {
             @Size(max = 60, message = "Qaimə nömrəsi ən çox 60 simvol ola bilər") String supplierInvoice,
             LocalDate dueDate,
             @Size(max = 500) String note,
-            UUID clientRequestId) {}
+            UUID clientRequestId,
+            /** The supplier order these goods came for (optional): its lines count what came. */
+            UUID purchaseOrderId) {
+
+        public PurchaseRequest(UUID companyId, List<ItemRequest> items, BigDecimal paid, PaymentMethod paymentMethod,
+                               UUID cashAccountId, String supplierInvoice, LocalDate dueDate, String note, UUID clientRequestId) {
+            this(companyId, items, paid, paymentMethod, cashAccountId, supplierInvoice, dueDate, note, clientRequestId, null);
+        }
+    }
 
     public record Item(UUID id, UUID productId, String name, BigDecimal quantity, BigDecimal unitCost, BigDecimal lineTotal,
                        BigDecimal returnedQty, LocalDate expiryDate) {}
@@ -94,6 +102,12 @@ public class PurchaseService {
     private final PartyAccountService accounts;
     private final AuditService audit;
     private final az.borcdefteri.debts.DebtService debts;
+    private org.springframework.beans.factory.ObjectProvider<PurchaseOrderService> orders;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setOrders(org.springframework.beans.factory.ObjectProvider<PurchaseOrderService> orders) {
+        this.orders = orders;
+    }
 
     public PurchaseService(JdbcClient jdbc, TenantService tenant, InventoryService inventory, CashService cash,
                            PartyAccountService accounts, AuditService audit, az.borcdefteri.debts.DebtService debts) {
@@ -169,6 +183,13 @@ public class PurchaseService {
                 audit.log(m.storeId(), m.userId(), "PRODUCT_PRICE_CHANGED", "PRODUCT", p.id().toString(),
                         p.name() + ": satış " + p.salePrice() + " -> " + Money.of(it.salePrice()) + " (" + number + ")");
             }
+        }
+
+        if (req.purchaseOrderId() != null) {
+            Map<UUID, BigDecimal> got = new LinkedHashMap<>();
+            for (ItemRequest it : req.items()) got.merge(it.productId(), qty(it), BigDecimal::add);
+            orders.getObject().received(m, req.purchaseOrderId(), got);
+            jdbc.sql("UPDATE purchases SET purchase_order_id = :o WHERE id = :id").param("o", req.purchaseOrderId()).param("id", id).update();
         }
 
         if (req.companyId() != null && total.signum() > 0) {

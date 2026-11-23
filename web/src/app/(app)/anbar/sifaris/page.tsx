@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, EmptyState, Input, PageHeader, Spinner } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { Party, Product } from "@/lib/types";
+import type { Party, Product, PurchaseOrder } from "@/lib/types";
 import { waLink } from "@/lib/whatsapp";
 
 const q = (n: number) => Number(n).toLocaleString("az-AZ", { maximumFractionDigits: 3 });
@@ -25,6 +25,25 @@ export default function ReorderPage() {
   const [skip, setSkip] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [made, setMade] = useState<Record<string, PurchaseOrder>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  /** Sifariş yarat: the chosen lines become an order to the supplier; it is turned into a goods receipt when they come. */
+  async function makeOrder(groupId: string, items: Product[]) {
+    const lines = items.filter((p) => !skip[p.id] && Number(String(amount(p)).replace(",", ".")) > 0)
+      .map((p) => ({ productId: p.id, quantity: Number(String(amount(p)).replace(",", ".")) }));
+    if (lines.length === 0) { setError("Sifariş üçün ən azı bir mal seçin"); return; }
+    setBusy(groupId);
+    setError(null);
+    try {
+      const o = await api<PurchaseOrder>("/api/purchase-orders", { method: "POST", json: { companyId: groupId || null, items: lines } });
+      setMade((m) => ({ ...m, [groupId]: o }));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Sifariş yaradılmadı");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   useEffect(() => {
     api<Product[]>("/api/products?active=true").then(setProducts).catch((e) => setError(e instanceof ApiError ? e.message : "Yüklənmədi"));
@@ -77,7 +96,13 @@ export default function ReorderPage() {
                   <div className="flex flex-wrap gap-2">
                     <Button variant="outline" className="px-3 py-1.5" onClick={() => copy(g.id, text)}>{copied === g.id ? "Kopyalandı ✓" : "Mətni kopyala"}</Button>
                     {wa && <a href={wa} target="_blank" rel="noreferrer" className="rounded-xl bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700">WhatsApp-da göndər</a>}
-                    <Link href="/anbar/qebul" className="rounded-xl bg-gold-500 px-3 py-1.5 text-sm font-semibold text-navy-900 hover:bg-gold-600">Mal gəldi → qəbul et</Link>
+                    {made[g.id] ? (
+                      <Link href={`/anbar/qebul?order=${made[g.id].id}`} className="rounded-xl bg-gold-500 px-3 py-1.5 text-sm font-semibold text-navy-900 hover:bg-gold-600">
+                        {made[g.id].number} yaradıldı · mal gələndə qəbul et →
+                      </Link>
+                    ) : (
+                      <Button variant="gold" className="px-3 py-1.5" disabled={busy === g.id} onClick={() => makeOrder(g.id, g.items)}>Sifariş yarat</Button>
+                    )}
                   </div>
                 </div>
                 <div className="divide-y divide-slate-100 rounded-xl ring-1 ring-slate-200">

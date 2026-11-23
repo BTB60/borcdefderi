@@ -39,6 +39,7 @@ const STORE_NAV: NavItem[] = [
   { href: "/xatirlatmalar", label: "Xatırlatmalar", icon: "M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9Zm4.3 13a1.94 1.94 0 0 0 3.4 0", permission: "CUSTOMER_DEBTS" },
   { href: "/satis", label: "Satış", icon: "M3 4h2l2.4 11h11.2L21 8H6.2M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", permission: "SALES" },
   { href: "/sifarisler", label: "Onlayn sifarişlər", icon: "M4 6h16l-1.5 9h-13L4 6Zm3 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm10 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM8 3h8", permission: "SALES" },
+  { href: "/bonus-kartlari", label: "Bonus kartları", icon: "M3 6h18v12H3V6Zm0 4h18M7 15h3", anyOf: ["SALES", "CUSTOMER_DEBTS"] },
   { href: "/catdirilma", label: "Çatdırılma", icon: "M3 7h11v9H3V7Zm11 3h4l3 3v3h-7v-6ZM7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm10 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z", permission: "SALES", jobTitle: "COURIER" },
   { href: "/anbar", label: "Anbar", icon: "M3 9l9-6 9 6v11H3V9Zm6 11v-6h6v6", permission: "INVENTORY" },
   { href: "/maliyye", label: "Gəlir və mənfəət", icon: "M4 19h16M6 16l4-5 3 3 5-7", permission: "REPORTS" },

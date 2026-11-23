@@ -68,9 +68,23 @@ public class BonusService {
                 .param("k", kind).param("a", a).param("n", note).param("by", m.userId()).update();
     }
 
-    /** Bonus for the paid part of a sale (0 when the store gives no bonus). */
-    BigDecimal earnedFor(UUID storeId, BigDecimal paid) {
-        BigDecimal pct = storePercent(storeId);
+    /** The bonus percent for a customer: their card's own percent, otherwise the store's. */
+    BigDecimal percentFor(UUID storeId, UUID customerId) {
+        BigDecimal card = customerId == null ? null : jdbc.sql("SELECT percent FROM loyalty_cards WHERE customer_id = :c AND active")
+                .param("c", customerId).query(BigDecimal.class).optional().orElse(null);
+        return card != null ? card : storePercent(storeId);
+    }
+
+    /** True when the customer's bonus card is blocked: no bonus is earned or spent. */
+    boolean cardBlocked(UUID customerId) {
+        return customerId != null && jdbc.sql("SELECT COUNT(*) FROM loyalty_cards WHERE customer_id = :c AND NOT active")
+                .param("c", customerId).query(Long.class).single() > 0;
+    }
+
+    /** Bonus for the paid part of a sale, at the customer's card percent or the store's (0 when none, or blocked). */
+    BigDecimal earnedFor(UUID storeId, UUID customerId, BigDecimal paid) {
+        if (cardBlocked(customerId)) return Money.zero();
+        BigDecimal pct = percentFor(storeId, customerId);
         if (pct.signum() == 0 || paid.signum() <= 0) return Money.zero();
         return paid.multiply(pct).divide(BigDecimal.valueOf(100), 2, RoundingMode.DOWN);
     }
@@ -103,7 +117,7 @@ public class BonusService {
                 .query((rs, n) -> new Entry(rs.getObject("id", UUID.class), rs.getString("kind"), Money.of(rs.getBigDecimal("amount")),
                         rs.getObject("sale_id", UUID.class), rs.getString("number"), rs.getString("note"), rs.getString("full_name"),
                         rs.getObject("created_at", OffsetDateTime.class))).list();
-        return new Account(customerId, balance(customerId), storePercent(m.storeId()), discount, entries);
+        return new Account(customerId, balance(customerId), percentFor(m.storeId(), customerId), discount, entries);
     }
 
     /** Owner adds or removes bonus by hand (a gift, a correction). */

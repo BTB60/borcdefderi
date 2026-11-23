@@ -206,6 +206,7 @@ public class SalesService {
         BigDecimal bonusUsed = Money.of(req.bonusUsed() != null ? req.bonusUsed() : BigDecimal.ZERO);
         if (bonusUsed.signum() > 0) {
             if (req.customerId() == null) throw ApiException.badRequest("CUSTOMER_REQUIRED", "Bonusla ödəniş üçün müştəri seçin");
+            if (bonus.cardBlocked(req.customerId())) throw ApiException.conflict("CARD_BLOCKED", "Müştərinin bonus kartı bloklanıb");
             BigDecimal available = bonus.lockBalance(m.storeId(), req.customerId());
             if (bonusUsed.compareTo(available) > 0) {
                 throw ApiException.conflict("BONUS_EXCEEDS", "Müştərinin bonusu kifayət etmir (balans: " + available + " AZN)");
@@ -229,7 +230,7 @@ public class SalesService {
 
         if (credit.signum() > 0) checkCreditLimit(m, req.customerId(), credit, Boolean.TRUE.equals(req.allowOverLimit()));
 
-        BigDecimal bonusEarned = req.customerId() == null ? Money.zero() : bonus.earnedFor(m.storeId(), paid);
+        BigDecimal bonusEarned = req.customerId() == null ? Money.zero() : bonus.earnedFor(m.storeId(), req.customerId(), paid);
         UUID saleId = UUID.randomUUID();
         String number = "S-" + String.format("%06d", jdbc.sql("SELECT nextval('sale_number_seq')").query(Long.class).single());
         BigDecimal costTotal = Money.zero();

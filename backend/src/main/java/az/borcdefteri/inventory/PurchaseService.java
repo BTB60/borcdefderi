@@ -46,12 +46,22 @@ public class PurchaseService {
             @NotNull @DecimalMin(value = "0.00", message = "Alış qiyməti mənfi ola bilməz")
             @Digits(integer = 12, fraction = 2) BigDecimal unitCost,
             /** Son istifadə tarixi of this batch (optional). */
-            LocalDate expiryDate) {
+            LocalDate expiryDate,
+            /** New sale price of the product, set with the receipt (optional; null = keep). */
+            @DecimalMin(value = "0.00", message = "Satış qiyməti mənfi ola bilməz")
+            @Digits(integer = 12, fraction = 2) BigDecimal salePrice) {
 
         public ItemRequest(UUID productId, BigDecimal quantity, BigDecimal unitCost) {
-            this(productId, quantity, unitCost, null);
+            this(productId, quantity, unitCost, null, null);
+        }
+
+        public ItemRequest(UUID productId, BigDecimal quantity, BigDecimal unitCost, LocalDate expiryDate) {
+            this(productId, quantity, unitCost, expiryDate, null);
         }
     }
+
+    /** Tədarükçünü dəyiş: the right supplier of a receipt entered under the wrong one (or with none). */
+    public record SupplierChange(@NotNull(message = "Tədarükçünü seçin") UUID companyId) {}
 
     public record PurchaseRequest(
             UUID companyId,
@@ -153,6 +163,12 @@ public class PurchaseService {
                 jdbc.sql("UPDATE products SET purchase_price = :pp, version = version + 1 WHERE id = :id")
                         .param("pp", avg).param("id", p.id()).update();
             }
+            if (it.salePrice() != null && Money.of(it.salePrice()).compareTo(Money.of(p.salePrice())) != 0) {
+                jdbc.sql("UPDATE products SET sale_price = :sp, updated_at = now(), version = version + 1 WHERE id = :id")
+                        .param("sp", Money.of(it.salePrice())).param("id", p.id()).update();
+                audit.log(m.storeId(), m.userId(), "PRODUCT_PRICE_CHANGED", "PRODUCT", p.id().toString(),
+                        p.name() + ": satış " + p.salePrice() + " -> " + Money.of(it.salePrice()) + " (" + number + ")");
+            }
         }
 
         if (req.companyId() != null && total.signum() > 0) {
@@ -237,6 +253,72 @@ public class PurchaseService {
         return load(m.storeId(), id);
     }
 
+    /**
+     * Tədarükçünü dəyiş. Goods, stock and prices stay as they are; only who the store owes changes. What this receipt
+     * still adds to the old supplier's balance (its total less what was paid at the time and the goods returned) is
+     * taken off the old supplier and put on the new one. A receipt without a supplier (paid in full then) just gets one.
+     * The payment made with the receipt stays in the old supplier's history, where it now nets to zero.
+     */
+    @Transactional
+    public Purchase changeSupplier(UUID id, SupplierChange req) {
+        CurrentMember m = inventory.requireInventory();
+        if (!m.has(DebtType.COMPANY_PAYABLE.permission())) {
+            throw ApiException.forbidden("PERMISSION_DENIED", "Tədarükçünü dəyişmək üçün “Bizim tədarükçüyə borcumuz” icazəsi lazımdır");
+        }
+        jdbc.sql("SELECT id FROM purchases WHERE id = :id AND store_id = :s FOR UPDATE").param("id", id).param("s", m.storeId())
+                .query(UUID.class).optional().orElseThrow(() -> ApiException.notFound("Alış tapılmadı"));
+        record Row(UUID company, String companyName, String number, String invoice, BigDecimal total, BigDecimal paid, BigDecimal returned) {}
+        Row r = jdbc.sql("""
+                SELECT p.company_id, c.name, p.number, p.supplier_invoice, p.total, p.paid, p.returned_amount
+                FROM purchases p LEFT JOIN companies c ON c.id = p.company_id WHERE p.id = :id""").param("id", id)
+                .query((rs, n) -> new Row(rs.getObject("company_id", UUID.class), rs.getString("name"), rs.getString("number"),
+                        rs.getString("supplier_invoice"), Money.of(rs.getBigDecimal("total")), Money.of(rs.getBigDecimal("paid")),
+                        Money.of(rs.getBigDecimal("returned_amount")))).single();
+        String newName = jdbc.sql("SELECT name FROM companies WHERE id = :id AND store_id = :s")
+                .param("id", req.companyId()).param("s", m.storeId()).query(String.class).optional()
+                .orElseThrow(() -> ApiException.notFound("Tədarükçü tapılmadı"));
+        if (req.companyId().equals(r.company())) throw ApiException.badRequest("SAME_SUPPLIER", "Bu qaimə artıq həmin tədarükçüdədir");
+
+        BigDecimal moved = Money.zero();
+        UUID newDebt = null;
+        if (r.company() != null) {
+            moved = Money.of(r.total().subtract(r.paid()).subtract(r.returned()).max(BigDecimal.ZERO));
+            // paid later on the receipt's own debt ("Borcu ödə"): only what is still open moves
+            BigDecimal debtLeft = jdbc.sql("SELECT d.remaining_amount FROM purchases p JOIN debts d ON d.id = p.debt_id WHERE p.id = :id")
+                    .param("id", id).query(BigDecimal.class).optional().orElse(null);
+            if (debtLeft != null) moved = Money.of(moved.min(debtLeft));
+            if (moved.signum() > 0) {
+                List<az.borcdefteri.debts.DebtService.DebtView> old = debts.lockForParty(m, DebtType.COMPANY_PAYABLE, r.company()).stream()
+                        .filter(d -> d.remainingAmount().signum() > 0).toList();
+                BigDecimal balance = Money.of(old.stream().map(az.borcdefteri.debts.DebtService.DebtView::remainingAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add));
+                if (balance.compareTo(moved) < 0) {
+                    throw ApiException.conflict("SUPPLIER_PAID_OFF", "“" + r.companyName() + "” üzrə qalıq borc (" + balance
+                            + " AZN) bu qaimənin borcundan (" + moved + " AZN) azdır: ona sonradan ödəniş edilib. "
+                            + "Əvvəlcə həmin ödənişi ləğv edin və ya düzgün tədarükçüyə köçürün");
+                }
+                String note = r.number() + ": tədarükçü dəyişdirildi → " + newName;
+                BigDecimal left = moved;
+                for (int i = old.size() - 1; i >= 0 && left.signum() > 0; i--) { // the newest debt carries this receipt
+                    var d = old.get(i);
+                    BigDecimal part = Money.of(left.min(d.remainingAmount()));
+                    debts.decreaseLocked(m, d, part, note);
+                    left = Money.of(left.subtract(part));
+                }
+                // a debt of its own, so the receipt keeps showing exactly what is still owed for it
+                newDebt = debts.create(new az.borcdefteri.debts.DebtRequest(DebtType.COMPANY_PAYABLE, req.companyId(), moved,
+                        tenant.today(), null, "Mal alışı " + r.number() + " (əvvəl “" + r.companyName() + "” adına yazılmışdı)", null),
+                        r.invoice() != null ? r.invoice() : r.number()).id();
+            }
+        }
+        jdbc.sql("UPDATE purchases SET company_id = :c, debt_id = :d WHERE id = :id")
+                .param("c", req.companyId()).param("d", newDebt).param("id", id).update();
+        audit.log(m.storeId(), m.userId(), "PURCHASE_SUPPLIER_CHANGED", "PURCHASE", id.toString(),
+                r.number() + ": " + (r.companyName() != null ? r.companyName() : "tədarükçüsüz") + " → " + newName
+                        + (moved.signum() > 0 ? ", borc " + moved + " AZN köçürüldü" : ""));
+        return load(m.storeId(), id);
+    }
+
     public List<Purchase> list(LocalDate from, LocalDate to, UUID companyId, int limit) {
         CurrentMember m = inventory.requireInventory();
         StringBuilder where = new StringBuilder(" WHERE p.store_id = :s");
@@ -281,8 +363,12 @@ public class PurchaseService {
         // with a supplier debt the debt is the truth: later payments (here or in "Bizim tədarükçüyə borcumuz") and
         // returns to the supplier show on the receipt
         if (rs.getBigDecimal("debt_remaining") != null) {
-            paid = Money.of(rs.getBigDecimal("debt_paid"));
-            unpaid = Money.of(rs.getBigDecimal("debt_remaining"));
+            BigDecimal remaining = Money.of(rs.getBigDecimal("debt_remaining"));
+            // a receipt moved to another supplier ("Tədarükçünü dəyiş") has a debt for its open part only, so what was
+            // paid is the rest of the receipt; otherwise the debt's own payments
+            BigDecimal rest = Money.of(total.subtract(Money.of(rs.getBigDecimal("returned_amount"))).subtract(remaining));
+            paid = Money.of(rs.getBigDecimal("debt_paid")).max(rest);
+            unpaid = remaining;
         }
         return new Purchase(rs.getObject("id", UUID.class), rs.getString("number"), rs.getObject("company_id", UUID.class),
                 rs.getString("company_name"), rs.getString("supplier_invoice"), total, paid, unpaid,

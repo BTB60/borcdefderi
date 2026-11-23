@@ -40,6 +40,12 @@ public class PurchaseController {
         return purchases.returnItems(id, req);
     }
 
+    /** Tədarükçünü dəyiş: the receipt (and what is still owed for it) moves to the right supplier. */
+    @PostMapping("/{id}/supplier")
+    public PurchaseService.Purchase changeSupplier(@PathVariable UUID id, @Valid @RequestBody PurchaseService.SupplierChange req) {
+        return purchases.changeSupplier(id, req);
+    }
+
     @GetMapping("/{id}")
     public PurchaseService.Purchase get(@PathVariable UUID id) {
         return purchases.get(id);

@@ -2,14 +2,24 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, Table, Td, Th } from "@/components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, Table, Td, Th, useConfirm } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { PaymentModal } from "@/components/debts/DebtModals";
 import type { Debt, Party, Product, Purchase } from "@/lib/types";
 
-type Line = { product: Product; quantity: string; unitCost: string; expiryDate: string };
+type Line = { product: Product; quantity: string; unitCost: string; expiryDate: string; salePrice: string };
+
+/** The receipt being filled in, kept in this browser so a closed window or a lost connection loses nothing. */
+type Draft = { companyId: string; invoice: string; dueDate: string; paid: string; method: string; note: string; lines: Line[]; savedAt: string };
+const DRAFT_KEY = "hp_purchase_draft";
+const readDraft = (): Draft | null => {
+  try { return JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "null") as Draft | null; } catch { return null; }
+};
+const writeDraft = (d: Draft | null) => {
+  try { if (d) localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); else localStorage.removeItem(DRAFT_KEY); } catch { /* storage blocked */ }
+};
 
 const num = (s: string) => {
   const n = Number(String(s).replace(",", "."));
@@ -108,6 +118,7 @@ export default function PurchasesPage() {
             {!!viewing.returnedAmount && <Badge tone="amber">Qaytarılıb {formatMoney(viewing.returnedAmount)}</Badge>}
           </div>
           {viewing.note && <p className="mt-3 text-sm text-slate-500">{viewing.note}</p>}
+          {canPay && <ChangeSupplier purchase={viewing} onDone={(p, msg) => { setViewing(p); setNotice(msg); load(); }} />}
           <ReturnToSupplier purchase={viewing} onDone={(p, msg) => { setViewing(p); setNotice(msg); load(); }} />
         </Modal>
       )}
@@ -123,6 +134,70 @@ export default function PurchasesPage() {
           }} />
       )}
     </>
+  );
+}
+
+/**
+ * Tədarükçünü dəyiş: a receipt entered under the wrong supplier (or none) moves to the right one. The goods and stock
+ * stay; what is still owed for the receipt moves from the old supplier's debt to the new one's.
+ */
+function ChangeSupplier({ purchase, onDone }: { purchase: Purchase; onDone: (p: Purchase, msg: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [suppliers, setSuppliers] = useState<Party[] | null>(null);
+  const [target, setTarget] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
+  useEffect(() => { if (open && !suppliers) api<Party[]>("/api/companies").then(setSuppliers).catch(() => setSuppliers([])); }, [open, suppliers]);
+
+  const owed = purchase.companyId ? Math.max(0, Math.min(purchase.unpaid, round2(purchase.total - (purchase.returnedAmount ?? 0)))) : 0;
+
+  async function save() {
+    const name = suppliers?.find((s) => s.id === target)?.name ?? "";
+    const ok = await confirm(
+      <>
+        <span className="block"><b>{purchase.number}</b>: {purchase.companyName ?? "Təchizatçısız"} → <b>{name}</b></span>
+        {owed > 0 && <span className="mt-1 block">Bu qaimənin borcu ({formatMoney(owed)}) {purchase.companyName} hesabından çıxıb {name} hesabına keçəcək.</span>}
+        <span className="mt-1 block text-slate-500">Mal, anbar qalığı və qiymətlər dəyişmir.</span>
+      </>, { title: "Tədarükçünü dəyiş", confirmLabel: "Bəli, dəyiş" });
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const p = await api<Purchase>(`/api/purchases/${purchase.id}/supplier`, { method: "POST", json: { companyId: target } });
+      setOpen(false);
+      onDone(p, `${p.number}: tədarükçü “${name}” olaraq dəyişdirildi`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Alınmadı");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="mt-4 flex justify-end">
+        <Button variant="outline" onClick={() => setOpen(true)}>{purchase.companyId ? "Tədarükçünü dəyiş" : "Tədarükçü təyin et"}</Button>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+      <p className="mb-2 text-sm font-semibold text-navy-800">Düzgün tədarükçü</p>
+      {error && <div className="mb-2"><Alert>{error}</Alert></div>}
+      {!suppliers ? <Spinner /> : (
+        <Select value={target} onChange={(e) => setTarget(e.target.value)}>
+          <option value="">— Seçin —</option>
+          {suppliers.filter((s) => s.id !== purchase.companyId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </Select>
+      )}
+      <p className="mt-2 text-xs text-slate-500">Mal və anbar dəyişmir. Qaimənin ödənilməmiş borcu yeni tədarükçünün hesabına keçir; qaimə ilə edilən ödəniş köhnə tədarükçünün tarixçəsində qalır (onun balansına təsir etmir).</p>
+      <div className="mt-3 flex justify-end gap-2">
+        <Button variant="ghost" onClick={() => setOpen(false)}>Bağla</Button>
+        <Button variant="gold" disabled={busy || !target} onClick={save}>Dəyiş</Button>
+      </div>
+      {confirmDialog}
+    </div>
   );
 }
 
@@ -202,11 +277,30 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(newId());
   const searchRef = useRef<HTMLInputElement>(null);
+  const [creatingProduct, setCreatingProduct] = useState<string | null>(null);
+  const [restored, setRestored] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   useEffect(() => {
     api<Product[]>("/api/products?active=true").then(setProducts).catch(() => setProducts([]));
     api<Party[]>("/api/companies").then(setSuppliers).catch(() => setSuppliers([]));
+    // a receipt left half done (window closed, connection lost) comes back
+    const d = readDraft();
+    if (d && d.lines?.length) {
+      setCompanyId(d.companyId); setInvoice(d.invoice); setDueDate(d.dueDate); setPaid(d.paid); setMethod(d.method); setNote(d.note);
+      setLines(d.lines.map((l) => ({ ...l, salePrice: l.salePrice ?? String(l.product.salePrice ?? "") })));
+      setRestored(d.savedAt);
+    }
   }, []);
+  useEffect(() => {
+    writeDraft(lines.length ? { companyId, invoice, dueDate, paid, method, note, lines, savedAt: new Date().toISOString() } : null);
+  }, [companyId, invoice, dueDate, paid, method, note, lines]);
+
+  function clearDraft() {
+    setLines([]); setCompanyId(""); setInvoice(""); setDueDate(""); setPaid(""); setMethod("CASH"); setNote("");
+    setRestored(null);
+    writeDraft(null);
+  }
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -220,7 +314,7 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
     setLines((ls) => {
       const i = ls.findIndex((l) => l.product.id === p.id);
       if (i >= 0) return ls.map((l, k) => (k === i ? { ...l, quantity: String(num(l.quantity) + 1) } : l));
-      return [...ls, { product: p, quantity: "1", unitCost: String(p.purchasePrice ?? 0), expiryDate: "" }];
+      return [...ls, { product: p, quantity: "1", unitCost: String(p.purchasePrice ?? 0), expiryDate: "", salePrice: String(p.salePrice ?? "") }];
     });
     setQuery("");
     searchRef.current?.focus();
@@ -233,6 +327,7 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
     const exact = products.find((p) => p.barcode === q || p.code.toLowerCase() === q.toLowerCase());
     if (exact) add(exact);
     else if (matches.length === 1) add(matches[0]);
+    else if (q && matches.length === 0) setCreatingProduct(q); // an unknown barcode: make the product right here
   }
 
   async function save() {
@@ -243,17 +338,33 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
     const paidN = onCredit ? 0 : round2(num(paid));
     if (paidN > total) { setError("Ödənilən məbləğ alışdan çox ola bilməz"); return; }
     if (!companyId && paidN > 0 && paidN !== total) { setError("Borcla və ya qismən ödənişli alış üçün təchizatçı seçin"); return; }
+    const supplier = suppliers.find((s) => s.id === companyId)?.name;
+    const changed = lines.filter((l) => l.salePrice !== "" && round2(num(l.salePrice)) !== round2(l.product.salePrice));
+    const ok = await confirm(
+      <>
+        <span className="block text-base font-semibold text-navy-800">{supplier ?? "Təchizatçısız"}{invoice ? ` · qaimə ${invoice}` : ""}</span>
+        <span className="mt-1 block">{lines.length} məhsul · cəmi <b>{formatMoney(total)}</b></span>
+        <span className="mt-1 block">{onCredit ? "Hamısı borca" : `İndi ödənilir: ${formatMoney(paidN)} (${METHOD_TEXT[method] ?? method})`}</span>
+        {companyId && total - paidN > 0 && <span className="mt-1 block text-rose-700">{supplier} borcunuza yazılacaq: <b>{formatMoney(round2(total - paidN))}</b></span>}
+        {changed.length > 0 && <span className="mt-1 block text-amber-700">{changed.length} məhsulun satış qiyməti dəyişəcək</span>}
+        <span className="mt-2 block text-slate-500">Mallar anbara yüklənəcək. Təchizatçı düzgündür?</span>
+      </>, { title: "Qaiməni yekunlaşdır", confirmLabel: "Bəli, anbara yüklə" });
+    if (!ok) return;
     setBusy(true);
     try {
       const saved = await api<Purchase>("/api/purchases", {
         method: "POST",
         json: {
           companyId: companyId || null,
-          items: lines.map((l) => ({ productId: l.product.id, quantity: num(l.quantity), unitCost: round2(num(l.unitCost)), expiryDate: l.expiryDate || null })),
+          items: lines.map((l) => ({
+            productId: l.product.id, quantity: num(l.quantity), unitCost: round2(num(l.unitCost)), expiryDate: l.expiryDate || null,
+            salePrice: l.salePrice !== "" && round2(num(l.salePrice)) !== round2(l.product.salePrice) ? round2(num(l.salePrice)) : null,
+          })),
           paid: paidN, paymentMethod: onCredit ? "CASH" : method, supplierInvoice: invoice || null, dueDate: dueDate || null, note: note || null,
           clientRequestId: requestId.current,
         },
       });
+      writeDraft(null);
       onSaved(saved);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Yadda saxlanmadı");
@@ -264,6 +375,12 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
 
   return (
     <Modal open title="Yeni mal qəbulu" onClose={onClose} size="xl">
+      {restored && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <span>Yarımçıq qalmış qaimə bərpa edildi ({formatDateTime(restored)}).</span>
+          <button type="button" className="font-semibold underline" onClick={clearDraft}>Təmizlə, yenidən başla</button>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Təchizatçı (şirkət)" hint="Seçilsə, ödənilməyən hissə “Bizim tədarükçüyə borcumuz”a yazılır">
           <Select value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
@@ -278,6 +395,12 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
       <div className="relative mt-4">
         <Input ref={searchRef} autoFocus value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onSearchKey}
           placeholder="Məhsul adı, kodu və ya barkodu (skaner ilə oxudun və Enter)" />
+        {query.trim() && matches.length === 0 && (
+          <div className="absolute z-10 mt-1 w-full rounded-xl bg-white p-3 text-sm shadow-lg ring-1 ring-slate-200">
+            “{query.trim()}” tapılmadı.{" "}
+            <button type="button" className="font-semibold text-gold-600 hover:underline" onClick={() => setCreatingProduct(query.trim())}>+ Yeni məhsul kimi əlavə et</button>
+          </div>
+        )}
         {matches.length > 0 && (
           <ul className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-xl bg-white shadow-lg ring-1 ring-slate-200">
             {matches.map((p) => (
@@ -295,7 +418,7 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
       <div className="mt-3">
         {lines.length === 0 ? <EmptyState title="Məhsul əlavə edin" /> : (
           <Table>
-            <thead><tr><Th>Məhsul</Th><Th className="text-right">Miqdar</Th><Th className="text-right">Alış qiyməti</Th><Th>Son istifadə tarixi</Th><Th className="text-right">Cəmi</Th><Th /></tr></thead>
+            <thead><tr><Th>Məhsul</Th><Th className="text-right">Miqdar</Th><Th className="text-right">Alış qiyməti</Th><Th className="text-right">Satış qiyməti</Th><Th>Son istifadə tarixi</Th><Th className="text-right">Cəmi</Th><Th /></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {lines.map((l, i) => (
                 <tr key={l.product.id}>
@@ -304,6 +427,18 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
                     onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, quantity: e.target.value } : x)))} /></Td>
                   <Td className="text-right"><Input className="w-28 text-right" inputMode="decimal" value={l.unitCost}
                     onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, unitCost: e.target.value } : x)))} /></Td>
+                  <Td className="text-right">
+                    <Input className="w-28 text-right" inputMode="decimal" value={l.salePrice} aria-label="Satış qiyməti"
+                      onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, salePrice: e.target.value } : x)))} />
+                    <div className="mt-0.5 text-xs">
+                      {num(l.unitCost) > 0 && num(l.salePrice) > 0 && (
+                        <span className={num(l.salePrice) <= num(l.unitCost) ? "font-semibold text-rose-600" : "text-slate-500"}>
+                          {num(l.salePrice) <= num(l.unitCost) ? "zərər! " : ""}{Math.round(((num(l.salePrice) - num(l.unitCost)) / num(l.unitCost)) * 100)}%
+                        </span>
+                      )}
+                      {l.salePrice !== "" && round2(num(l.salePrice)) !== round2(l.product.salePrice) && <span className="ml-1 text-amber-700">(əvvəl {formatMoney(l.product.salePrice)})</span>}
+                    </div>
+                  </Td>
                   <Td><Input type="date" className="w-40" value={l.expiryDate} aria-label="Son istifadə tarixi" title="Boş qala bilər"
                     onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, expiryDate: e.target.value } : x)))} /></Td>
                   <Td className="text-right font-semibold tabular-nums">{formatMoney(round2(num(l.quantity) * num(l.unitCost)))}</Td>
@@ -340,8 +475,65 @@ function PurchaseForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: 
       {error && <div className="mt-3"><Alert>{error}</Alert></div>}
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>Ləğv et</Button>
-        <Button variant="gold" disabled={busy || lines.length === 0} onClick={save}>{busy ? "Saxlanılır…" : "Qəbul et"}</Button>
+        <Button variant="gold" disabled={busy || lines.length === 0} onClick={save}>{busy ? "Saxlanılır…" : "Qaiməni yekunlaşdır"}</Button>
       </div>
+      {lines.length > 0 && <p className="mt-2 text-right text-xs text-slate-500">Qaimə yekunlaşdırılana qədər anbara heç nə düşmür; yarımçıq qaimə bu brauzerdə yadda qalır.</p>}
+      {confirmDialog}
+      {creatingProduct !== null && (
+        <NewProductModal initial={creatingProduct} onClose={() => { setCreatingProduct(null); searchRef.current?.focus(); }}
+          onCreated={(p) => { setProducts((ps) => [...ps, p]); setCreatingProduct(null); add(p); }} />
+      )}
+    </Modal>
+  );
+}
+
+const METHOD_TEXT: Record<string, string> = { CASH: "nağd", CARD: "kartla", TRANSFER: "bank köçürməsi", DEBT: "borc" };
+
+/** A product that is not in the store yet, made from the receipt (an unknown barcode or a new name). */
+function NewProductModal({ initial, onClose, onCreated }: { initial: string; onClose: () => void; onCreated: (p: Product) => void }) {
+  const looksLikeCode = /^[0-9A-Za-z-]{4,64}$/.test(initial) && /\d/.test(initial);
+  const [form, setForm] = useState({ name: looksLikeCode ? "" : initial, barcode: looksLikeCode ? initial : "", unit: "ədəd", purchasePrice: "", salePrice: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const buy = num(form.purchasePrice);
+  const sell = num(form.salePrice);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const p = await api<Product>("/api/products", {
+        method: "POST",
+        json: { name: form.name.trim(), barcode: form.barcode.trim() || null, unit: form.unit.trim() || "ədəd",
+          purchasePrice: round2(buy), salePrice: round2(sell), initialStock: 0 },
+      });
+      onCreated(p);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Məhsul yaradılmadı");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open title="Yeni məhsul" onClose={onClose}
+      footer={<><Button variant="ghost" onClick={onClose}>Ləğv et</Button><Button type="submit" form="new-product-form" disabled={busy}>Yarat və qaiməyə əlavə et</Button></>}>
+      {error && <div className="mb-3"><Alert>{error}</Alert></div>}
+      <form id="new-product-form" onSubmit={submit} className="space-y-3">
+        <Field label="Məhsulun adı"><Input required autoFocus={!form.name} maxLength={200} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Barkod"><Input value={form.barcode} maxLength={64} onChange={(e) => setForm({ ...form, barcode: e.target.value })} /></Field>
+          <Field label="Vahid"><Input value={form.unit} maxLength={20} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="ədəd, kq, litr" /></Field>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Alış qiyməti (₼)"><Input required inputMode="decimal" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} /></Field>
+          <Field label="Satış qiyməti (₼)" hint={buy > 0 && sell > 0 ? `${sell <= buy ? "zərər! " : ""}${Math.round(((sell - buy) / buy) * 100)}% qazanc` : undefined}>
+            <Input required inputMode="decimal" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} />
+          </Field>
+        </div>
+        <p className="text-xs text-slate-500">Məhsul anbarda 0 qalıqla yaranır; say qaimə yekunlaşanda əlavə olunur.</p>
+      </form>
     </Modal>
   );
 }

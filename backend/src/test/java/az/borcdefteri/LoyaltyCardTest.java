@@ -52,6 +52,13 @@ class LoyaltyCardTest extends IntegrationTestBase {
         get(owner, "/api/loyalty-cards?q=9998877").andExpect(jsonPath("$.length()", is(1)));
         get(owner, "/api/loyalty-cards?q=" + gold.get("number").asText()).andExpect(jsonPath("$[0].percent", is(10.0)));
 
+        // the store's card design reaches the customer's kabinet, with the card's own percent
+        put(owner, "/api/settings/print-design", Map.of("card", Map.of("background", "#123456", "textColor", "#ffffff", "title", "VIP kart")))
+                .andExpect(status().isOk());
+        String url = body(post(owner, "/api/customers/" + gold.get("customerId").asText() + "/portal-links", Map.of("days", 30))).get("url").asText();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/public/portal/" + url.substring(url.lastIndexOf('/') + 1)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.cardDesign.title", is("VIP kart"))).andExpect(jsonPath("$.bonusPercent", is(10.0)));
+
         // change the percent, then block: nothing earned, spending refused
         put(owner, "/api/loyalty-cards/" + plain.get("id").asText(), Map.of("firstName", "Vüsal", "lastName", "Məmmədov",
                 "phone", "0559998877", "percent", "5", "active", false)).andExpect(status().isOk())

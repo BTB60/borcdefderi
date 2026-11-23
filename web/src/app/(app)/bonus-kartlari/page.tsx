@@ -7,7 +7,8 @@ import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { useDebounced } from "@/lib/useDebounced";
 import { waLink } from "@/lib/whatsapp";
-import { cardBarcodeUrl, printLoyaltyCard } from "@/components/LoyaltyCard";
+import { CardFace, printLoyaltyCard, type CardDesign } from "@/components/LoyaltyCard";
+import { CardDesigner } from "@/components/CardDesigner";
 
 type LoyaltyCard = {
   id: string; customerId: string; number: string; firstName: string; lastName: string; patronymic: string | null; fullName: string;
@@ -29,6 +30,10 @@ export default function LoyaltyCardsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<LoyaltyCard | "new" | null>(null);
   const [viewing, setViewing] = useState<LoyaltyCard | null>(null);
+  const [design, setDesign] = useState<CardDesign | null>(null);
+  const [designing, setDesigning] = useState(false);
+  const mayDesign = isOwner || can("TILL_SETTINGS");
+  useEffect(() => { api<{ card?: CardDesign }>("/api/settings/print-design").then((d) => setDesign(d.card ?? null)).catch(() => undefined); }, []);
 
   const load = useCallback(() => {
     api<LoyaltyCard[]>(`/api/loyalty-cards${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ""}`)
@@ -43,7 +48,10 @@ export default function LoyaltyCardsPage() {
   return (
     <>
       <PageHeader title="Bonus kartları" subtitle="Hər müştəriyə öz faizi ilə bonus kartı. Kassada kartın barkodunu skan edin — bonus yığılır və xərclənir."
-        actions={<Button variant="gold" onClick={() => setEditing("new")}>+ Yeni kart</Button>} />
+        actions={<div className="flex flex-wrap gap-2">
+          {mayDesign && <Button variant="outline" onClick={() => setDesigning(true)}>🎨 Kart dizaynı</Button>}
+          <Button variant="gold" onClick={() => setEditing("new")}>+ Yeni kart</Button>
+        </div>} />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
       <div className="mb-4 grid gap-3 sm:grid-cols-2">
@@ -75,7 +83,9 @@ export default function LoyaltyCardsPage() {
       </Card>
       {editing && <CardModal card={editing === "new" ? null : editing} onClose={() => setEditing(null)}
         onSaved={(c, created) => { setEditing(null); setNotice(created ? `Kart yaradıldı: ${c.number} · ${c.fullName} · ${Number(c.percent)}%` : `${c.fullName}: kart yeniləndi`); load(); if (created) setViewing(c); }} />}
-      {viewing && <CardDetail card={viewing} storeName={me?.storeName ?? ""} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
+      {viewing && <CardDetail card={viewing} design={design} storeName={me?.storeName ?? ""} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
+      {designing && <CardDesigner initial={design} store={me?.storeName ?? ""} onClose={() => setDesigning(false)}
+        onSaved={(d) => { setDesign(d); setDesigning(false); setNotice("Kartın dizaynı yadda saxlanıldı"); }} />}
     </>
   );
 }
@@ -130,7 +140,7 @@ function CardModal({ card, onClose, onSaved }: { card: LoyaltyCard | null; onClo
   );
 }
 
-function CardDetail({ card, storeName, onClose, onEdit }: { card: LoyaltyCard; storeName: string; onClose: () => void; onEdit: () => void }) {
+function CardDetail({ card, design, storeName, onClose, onEdit }: { card: LoyaltyCard; design: CardDesign | null; storeName: string; onClose: () => void; onEdit: () => void }) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [data, setData] = useState<LoyaltyCard>(card);
   useEffect(() => {
@@ -142,19 +152,10 @@ function CardDetail({ card, storeName, onClose, onEdit }: { card: LoyaltyCard; s
       footer={<><Button variant="ghost" onClick={onClose}>Bağla</Button><Button variant="outline" onClick={onEdit}>Dəyiş</Button></>}>
       <div className="grid gap-5 md:grid-cols-[300px_1fr]">
         <div>
-          <div className="rounded-2xl bg-gradient-to-br from-navy-800 to-violet-900 p-4 text-white shadow-lg">
-            <p className="text-[11px] uppercase tracking-widest text-white/60">Bonus kartı · {Number(data.percent)}%</p>
-            <p className="font-serif text-lg font-semibold">{storeName}</p>
-            <p className="text-sm text-white/80">{data.fullName}</p>
-            <div className="mt-3 rounded-xl bg-white p-2 text-center text-black">
-              {/* eslint-disable-next-line @next/next/no-img-element -- a server-made barcode picture */}
-              <img src={cardBarcodeUrl(data.number)} alt={`Barkod ${data.number}`} className="mx-auto h-12 max-w-full" />
-              <p className="text-xs tracking-[0.2em]">{data.number}</p>
-            </div>
-          </div>
+          <CardFace design={design} store={storeName} name={data.fullName} code={data.number} percent={data.percent} balance={data.balance} />
           {!data.active && <div className="mt-2"><Badge tone="rose">Kart bloklanıb</Badge></div>}
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="gold" onClick={() => printLoyaltyCard({ store: storeName, name: data.fullName, code: data.number, percent: Number(data.percent) })}>Kartı çap et</Button>
+            <Button variant="gold" onClick={() => printLoyaltyCard({ store: storeName, name: data.fullName, code: data.number, percent: Number(data.percent), design })}>Kartı çap et</Button>
             {share && <a href={share} target="_blank" rel="noreferrer" className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">WhatsApp ilə göndər</a>}
           </div>
         </div>

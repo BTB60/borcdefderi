@@ -49,7 +49,7 @@ export default function CustomerPortalPage() {
           <>
             {data.customerCode && (
               <LoyaltyCardView store={data.storeName} name={data.customerName} code={data.customerCode}
-                balance={data.bonusBalance ?? 0} percent={data.bonusPercent} />
+                balance={data.bonusBalance ?? 0} percent={data.bonusPercent} design={data.cardDesign} />
             )}
             <section className="mb-5 rounded-3xl bg-gradient-to-br from-navy-800 to-violet-900 p-6 text-white shadow-xl">
               <p className="text-sm text-white/70">{data.storeName}{data.storePhone ? ` · ${data.storePhone}` : ""}</p>

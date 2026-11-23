@@ -255,6 +255,7 @@ export interface PortalView {
   expiresAt: string | null; generatedAt: string;
   /** Bonus kartı. */
   bonusBalance?: number; bonusPercent?: number;
+  cardDesign?: import("@/components/LoyaltyCard").CardDesign | null;
 }
 
 export interface Activity {

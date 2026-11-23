@@ -5,6 +5,7 @@ import '../state/session.dart';
 import 'cash_screen.dart';
 import 'dashboard_screen.dart';
 import 'debts_screen.dart';
+import 'deliveries_screen.dart';
 import 'expenses_screen.dart';
 import 'inventory_screen.dart';
 import 'more_screen.dart';
@@ -57,6 +58,9 @@ class _HomeShellState extends State<HomeShell> {
           if (me.canAnyDebt) (label: 'Ödənişlər', icon: Icons.payments_outlined, page: PaymentsScreen(session: s)),
           if (me.can('CASH')) (label: 'Kassa', icon: Icons.account_balance_outlined, page: CashScreen(session: s)),
           if (me.can('EXPENSES')) (label: 'Xərclər', icon: Icons.receipt_long_outlined, page: ExpensesScreen(session: s)),
+          // a courier opens the app on their deliveries
+          if (me.jobTitle == 'COURIER' && !me.can('SALES'))
+            (label: 'Çatdırılma', icon: Icons.local_shipping_outlined, page: DeliveriesScreen(session: s)),
         ].take(4),
       (label: 'Daha', icon: Icons.more_horiz, page: MoreScreen(session: s)),
     ];

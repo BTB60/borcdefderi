@@ -60,6 +60,29 @@ Köməkçi Claude API ilə işləyir. Açar olmasa, tətbiqdə "Köməkçi həl�
 Köməkçi yalnız oxuyur (borclar, satış, qalıq, kassa, hesabat) və istifadəçinin öz icazələri ilə işləyir. Mağaza üzrə
 gündəlik sual və token sayı `assistant_usage` cədvəlində saxlanılır.
 
+### Avtomatik SMS — istəyə görə
+
+SMS xidməti qoşulmasa, borc xatırlatmaları əvvəlki kimi işləyir: mağaza onları bir toxunuşla WhatsApp və ya SMS ilə
+özü göndərir. Xidmət qoşulandan sonra mağaza sahibi **Xatırlatmalar → Parametrlər → Avtomatik SMS** seçimini aça bilir.
+Bundan sonra hər səhər saat 9:00-da xatırlatmalar müştərilərə SMS ilə özü gedir. Hər SMS `sms_messages` cədvəlində
+saxlanılır.
+
+Render → `borcdefderi` → **Environment**:
+
+| Dəyişən | Dəyər |
+|---|---|
+| `SMS_PROVIDER` | `http` (əksər yerli provayderlər) və ya `twilio`; boş = söndürülüb |
+| `SMS_SENDER` | Göndərən adı (provayderdə təsdiqlənmiş), default `HesabPro` |
+| `SMS_HTTP_URL` | Provayderin ünvanı; `{to}`, `{text}`, `{sender}` yerinə nömrə (994XXXXXXXXX), mətn və göndərən adı qoyulur |
+| `SMS_HTTP_METHOD` | `GET` (default) və ya `POST` |
+| `SMS_HTTP_BODY` | `POST` üçün sorğunun gövdəsi, eyni yer tutucularla (məs. `{"to":"{to}","text":"{text}","from":"{sender}"}`) |
+| `SMS_HTTP_CONTENT_TYPE` | default `application/json` |
+| `SMS_HTTP_AUTH` | `Authorization` başlığı (məs. `Bearer <açar>`); gizli saxlayın |
+| `SMS_TWILIO_SID`, `SMS_TWILIO_TOKEN` | yalnız `twilio` üçün |
+| `SMS_MONTHLY_LIMIT` | mağaza üzrə aylıq SMS limiti, default `300` |
+
+Yoxlamaq üçün: mağaza sahibi **Xatırlatmalar → Parametrlər → Test SMS** ilə öz nömrəsinə SMS göndərir.
+
 ## 3. Vercel (Next.js web)
 
 1. Vercel-də **Add New → Project**, repozitoriyanı seçin.

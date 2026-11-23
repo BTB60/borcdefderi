@@ -8,6 +8,8 @@ import '../state/session.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'assistant_screen.dart';
+import 'attendance_screen.dart';
+import 'deliveries_screen.dart';
 import 'cash_screen.dart';
 import 'contact_screen.dart';
 import 'employees_screen.dart';
@@ -111,6 +113,16 @@ class MoreScreen extends StatelessWidget {
                   builder: (_) => me.lockedFor('SALES') ? SubscriptionScreen(session: session) : SalesScreen(session: session))),
             ),
           ),
+        if (me.can('SALES') || me.jobTitle == 'COURIER')
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.local_shipping_outlined, color: navy),
+              title: Text(me.can('SALES') ? 'Çatdırılma' : 'Mənim çatdırılmalarım'),
+              subtitle: const Text('Kuryerə ver, statusu izlə, müştəriyə link'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeliveriesScreen(session: session))),
+            ),
+          ),
         if (me.can('INVENTORY') || me.can('SALES') || me.lockedFor('INVENTORY'))
           Card(
             child: ListTile(
@@ -184,6 +196,16 @@ class MoreScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context)
                   .push(MaterialPageRoute(builder: (_) => PartiesScreen(session: session, isCustomer: false))),
+            ),
+          ),
+        if (!me.isSuperAdmin && !me.isSupportAdmin)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.schedule, color: navy),
+              title: const Text('Davamiyyət'),
+              subtitle: Text(me.isOwner ? 'Kim neçədə gəlib-gedib, gecikmələr, iş saatı' : 'Gəldim / Getdim'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AttendanceScreen(session: session))),
             ),
           ),
         Card(

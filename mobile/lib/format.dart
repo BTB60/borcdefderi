@@ -62,6 +62,7 @@ const jobTitleLabels = {
   'STOREKEEPER': 'Anbardar',
   'ACCOUNTANT': 'Mühasib',
   'SELLER': 'Satıcı',
+  'COURIER': 'Kuryer',
   'OTHER': 'Digər',
 };
 
@@ -71,6 +72,7 @@ const jobTitlePermissions = {
   'STOREKEEPER': ['INVENTORY'],
   'ACCOUNTANT': ['REPORTS', 'CASH', 'EXPENSES', 'CUSTOMER_DEBTS', 'COMPANY_RECEIVABLES', 'COMPANY_PAYABLES'],
   'SELLER': ['SALES', 'CUSTOMER_DEBTS'],
+  'COURIER': <String>[],
   'OTHER': <String>[],
 };
 

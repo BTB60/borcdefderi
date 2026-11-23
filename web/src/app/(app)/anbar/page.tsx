@@ -8,6 +8,7 @@ import { API_URL, ApiError, api, download, getToken, openProtected } from "@/lib
 import { useDebounced } from "@/lib/useDebounced";
 import { useAuth } from "@/lib/auth";
 import { BulkPriceModal } from "@/components/BulkPriceModal";
+import { VariantsModal } from "@/components/inventory/VariantsModal";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import type { InventorySummary, Party, Product, ProductCategory, StockMovement } from "@/lib/types";
 import { UNIT_SUGGESTIONS, isWeighed, unitKind } from "@/lib/units";
@@ -37,6 +38,7 @@ export default function InventoryPage() {
   const [priceList, setPriceList] = useState(false);
   const [bulk, setBulk] = useState(false);
   const [labelsFor, setLabelsFor] = useState<Product | "all" | null>(null);
+  const [variantsOf, setVariantsOf] = useState<Product | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
@@ -122,6 +124,7 @@ export default function InventoryPage() {
                   <Td>
                     <span className="font-medium text-navy-800">{p.name}</span>
                     <div className="text-xs text-slate-400">{p.code}{p.barcode ? ` · ${p.barcode}` : ""}{p.supplierName ? ` · ${p.supplierName}` : ""}</div>
+                    {(p.variantCount ?? 0) > 0 && <button onClick={() => setVariantsOf(p)} className="mt-0.5 text-xs font-medium text-gold-600 hover:underline">{p.variantCount} variant (ölçü / rəng)</button>}
                   </Td>
                   <Td className="text-xs">{p.categoryName ?? "—"}</Td>
                   <Td className="text-right tabular-nums">{formatMoney(p.purchasePrice)}</Td>
@@ -148,6 +151,7 @@ export default function InventoryPage() {
                       <Button variant="ghost" className="px-2.5 py-1.5" onClick={() => setHistoryOf(p)}>Tarixçə</Button>
                       {manage && <Button variant="outline" className="px-2.5 py-1.5" onClick={() => setStockOf(p)}>Stok</Button>}
                       {manage && <Button variant="ghost" className="px-2.5 py-1.5" onClick={() => setLabelsFor(p)}>Barkod</Button>}
+                      {manage && !p.parentId && <Button variant="ghost" className="px-2.5 py-1.5" onClick={() => setVariantsOf(p)}>Variantlar</Button>}
                       {manage && <Button variant="ghost" className="px-2.5 py-1.5" onClick={() => setEditing(p)}>Redaktə</Button>}
                       {manage && <Button variant="ghost" className="px-2.5 py-1.5 text-rose-600" onClick={() => remove(p)}>Sil</Button>}
                     </div>
@@ -162,6 +166,7 @@ export default function InventoryPage() {
       {editing && <ProductModal product={editing === "new" ? null : editing} categories={categories} suppliers={suppliers}
         onCategory={(c) => setCategories((x) => [...x, c])} onClose={() => setEditing(null)} onSaved={(m) => { setEditing(null); setNotice(m); load(); }} />}
       {stockOf && <StockModal product={stockOf} onClose={() => setStockOf(null)} onSaved={(m) => { setStockOf(null); setNotice(m); load(); }} />}
+      {variantsOf && <VariantsModal product={variantsOf} manage={manage} onClose={() => setVariantsOf(null)} onChanged={load} />}
       {historyOf && <HistoryModal product={historyOf} onClose={() => setHistoryOf(null)} />}
       {labelsFor && <LabelModal product={labelsFor === "all" ? null : labelsFor} onClose={() => setLabelsFor(null)} />}
       {priceList && <PriceListModal onClose={() => setPriceList(false)} onDone={(m) => { setPriceList(false); setNotice(m); load(); }} />}

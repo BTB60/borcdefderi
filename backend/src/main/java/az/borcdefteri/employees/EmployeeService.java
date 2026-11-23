@@ -21,7 +21,7 @@ public class EmployeeService {
                                boolean active, List<String> permissions, String jobTitle) {}
 
     /** Vəzifə: Kassir, Anbardar, Mühasib, Satıcı, Digər. */
-    public static final Set<String> JOB_TITLES = Set.of("CASHIER", "STOREKEEPER", "ACCOUNTANT", "SELLER", "OTHER");
+    public static final Set<String> JOB_TITLES = Set.of("CASHIER", "STOREKEEPER", "ACCOUNTANT", "SELLER", "COURIER", "OTHER");
 
     private static final String SELECT_EMPLOYEES = """
             SELECT m.id AS member_id, u.id AS user_id, u.email, u.full_name, u.phone, m.active, m.job_title,

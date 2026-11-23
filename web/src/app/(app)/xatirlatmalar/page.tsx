@@ -14,6 +14,7 @@ type Reminder = {
   handledAt: string | null; message: string;
 };
 type Settings = { enabled: boolean; daysBefore: number; repeatDays: number };
+type SmsStatus = { configured: boolean; autoReminders: boolean; sentThisMonth: number; monthlyLimit: number };
 
 const CHANNEL: Record<string, string> = { WHATSAPP: "WhatsApp", SMS: "SMS", CALL: "Zəng", OTHER: "Digər" };
 
@@ -26,6 +27,25 @@ export default function RemindersPage() {
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [edited, setEdited] = useState<Record<string, string>>({});
+  const [sms, setSms] = useState<SmsStatus | null>(null);
+  const [smsBusy, setSmsBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => { if (allowed) api<SmsStatus>("/api/settings/sms").then(setSms).catch(() => setSms(null)); }, [allowed]);
+
+  async function sendAllSms() {
+    setSmsBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ sent: number }>("/api/reminders/send-sms", { method: "POST" });
+      setNotice(r.sent > 0 ? `${r.sent} xatırlatma SMS ilə göndərildi` : "Heç bir SMS göndərilmədi (telefon nömrəsi olan gözləyən xatırlatma yoxdur və ya limit bitib)");
+      load();
+      api<SmsStatus>("/api/settings/sms").then(setSms).catch(() => undefined);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Alınmadı");
+    } finally {
+      setSmsBusy(false);
+    }
+  }
 
   const load = useCallback(() => {
     setItems(null);
@@ -60,8 +80,17 @@ export default function RemindersPage() {
     <>
       <PageHeader title="Borc xatırlatmaları"
         subtitle="Sistem hər gün son ödəmə tarixi yaxınlaşan və keçən müştəriləri özü tapır. Hazır mesajı bir toxunuşla göndərin."
-        actions={isOwner ? <Button variant="outline" onClick={() => setSettingsOpen(true)}>Parametrlər</Button> : undefined} />
+        actions={<>
+          {sms?.configured && tab === "PENDING" && (items?.length ?? 0) > 0 && (
+            <Button variant="gold" disabled={smsBusy} onClick={sendAllSms}>{smsBusy ? "Göndərilir…" : "Hamısını SMS ilə göndər"}</Button>
+          )}
+          {isOwner && <Button variant="outline" onClick={() => setSettingsOpen(true)}>Parametrlər</Button>}
+        </>} />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
+      {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
+      {sms?.autoReminders && (
+        <div className="mb-4"><Alert kind="info">Avtomatik SMS açıqdır: hər səhər 9:00-da xatırlatmalar müştərilərə SMS ilə özü gedir. Bu ay: {sms.sentThisMonth} / {sms.monthlyLimit} SMS.</Alert></div>
+      )}
       <div className="mb-4 inline-flex rounded-xl bg-slate-100 p-1" role="tablist">
         {([["PENDING", "Göndəriləcək"], ["SENT", "Göndərilib"], ["SKIPPED", "Keçilib"]] as const).map(([k, l]) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
@@ -107,7 +136,7 @@ export default function RemindersPage() {
           </div>
         </>
       )}
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} onSaved={() => { setSettingsOpen(false); load(); }} />}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} onSaved={() => { setSettingsOpen(false); load(); api<SmsStatus>("/api/settings/sms").then(setSms).catch(() => undefined); }} />}
     </>
   );
 }
@@ -116,13 +145,30 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   const [s, setS] = useState<Settings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { api<Settings>("/api/settings/reminders").then(setS).catch(() => setError("Yüklənmədi")); }, []);
+  const [sms, setSms] = useState<SmsStatus | null>(null);
+  const [testPhone, setTestPhone] = useState("");
+  const [testResult, setTestResult] = useState<string | null>(null);
+  useEffect(() => {
+    api<Settings>("/api/settings/reminders").then(setS).catch(() => setError("Yüklənmədi"));
+    api<SmsStatus>("/api/settings/sms").then(setSms).catch(() => setSms(null));
+  }, []);
+
+  async function test() {
+    setTestResult(null);
+    try {
+      const r = await api<{ sent: boolean }>("/api/settings/sms/test", { method: "POST", json: { phone: testPhone } });
+      setTestResult(r.sent ? "Test SMS göndərildi" : "SMS göndərilmədi — provayder cavab vermədi");
+    } catch (e) {
+      setTestResult(e instanceof ApiError ? e.message : "Alınmadı");
+    }
+  }
 
   async function save() {
     if (!s) return;
     setBusy(true);
     try {
       await api("/api/settings/reminders", { method: "PUT", json: s });
+      if (sms?.configured) await api("/api/settings/sms", { method: "PUT", json: { autoReminders: sms.autoReminders } });
       onSaved();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Yadda saxlanmadı");
@@ -148,6 +194,25 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
             <Input type="number" min={1} max={60} value={s.repeatDays} onChange={(e) => setS({ ...s, repeatDays: Number(e.target.value) })} />
           </Field>
           <p className="text-xs text-slate-500">Xatırlatma yalnız “son ödəmə tarixi” qoyulmuş borclar üçün yaranır. Hər səhər saat 9:00-da siyahı yenilənir.</p>
+          <div className="border-t border-slate-100 pt-4">
+            <p className="mb-2 text-sm font-semibold text-navy-800">Avtomatik SMS</p>
+            {!sms ? <Spinner /> : !sms.configured ? (
+              <p className="text-xs text-slate-500">SMS xidməti hələ qoşulmayıb. Qoşulandan sonra xatırlatmalar müştərilərə özü SMS ilə gedə biləcək.</p>
+            ) : (
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-navy-800">
+                  <input type="checkbox" className="h-4 w-4" checked={sms.autoReminders} onChange={(e) => setSms({ ...sms, autoReminders: e.target.checked })} />
+                  Xatırlatmaları hər səhər SMS ilə özü göndərsin
+                </label>
+                <p className="text-xs text-slate-500">Bu ay göndərilib: {sms.sentThisMonth} / {sms.monthlyLimit} SMS.</p>
+                <div className="flex gap-2">
+                  <Input placeholder="Test üçün nömrə: 050 123 45 67" value={testPhone} onChange={(e) => setTestPhone(e.target.value)} />
+                  <Button variant="outline" type="button" disabled={!testPhone.trim()} onClick={test}>Test SMS</Button>
+                </div>
+                {testResult && <p className="text-xs text-slate-600">{testResult}</p>}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </Modal>

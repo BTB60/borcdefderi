@@ -42,7 +42,11 @@ public class InventoryService {
                           /** IMEI / seriya nömrəsi asked at the till, one per unit. */
                           boolean trackSerial,
                           /** Zəmanət in months; null = none. */
-                          Integer warrantyMonths) {}
+                          Integer warrantyMonths,
+                          /** Variant: the model product this size / colour belongs to; null = not a variant. */
+                          UUID parentId, String variantSize, String variantColor,
+                          /** Model product: how many variants (sizes / colours) it has. */
+                          long variantCount) {}
 
     public record ProductRequest(
             @jakarta.validation.constraints.NotBlank(message = "Məhsulun adını daxil edin")
@@ -292,7 +296,8 @@ public class InventoryService {
     public boolean delete(UUID id) {
         CurrentMember m = requireInventory();
         Product p = lockProduct(m.storeId(), id);
-        long used = jdbc.sql("SELECT (SELECT COUNT(*) FROM inventory_movements WHERE product_id = :id) + (SELECT COUNT(*) FROM sale_items WHERE product_id = :id)")
+        long used = jdbc.sql("SELECT (SELECT COUNT(*) FROM inventory_movements WHERE product_id = :id) + (SELECT COUNT(*) FROM sale_items WHERE product_id = :id)"
+                        + " + (SELECT COUNT(*) FROM products WHERE parent_id = :id)")
                 .param("id", id).query(Long.class).single();
         if (used == 0) {
             jdbc.sql("DELETE FROM products WHERE id = :id AND store_id = :s").param("id", id).param("s", m.storeId()).update();
@@ -326,6 +331,121 @@ public class InventoryService {
                 .param("id", id).param("s", m.storeId())
                 .query((rs, n) -> new Image(rs.getBytes("image"), rs.getString("image_type"))).optional()
                 .orElseThrow(() -> ApiException.notFound("Şəkil yoxdur"));
+    }
+
+    // ----- variants (ölçü / rəng) -----
+
+    public record VariantItem(
+            @jakarta.validation.constraints.Size(max = 30) String size,
+            @jakarta.validation.constraints.Size(max = 30) String color,
+            @jakarta.validation.constraints.Pattern(regexp = "^[0-9A-Za-z-]{0,64}$", message = "Barkod yalnız rəqəm/hərf ola bilər") String barcode,
+            /** null = the model's sale price. */
+            @jakarta.validation.constraints.DecimalMin("0.00")
+            @jakarta.validation.constraints.Digits(integer = 12, fraction = 2) BigDecimal salePrice,
+            @jakarta.validation.constraints.DecimalMin("0.000")
+            @jakarta.validation.constraints.Digits(integer = 11, fraction = 3) BigDecimal initialStock) {}
+
+    /** Either explicit {@code items}, or every combination of {@code sizes} × {@code colors}. */
+    public record VariantsRequest(List<@jakarta.validation.Valid VariantItem> items, List<String> sizes, List<String> colors) {}
+
+    /** The variants of a model product, by size then colour. */
+    public List<Product> variants(UUID parentId) {
+        CurrentMember m = requireRead();
+        load(m.storeId(), parentId);
+        return jdbc.sql(SELECT + " WHERE p.store_id = :s AND p.parent_id = :p ORDER BY p.variant_size NULLS FIRST, p.variant_color NULLS FIRST")
+                .param("s", m.storeId()).param("p", parentId).query((rs, n) -> map(rs)).list();
+    }
+
+    /**
+     * Adds sizes / colours to a model product. Each variant is a product of its own (code MODEL-1, MODEL-2, ...,
+     * name "Model — 42 / Qara") with the model's prices, category, supplier and unit; combinations that already exist
+     * are skipped. Returns all variants of the model.
+     */
+    @Transactional
+    public List<Product> createVariants(UUID parentId, VariantsRequest req) {
+        CurrentMember m = requireInventory();
+        Product parent = lockProduct(m.storeId(), parentId);
+        if (parent.parentId() != null) throw ApiException.badRequest("VARIANT_OF_VARIANT", "Variantın variantı ola bilməz");
+        List<VariantItem> items = new java.util.ArrayList<>();
+        if (req.items() != null) items.addAll(req.items());
+        List<String> sizes = clean(req.sizes());
+        List<String> colors = clean(req.colors());
+        if (!sizes.isEmpty() || !colors.isEmpty()) {
+            for (String sz : sizes.isEmpty() ? java.util.Collections.<String>singletonList(null) : sizes) {
+                for (String c : colors.isEmpty() ? java.util.Collections.<String>singletonList(null) : colors) {
+                    items.add(new VariantItem(sz, c, null, null, null));
+                }
+            }
+        }
+        if (items.isEmpty()) throw ApiException.badRequest("NO_VARIANTS", "Ən azı bir ölçü və ya rəng daxil edin");
+        if (items.size() > 200) throw ApiException.badRequest("TOO_MANY_VARIANTS", "Bir dəfəyə ən çox 200 variant");
+        Integer maxProducts = plans.limitsFor(m.storeId()).maxProducts();
+        if (maxProducts != null) {
+            jdbc.sql("SELECT id FROM stores WHERE id = :s FOR UPDATE").param("s", m.storeId()).query(UUID.class).single();
+            long current = jdbc.sql("SELECT COUNT(*) FROM products WHERE store_id = :s AND active")
+                    .param("s", m.storeId()).query(Long.class).single();
+            if (current + items.size() > maxProducts) {
+                throw ApiException.conflict("PLAN_LIMIT_PRODUCTS", "Paketinizdə ən çox " + maxProducts
+                        + " məhsul ola bilər (hər variant ayrıca məhsuldur). Daha çox məhsul üçün paketi yüksəldin.");
+            }
+        }
+        int seq = jdbc.sql("SELECT COUNT(*) FROM products WHERE parent_id = :p").param("p", parentId).query(Long.class).single().intValue();
+        int created = 0;
+        for (VariantItem it : items) {
+            String size = blank(it.size());
+            String color = blank(it.color());
+            if (size == null && color == null) throw ApiException.badRequest("EMPTY_VARIANT", "Variantın ölçüsü və ya rəngi olmalıdır");
+            boolean exists = jdbc.sql("""
+                    SELECT COUNT(*) FROM products WHERE parent_id = :p
+                      AND LOWER(COALESCE(variant_size, '')) = LOWER(:sz) AND LOWER(COALESCE(variant_color, '')) = LOWER(:c)""")
+                    .param("p", parentId).param("sz", size == null ? "" : size).param("c", color == null ? "" : color)
+                    .query(Long.class).single() > 0;
+            if (exists) continue;
+            UUID id = UUID.randomUUID();
+            String code;
+            do {
+                code = truncate(parent.code(), 25) + "-" + (++seq);
+            } while (jdbc.sql("SELECT COUNT(*) FROM products WHERE store_id = :s AND LOWER(code) = LOWER(:c)")
+                    .param("s", m.storeId()).param("c", code).query(Long.class).single() > 0);
+            String label = size != null && color != null ? size + " / " + color : size != null ? size : color;
+            try {
+                jdbc.sql("""
+                        INSERT INTO products (id, store_id, code, barcode, name, category_id, supplier_id, unit, purchase_price,
+                                              sale_price, min_stock, active, created_by, old_price, wholesale_price, track_serial,
+                                              warranty_months, parent_id, variant_size, variant_color)
+                        SELECT :id, store_id, :code, :bc, :n, category_id, supplier_id, unit, purchase_price, :sp, min_stock, TRUE, :by,
+                               old_price, wholesale_price, track_serial, warranty_months, id, :sz, :c
+                        FROM products WHERE id = :p""")
+                        .param("id", id).param("code", code).param("bc", blank(it.barcode()))
+                        .param("n", truncate(parent.name(), 200 - label.length() - 3) + " — " + label)
+                        .param("sp", it.salePrice() == null ? parent.salePrice() : Money.of(it.salePrice()))
+                        .param("by", m.userId()).param("sz", size).param("c", color).param("p", parentId).update();
+            } catch (org.springframework.dao.DuplicateKeyException e) {
+                throw ApiException.conflict("DUPLICATE_CODE", "Barkod artıq başqa məhsulda istifadə olunur: " + it.barcode());
+            }
+            if (it.initialStock() != null && it.initialStock().signum() > 0) {
+                move(m, id, "RECEIPT", qty(it.initialStock()), parent.purchasePrice(), null, "Başlanğıc qalıq");
+            }
+            created++;
+        }
+        audit.log(m.storeId(), m.userId(), "PRODUCT_VARIANTS_ADDED", "PRODUCT", parentId.toString(), parent.name() + ": " + created + " variant");
+        return variants(parentId);
+    }
+
+    private static List<String> clean(List<String> values) {
+        if (values == null) return List.of();
+        List<String> out = new java.util.ArrayList<>();
+        for (String v : values) {
+            String b = blank(v);
+            if (b == null) continue;
+            if (b.length() > 30) throw ApiException.badRequest("INVALID_VARIANT", "Ölçü / rəng ən çox 30 simvol");
+            if (out.stream().noneMatch(b::equalsIgnoreCase)) out.add(b);
+        }
+        return out;
+    }
+
+    private static String truncate(String s, int max) {
+        return s.length() <= max ? s : s.substring(0, Math.max(max, 1)).trim();
     }
 
     // ----- stock -----
@@ -476,7 +596,8 @@ public class InventoryService {
     private static final String SELECT = """
             SELECT p.id, p.code, p.barcode, p.name, p.category_id, c.name AS category_name, p.supplier_id, co.name AS supplier_name,
                    p.unit, p.purchase_price, p.sale_price, p.old_price, p.wholesale_price, p.stock_qty, p.min_stock, p.active, p.image IS NOT NULL AS has_image,
-                   p.version, p.track_serial, p.warranty_months
+                   p.version, p.track_serial, p.warranty_months, p.parent_id, p.variant_size, p.variant_color,
+                   (SELECT COUNT(*) FROM products v WHERE v.parent_id = p.id) AS variant_count
             FROM products p
             LEFT JOIN product_categories c ON c.id = p.category_id
             LEFT JOIN companies co ON co.id = p.supplier_id""";
@@ -499,7 +620,9 @@ public class InventoryService {
                 Money.of(stock.multiply(pp)), Money.of(stock.multiply(sp)), rs.getLong("version"),
                 rs.getBigDecimal("old_price") == null ? null : Money.of(rs.getBigDecimal("old_price")),
                 rs.getBigDecimal("wholesale_price") == null ? null : Money.of(rs.getBigDecimal("wholesale_price")),
-                rs.getBoolean("track_serial"), (Integer) rs.getObject("warranty_months", Integer.class));
+                rs.getBoolean("track_serial"), (Integer) rs.getObject("warranty_months", Integer.class),
+                rs.getObject("parent_id", UUID.class), rs.getString("variant_size"), rs.getString("variant_color"),
+                rs.getLong("variant_count"));
     }
 
     private static Movement mapMove(java.sql.ResultSet rs) throws java.sql.SQLException {

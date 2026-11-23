@@ -17,6 +17,7 @@ import 'label_print_sheet.dart';
 import 'purchase_screen.dart';
 import 'stock_count_screen.dart';
 import 'stock_tools.dart';
+import 'variants_sheet.dart';
 
 double _n(Object? v) => (v as num?)?.toDouble() ?? 0;
 String _q(Object? v) {
@@ -926,6 +927,15 @@ class _StockSheetState extends State<_StockSheet> {
             icon: const Icon(Icons.local_offer_outlined),
             label: const Text('Qiymət / endirim'),
           ),
+          if (_product['parentId'] == null)
+            TextButton.icon(
+              onPressed: () async {
+                await showVariantsSheet(context, widget.session, _product, manage: true);
+                await _refreshProduct();
+              },
+              icon: const Icon(Icons.style_outlined),
+              label: Text((_product['variantCount'] as num? ?? 0) > 0 ? 'Variantlar (${_product['variantCount']})' : 'Ölçü / rəng'),
+            ),
         ]),
         const SizedBox(height: 4),
         if (_error != null) ErrorBanner(_error!),

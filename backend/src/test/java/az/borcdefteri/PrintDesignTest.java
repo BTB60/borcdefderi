@@ -44,7 +44,7 @@ class PrintDesignTest extends IntegrationTestBase {
                 .andExpect(jsonPath("$.receipt").doesNotExist()).andExpect(jsonPath("$.label.h", is(25)));
 
         put(owner, "/api/settings/print-design", Map.of("receipt", "x")).andExpect(status().isBadRequest());
-        put(owner, "/api/settings/print-design", Map.of("receipt", Map.of("logo", "a".repeat(700_000)))).andExpect(status().isBadRequest());
+        put(owner, "/api/settings/print-design", Map.of("receipt", Map.of("logo", "a".repeat(1_600_000)))).andExpect(status().isBadRequest());
 
         // the receipt PDF follows the design (narrow paper, own header, logo, no cashier), also with a broken logo
         String png = "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(java.util.Base64.getDecoder().decode(

@@ -53,7 +53,9 @@ public class CustomerPortalService {
                              List<PortalDebt> debts, List<PortalEntry> history, OffsetDateTime expiresAt,
                              OffsetDateTime generatedAt,
                              /** Bonus kartı: the customer's bonus balance and the store's bonus percent. */
-                             BigDecimal bonusBalance, BigDecimal bonusPercent) {}
+                             BigDecimal bonusBalance, BigDecimal bonusPercent,
+                             /** The store's bonus card design (background, logo, colours); null = the default look. */
+                             com.fasterxml.jackson.databind.JsonNode cardDesign) {}
 
     /** Resolved link: which store and customer it shows. */
     public record Resolved(UUID storeId, UUID customerId, OffsetDateTime expiresAt) {}
@@ -194,7 +196,21 @@ public class CustomerPortalService {
                 Money.of(paid), Money.of(rem), debts, entries, r.expiresAt(), OffsetDateTime.now(clock),
                 Money.of(jdbc.sql("SELECT COALESCE(SUM(amount), 0) FROM customer_bonus_entries WHERE customer_id = :c")
                         .param("c", r.customerId()).query(BigDecimal.class).single()),
-                jdbc.sql("SELECT bonus_percent FROM stores WHERE id = :s").param("s", r.storeId()).query(BigDecimal.class).single());
+                jdbc.sql("""
+                        SELECT COALESCE((SELECT percent FROM loyalty_cards WHERE customer_id = :c AND active), st.bonus_percent)
+                        FROM stores st WHERE st.id = :s""").param("c", r.customerId()).param("s", r.storeId()).query(BigDecimal.class).single(),
+                cardDesign(r.storeId()));
+    }
+
+    private com.fasterxml.jackson.databind.JsonNode cardDesign(UUID storeId) {
+        String raw = jdbc.sql("SELECT print_design -> 'card' FROM stores WHERE id = :s").param("s", storeId)
+                .query(String.class).optional().orElse(null);
+        if (raw == null) return null;
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readTree(raw);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String webUrl() {

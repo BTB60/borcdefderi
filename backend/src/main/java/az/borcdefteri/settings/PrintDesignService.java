@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Çek və barkod etiketi dizaynı of the store: {"receipt": {...}, "label": {...}}. The apps own the shape of each part
+ * Çek, barkod etiketi və bonus kartı dizaynı of the store: {"receipt": {...}, "label": {...}, "card": {...}}. The apps own the shape of each part
  * (paper, header lines, logo, label size, ...); the server keeps it so every till and browser prints the same way.
  * Everyone in the store reads it; the owner or a member with TILL_SETTINGS changes it.
  */
@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PrintDesignService {
 
     /** The logo is a small data URL; this keeps one design well under a few hundred KB. */
-    static final int MAX_BYTES = 600_000;
+    static final int MAX_BYTES = 1_500_000; // logo + the bonus card background picture (resized in the browser)
 
     private final JdbcClient jdbc;
     private final TenantService tenant;
@@ -52,7 +52,7 @@ public class PrintDesignService {
         }
         if (body == null || !body.isObject()) throw ApiException.badRequest("INVALID_DESIGN", "Dizayn düzgün deyil");
         ObjectNode next = (ObjectNode) load(m);
-        for (String part : new String[]{"receipt", "label"}) {
+        for (String part : new String[]{"receipt", "label", "card"}) {
             if (!body.has(part)) continue;
             JsonNode v = body.get(part);
             if (v.isNull()) next.remove(part);

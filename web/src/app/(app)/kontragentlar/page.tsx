@@ -57,7 +57,7 @@ function PartiesList() {
   return (
     <>
       <PageHeader
-        title="Müştəri və şirkətlər"
+        title="Müştəri və tədarükçülər"
         subtitle="Borc və alacaq qeydlərində istifadə olunan tərəflər"
         actions={
           <>
@@ -77,7 +77,7 @@ function PartiesList() {
             <button role="tab" aria-selected={tab === "customers"} onClick={() => setTab("customers")} className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === "customers" ? "bg-navy-800 text-white shadow" : "text-slate-600 hover:text-navy-800"}`}>Müştərilər</button>
           )}
           {canCompanies && (
-            <button role="tab" aria-selected={tab === "companies"} onClick={() => setTab("companies")} className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === "companies" ? "bg-navy-800 text-white shadow" : "text-slate-600 hover:text-navy-800"}`}>Şirkətlər</button>
+            <button role="tab" aria-selected={tab === "companies"} onClick={() => setTab("companies")} className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === "companies" ? "bg-navy-800 text-white shadow" : "text-slate-600 hover:text-navy-800"}`}>Tədarükçülər</button>
           )}
         </div>
         <div className="flex-1">

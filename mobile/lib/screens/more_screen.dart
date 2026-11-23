@@ -191,7 +191,7 @@ class MoreScreen extends StatelessWidget {
           Card(
             child: ListTile(
               leading: const Icon(Icons.business_outlined, color: navy),
-              title: const Text('Şirkətlər'),
+              title: const Text('Tədarükçülər'),
               subtitle: const Text('Əlavə et, redaktə et, axtar'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context)

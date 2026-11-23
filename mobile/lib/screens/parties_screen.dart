@@ -133,7 +133,7 @@ class _PartiesScreenState extends State<PartiesScreen> {
   Widget build(BuildContext context) {
     final noun = widget.isCustomer ? 'müştəri' : 'şirkət';
     return Scaffold(
-      appBar: AppBar(title: Text(widget.isCustomer ? 'Müştərilər' : 'Şirkətlər'), actions: [
+      appBar: AppBar(title: Text(widget.isCustomer ? 'Müştərilər' : 'Tədarükçülər'), actions: [
         if (widget.isCustomer)
           IconButton(
             tooltip: 'WhatsApp kampaniyası',

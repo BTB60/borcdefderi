@@ -100,7 +100,7 @@ export default function PartyProfilePage() {
 
   return (
     <>
-      <div className="mb-4"><Link href="/kontragentlar" className="text-sm text-slate-500 hover:text-navy-800">← Müştəri və şirkətlər</Link></div>
+      <div className="mb-4"><Link href="/kontragentlar" className="text-sm text-slate-500 hover:text-navy-800">← Müştəri və tədarükçülər</Link></div>
       {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
 

@@ -77,9 +77,24 @@ Render → `borcdefderi` → **Environment**:
 | `SMS_HTTP_METHOD` | `GET` (default) və ya `POST` |
 | `SMS_HTTP_BODY` | `POST` üçün sorğunun gövdəsi, eyni yer tutucularla (məs. `{"to":"{to}","text":"{text}","from":"{sender}"}`) |
 | `SMS_HTTP_CONTENT_TYPE` | default `application/json` |
-| `SMS_HTTP_AUTH` | `Authorization` başlığı (məs. `Bearer <açar>`); gizli saxlayın |
+| `SMS_HTTP_AUTH` | açar (məs. `Bearer <açar>` və ya sadəcə açar); gizli saxlayın |
+| `SMS_HTTP_AUTH_HEADER` | açarın getdiyi başlıq, default `Authorization` (1sms.az üçün `X-API-Key`) |
 | `SMS_TWILIO_SID`, `SMS_TWILIO_TOKEN` | yalnız `twilio` üçün |
 | `SMS_MONTHLY_LIMIT` | mağaza üzrə aylıq SMS limiti, default `300` |
+
+**1sms.az nümunəsi** (bildiriş SMS-i):
+
+| Dəyişən | Dəyər |
+|---|---|
+| `SMS_PROVIDER` | `http` |
+| `SMS_HTTP_URL` | `https://1sms.az/api/v1/sms/notification` |
+| `SMS_HTTP_METHOD` | `POST` |
+| `SMS_HTTP_BODY` | `{"recipients":["+{to}"],"text":"{text}","senderName":"{sender}"}` |
+| `SMS_HTTP_AUTH_HEADER` | `X-API-Key` |
+| `SMS_HTTP_AUTH` | 1sms.az-dakı API açarınız |
+| `SMS_SENDER` | təsdiqlənmiş göndəriş adınız (təsdiqə qədər `OTP 1SMS`) |
+
+Test rejimində 1sms.az yalnız qeydiyyat nömrənizə göndərir; hamıya göndərmək üçün orada "Real rejimə keç" müraciəti edin.
 
 Yoxlamaq üçün: mağaza sahibi **Xatırlatmalar → Parametrlər → Test SMS** ilə öz nömrəsinə SMS göndərir.
 

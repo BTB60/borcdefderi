@@ -101,6 +101,8 @@ app:
     http-body: ${SMS_HTTP_BODY:}
     http-content-type: ${SMS_HTTP_CONTENT_TYPE:application/json}
     http-auth: ${SMS_HTTP_AUTH:}
+    # the header that carries SMS_HTTP_AUTH (1sms.az: X-API-Key)
+    http-auth-header: ${SMS_HTTP_AUTH_HEADER:Authorization}
     twilio-sid: ${SMS_TWILIO_SID:}
     twilio-token: ${SMS_TWILIO_TOKEN:}
     # SMS per store per month (cost guard)

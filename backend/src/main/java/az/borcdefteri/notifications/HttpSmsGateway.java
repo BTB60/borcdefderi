@@ -27,6 +27,7 @@ public class HttpSmsGateway implements SmsGateway {
     private final String body;
     private final String contentType;
     private final String auth;
+    private final String authHeader;
     private final String twilioSid;
     private final String twilioToken;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
@@ -36,6 +37,7 @@ public class HttpSmsGateway implements SmsGateway {
                           @Value("${app.sms.http-body:}") String body,
                           @Value("${app.sms.http-content-type:application/json}") String contentType,
                           @Value("${app.sms.http-auth:}") String auth,
+                          @Value("${app.sms.http-auth-header:Authorization}") String authHeader,
                           @Value("${app.sms.twilio-sid:}") String twilioSid, @Value("${app.sms.twilio-token:}") String twilioToken) {
         this.provider = provider == null ? "" : provider.trim().toLowerCase(Locale.ROOT);
         this.sender = sender == null ? "" : sender.trim();
@@ -44,6 +46,7 @@ public class HttpSmsGateway implements SmsGateway {
         this.body = body == null ? "" : body;
         this.contentType = contentType == null || contentType.isBlank() ? "application/json" : contentType.trim();
         this.auth = auth == null ? "" : auth.trim();
+        this.authHeader = authHeader == null || authHeader.isBlank() ? "Authorization" : authHeader.trim();
         this.twilioSid = twilioSid == null ? "" : twilioSid.trim();
         this.twilioToken = twilioToken == null ? "" : twilioToken.trim();
     }
@@ -71,7 +74,7 @@ public class HttpSmsGateway implements SmsGateway {
     private HttpRequest generic(String phone, String text) {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(fill(url, phone, text, false, true)))
                 .timeout(Duration.ofSeconds(20));
-        if (!auth.isEmpty()) b.header("Authorization", auth);
+        if (!auth.isEmpty()) b.header(authHeader, auth); // e.g. 1sms.az wants X-API-Key
         if ("POST".equals(method)) {
             boolean json = body.trim().startsWith("{");
             b.header("Content-Type", contentType).POST(HttpRequest.BodyPublishers.ofString(fill(body, phone, text, json, !json)));

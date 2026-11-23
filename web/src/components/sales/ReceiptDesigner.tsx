@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Button, Card, Select } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { desktop, receiptHtml, receiptSettings, saveReceiptSettings, type ReceiptSettings } from "@/lib/desktop";
+import { onPrintDesignSaved } from "@/lib/printDesign";
 import type { Sale } from "@/lib/types";
 
 /** A made-up sale for the preview. */
@@ -50,6 +51,7 @@ export function ReceiptDesigner() {
   const [d, setD] = useState<ReceiptSettings>(receiptSettings);
   const [note, setNote] = useState<string | null>(null);
   useEffect(() => { setD(receiptSettings()); }, []);
+  useEffect(() => onPrintDesignSaved((ok) => setNote(ok ? "Yadda saxlanıldı" : "Serverə yazılmadı — yalnız bu kompüterdə saxlanıldı")), []);
 
   const set = (patch: Partial<ReceiptSettings>) => {
     setD((cur) => ({ ...cur, ...patch }));

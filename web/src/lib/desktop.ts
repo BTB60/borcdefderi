@@ -5,6 +5,7 @@
 import type { Sale } from "./types";
 import { qtyWithUnit, unitKind } from "@/lib/units";
 import { formatMoney } from "./format";
+import { RECEIPT_DESIGN_KEY, pushPrintDesign } from "@/lib/printDesign";
 
 export interface DesktopBridge {
   version: string;
@@ -68,7 +69,7 @@ export function isNetworkError(e: unknown): boolean {
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
-/** Çek dizaynı: everything the store can choose about its receipt (kept on this computer). */
+/** Çek dizaynı: everything the store can choose about its receipt (kept by the store, mirrored on this computer). */
 export type ReceiptSettings = {
   paper: "80" | "58";
   footer: string;
@@ -84,7 +85,7 @@ export type ReceiptSettings = {
   boldTotal: boolean;
 };
 
-const DESIGN_KEY = "hp_receipt_design";
+const DESIGN_KEY = RECEIPT_DESIGN_KEY;
 const DEFAULTS: ReceiptSettings = {
   paper: "80", footer: "Təşəkkür edirik!", header: "", logo: null, fontSize: "m", align: "center",
   showCashier: true, showCustomer: true, showStoreName: true, boldTotal: true,
@@ -108,6 +109,7 @@ export function saveReceiptSettings(s: Partial<ReceiptSettings>) {
     localStorage.setItem(DESIGN_KEY, JSON.stringify(next));
     if (s.paper) localStorage.setItem("hp_paper", s.paper);
     if (s.footer !== undefined) localStorage.setItem("hp_receipt_footer", s.footer);
+    pushPrintDesign("receipt");
   } catch { /* storage full (big logo) or blocked */ }
 }
 

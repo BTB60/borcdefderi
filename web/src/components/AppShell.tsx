@@ -18,6 +18,7 @@ import { cx } from "./ui";
 import { Countdown } from "./Countdown";
 import { Avatar } from "./Avatar";
 import { OrderAlerts } from "./OrderAlerts";
+import { loadPrintDesign } from "@/lib/printDesign";
 
 const SETTINGS_ICON = "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.2-1.3L14.3 3h-4l-.4 2.5a7.6 7.6 0 0 0-2.2 1.3l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.6l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2.2 1.3l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.2-1.3l2.4 1 2-3.4-2-1.6c.1-.4.1-.9.1-1.3Z";
 
@@ -245,6 +246,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       setExporting(false);
     }
   }
+
+  // the store's receipt and label design, so every till and browser prints the same
+  const storeId = me?.storeId;
+  useEffect(() => {
+    if (storeId && !isSuperAdmin) void loadPrintDesign();
+  }, [storeId, isSuperAdmin]);
 
   useEffect(() => {
     if (!me || isSuperAdmin) return;

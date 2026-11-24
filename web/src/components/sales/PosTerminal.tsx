@@ -1030,7 +1030,6 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
               </label>
             </div>
           )}
-          {phoneOpen && <BonusByPhoneModal onClose={() => setPhoneOpen(false)} onPick={pickByPhone} />}
           {pinOpen && <SetPinModal onClose={() => setPinOpen(false)} />}
           {app?.printLabels && (
             <button type="button" onClick={() => setLabelsOpen(true)} className="text-left text-xs font-medium text-slate-500 hover:text-navy-800">🏷 Etiket çap et (etiket printerinə)</button>
@@ -1212,6 +1211,9 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             searchRef.current?.focus();
           }} />
       )}
+
+      {/* the bonus card by phone: rendered in every mode (full-screen till, employees), not with the settings */}
+      {phoneOpen && <BonusByPhoneModal onClose={() => setPhoneOpen(false)} onPick={pickByPhone} />}
 
       {freeOpen && (
         <FreeAmount onClose={() => { setFreeOpen(false); searchRef.current?.focus(); }}

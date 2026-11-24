@@ -15,7 +15,7 @@ import type { Party, Product, Sale } from "@/lib/types";
 import { WeightEntry } from "@/components/sales/WeightEntry";
 import { FreeAmount } from "@/components/sales/FreeAmount";
 import { SerialEntry } from "@/components/sales/SerialEntry";
-import { BonusByPhoneModal, BonusCodeGate, type PhoneMatch } from "@/components/sales/BonusByPhone";
+import { BonusByPhoneModal, type PhoneMatch } from "@/components/sales/BonusByPhone";
 import { isWeighed, qtyWithUnit, unitKind } from "@/lib/units";
 import { shortBranch, useBranchStock } from "@/lib/branchStock";
 
@@ -175,7 +175,7 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
   // Qarışıq: cash is worked out from the card and bonus parts until the cashier types it
   const [cashManual, setCashManual] = useState(false);
   // a bonus card found by phone (no card at hand): its bonus is spent only after the SMS code
-  const [byPhone, setByPhone] = useState<{ cardId: string; unlocked: boolean } | null>(null);
+  const [byPhone, setByPhone] = useState<{ cardId: string } | null>(null);
   const [phoneOpen, setPhoneOpen] = useState(false);
   // Top 2 (pərakəndə) is the till's normal price; the cashier switches to Top 1 (topdan) for a wholesale sale
   const [level, setLevel] = useState<"RETAIL" | "WHOLESALE">("RETAIL");
@@ -400,12 +400,12 @@ Təşəkkür edirik!`;
   const lines = cart.map((l) => ({ ...l, total: r2(Math.max(0, num(l.quantity) * num(l.price) - num(l.discount))) }));
   const subtotal = r2(lines.reduce((s, l) => s + l.total, 0));
   const discountAmount = r2(Math.min(subtotal, percent ? (subtotal * Math.min(100, num(discount))) / 100 : num(discount)));
-  const bonusAvailable = byPhone && !byPhone.unlocked ? 0 : customer?.bonusBalance ?? 0;
-  const bonusLocked = !!byPhone && !byPhone.unlocked && (customer?.bonusBalance ?? 0) > 0;
+  // the bonus is spent without an SMS code, also for a card found by phone (the code is only for activating the card)
+  const bonusAvailable = customer?.bonusBalance ?? 0;
 
   function pickByPhone(m: PhoneMatch) {
     pickCustomer(partyFromCard(m, customers));
-    setByPhone({ cardId: m.cardId, unlocked: false });
+    setByPhone({ cardId: m.cardId });
     setPhoneOpen(false);
     setError(null);
   }
@@ -470,23 +470,19 @@ Təşəkkür edirik!`;
     const box = big
       ? "mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-right text-xl font-semibold tabular-nums outline-none focus:border-gold-500"
       : "mt-0.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-right font-semibold tabular-nums outline-none focus:border-gold-500";
-    const showBonus = !!customer && (bonusAvailable > 0 || bonusLocked);
+    const showBonus = !!customer && bonusAvailable > 0;
     const due = r2(Math.max(0, total - num(card)));
     return (
       <div className="space-y-2">
         <div className={cx("grid gap-2", showBonus ? "grid-cols-3" : "grid-cols-2")}>
-          {showBonus && (bonusLocked && byPhone ? (
-            <div className={lbl}>🎫 Bonus kartı
-              <div className="mt-1"><BonusCodeGate cardId={byPhone.cardId} onUnlocked={() => setByPhone({ ...byPhone, unlocked: true })} /></div>
-            </div>
-          ) : (
+          {showBonus && (
             <label className={lbl}>🎫 Bonus kartı
               <RestButton label="Hamısı" onClick={() => setBonusInput(String(r2(Math.min(bonusAvailable, payable))))} />
               <input value={bonusInput} inputMode="decimal" placeholder="0" aria-label="Bonus kartından"
                 onChange={(e) => setBonusInput(e.target.value.replace(/[^\d.,]/g, ""))} className={cx(box, "text-emerald-700")} />
               <span className="mt-0.5 block text-[11px] text-emerald-700">balans {formatMoney(bonusAvailable)}</span>
             </label>
-          ))}
+          )}
           <label className={lbl}>💳 Kart (₼)
             <RestButton onClick={() => setCard(String(r2(Math.max(0, total - (cashManual ? num(cash) : 0)))))} />
             <input autoFocus={big} value={card} inputMode="decimal" placeholder="0"
@@ -971,12 +967,6 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
               {discountAmount > 0 && <span className="w-20 text-right tabular-nums text-rose-600">−{formatMoney(discountAmount)}</span>}
             </div>
           </div>
-          {bonusLocked && byPhone && mode !== "mixed" && (
-            <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
-              <span>Bonus <span className="text-xs text-emerald-700">(balans {formatMoney(customer?.bonusBalance ?? 0)})</span></span>
-              <BonusCodeGate cardId={byPhone.cardId} onUnlocked={() => setByPhone({ ...byPhone, unlocked: true })} />
-            </div>
-          )}
           {bonusAvailable > 0 && mode !== "mixed" && (
             <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
               <span>🎫 Bonus kartı ilə <span className="text-xs text-emerald-700">(balans {formatMoney(bonusAvailable)})</span></span>

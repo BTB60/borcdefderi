@@ -56,67 +56,9 @@ export function BonusByPhoneModal({ onClose, onPick }: { onClose: () => void; on
                 : <span className="text-xs font-semibold text-rose-600">Kart bloklanıb</span>}
             </div>
           ))}
-          <p className="text-xs text-slate-500">
-            {found[0].smsOn
-              ? "Bonus yığmaq üçün kod lazım deyil. Bonusla ödəmək üçün müştərinin telefonuna SMS kod göndəriləcək."
-              : "SMS qoşulmayıb: bonus kodsuz istifadə olunacaq və bu, kassirin adı ilə jurnala yazılır."}
-          </p>
+          <p className="text-xs text-slate-500">Bonus kodsuz istifadə olunur; axtarış kassirin adı ilə jurnala yazılır.</p>
         </div>
       )}
     </Modal>
-  );
-}
-
-/** Paying with the bonus of a card found by phone: a 4-digit SMS code from the customer unlocks it. */
-export function BonusCodeGate({ cardId, onUnlocked }: { cardId: string; onUnlocked: () => void }) {
-  const [sent, setSent] = useState<string | null>(null);
-  const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function send() {
-    setBusy(true); setError(null);
-    try {
-      const r = await api<{ sent: boolean; smsOn: boolean; phone?: string }>(`/api/loyalty-cards/${cardId}/bonus-code`, { method: "POST", json: {} });
-      if (!r.smsOn) onUnlocked();
-      else setSent(r.phone ?? "");
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Kod göndərilmədi");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function verify() {
-    setBusy(true); setError(null);
-    try {
-      await api(`/api/loyalty-cards/${cardId}/bonus-code/verify`, { method: "POST", json: { code } });
-      onUnlocked();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Kod səhvdir");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="text-right">
-      {sent == null ? (
-        <button type="button" disabled={busy} onClick={send}
-          className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-violet-700 ring-1 ring-violet-200 disabled:opacity-50">
-          {busy ? "…" : "📩 Bonus üçün SMS kod"}
-        </button>
-      ) : (
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-slate-500">{sent} nömrəsinə</span>
-          <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" placeholder="kod" aria-label="SMS kodu"
-            className="h-8 w-16 rounded-lg border border-slate-200 bg-white px-2 text-center text-sm tracking-widest outline-none focus:border-gold-500" />
-          <button type="button" disabled={busy || code.length !== 4} onClick={verify}
-            className="rounded-md bg-violet-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-50">OK</button>
-          <button type="button" disabled={busy} onClick={send} className="text-xs text-slate-500 underline">yenə</button>
-        </div>
-      )}
-      {error && <p className="mt-1 text-xs text-rose-600">{error}</p>}
-    </div>
   );
 }

@@ -354,10 +354,9 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
   String? _customerName;
   double _customerPct = 0; // the customer's standing discount (%)
   double _bonusBalance = 0;
-  /// A bonus card found by phone (no card at hand): its bonus is spent only after the SMS code.
+  /// A bonus card found by phone (no card at hand). Its bonus is spent without an SMS code:
+  /// the code is only for activating the card in the HesabPro Kart app.
   String? _byPhoneCardId;
-  bool _bonusUnlocked = false;
-  bool get _bonusLocked => _byPhoneCardId != null && !_bonusUnlocked && _bonusBalance > 0;
   final _bonus = TextEditingController();
   // Top 2 (pərakəndə) is the normal price; Top 1 (topdan) only when the seller picks it for this sale
   bool _wholesale = false;
@@ -508,7 +507,6 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
         _bonusBalance = (party['bonusBalance'] as num?)?.toDouble() ?? 0;
         _bonus.clear();
         _byPhoneCardId = byPhoneCardId;
-        _bonusUnlocked = false;
       });
     } catch (e) {
       if (mounted) showError(context, e);
@@ -562,42 +560,6 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
       );
       if (picked == null) return;
       await _useCustomer('${picked['customerId']}', byPhoneCardId: '${picked['cardId']}');
-    } catch (e) {
-      if (mounted) showError(context, e);
-    }
-  }
-
-  /// Paying with the bonus of a card found by phone: the customer reads out the 4-digit SMS code.
-  Future<void> _unlockBonus() async {
-    final cardId = _byPhoneCardId;
-    if (cardId == null) return;
-    try {
-      final r = await widget.session.api.post('/api/loyalty-cards/$cardId/bonus-code') as Map<String, dynamic>;
-      if (r['smsOn'] != true) {
-        setState(() => _bonusUnlocked = true);
-        return;
-      }
-      if (!mounted) return;
-      final ctrl = TextEditingController();
-      final code = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('SMS kodu'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('${r['phone'] ?? ''} nömrəsinə 4 rəqəmli kod göndərildi. Müştəridən soruşun.'),
-            const SizedBox(height: 12),
-            TextField(controller: ctrl, autofocus: true, keyboardType: TextInputType.number, maxLength: 4, textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 24, letterSpacing: 8), decoration: const InputDecoration(counterText: '')),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Geri')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Təsdiqlə')),
-          ],
-        ),
-      );
-      if (code == null || code.isEmpty) return;
-      await widget.session.api.post('/api/loyalty-cards/$cardId/bonus-code/verify', {'code': code});
-      if (mounted) setState(() => _bonusUnlocked = true);
     } catch (e) {
       if (mounted) showError(context, e);
     }
@@ -863,15 +825,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                   const SizedBox(height: 8),
                   _sumRow('Müştəri endirimi ${_amount(_customerPct)}%', '−${formatMoney(_pctDiscount)}'),
                 ],
-                if (_bonusLocked) ...[
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: _unlockBonus,
-                    icon: const Icon(Icons.sms_outlined),
-                    label: Text('Bonusla ödə (balans ${formatMoney(_bonusBalance)}) — SMS kod'),
-                  ),
-                ],
-                if (_bonusBalance > 0 && !_bonusLocked) ...[
+                if (_bonusBalance > 0) ...[
                   const SizedBox(height: 8),
                   TextField(
                     controller: _bonus,
@@ -903,7 +857,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
         if (_bonusUsed > 0 && _total <= 0.004)
           _notice(Icons.card_giftcard, 'Hamısı bonus kartı ilə ödənilir', formatMoney(_bonusUsed), Colors.green),
         Wrap(spacing: 8, runSpacing: 8, children: [
-          if (_bonusBalance > 0 && !_bonusLocked)
+          if (_bonusBalance > 0)
             ActionChip(
               avatar: Icon(Icons.card_giftcard, size: 18, color: Colors.green.shade700),
               label: const Text('Hamısı bonusla'),
@@ -1017,7 +971,6 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                     onPressed: () => setState(() {
                       _customerId = null;
                       _byPhoneCardId = null;
-                      _bonusUnlocked = false;
                       _customerName = null;
                       _customerPct = 0;
                       _bonusBalance = 0;

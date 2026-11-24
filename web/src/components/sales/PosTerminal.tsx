@@ -117,6 +117,16 @@ async function printReceipt(saleId: string) {
 
 const AUTO_PRINT_KEY = "pos_auto_print";
 
+/** The customer behind a bonus card, for the till: from the customer list when it has them, else from the card itself. */
+function partyFromCard(m: PhoneMatch, customers: Party[]): Party {
+  const known = customers.find((c) => c.id === m.customerId);
+  if (known) return { ...known, bonusBalance: m.balance };
+  return {
+    id: m.customerId, name: m.fullName, phone: m.phone, code: m.number, note: null, createdAt: "",
+    openBalance: 0, openDebtCount: 0, discountPercent: m.discountPercent ?? 0, bonusBalance: m.balance,
+  };
+}
+
 /** Mixed payment: fills the field with what is left after the other part (and the bonus). */
 function RestButton({ onClick }: { onClick: () => void }) {
   return (
@@ -358,6 +368,15 @@ Təşəkkür edirik!`;
     const card = customers.find((c) => (c.code && c.code.toLowerCase() === q.toLowerCase())
       || (digits.length >= 9 && (c.phone ?? "").replace(/\D/g, "").endsWith(digits.slice(-9))));
     if (card) { pickCustomer(card); setSearch(""); return; }
+    if (/^HP-?\d{3,}$/i.test(q)) {
+      try {
+        const m = await api<PhoneMatch>(`/api/loyalty-cards/by-number/${encodeURIComponent(q)}`);
+        if (!m.active) { setError(`${m.number} bonus kartı bloklanıb`); return; }
+        pickCustomer(partyFromCard(m, customers)); setSearch(""); return;
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : `“${q}” tapılmadı`); return;
+      }
+    }
     // scale label (tərəzi barkodu): 2X PPPPP WWWWW C — product code (PLU) and weight in grams
     const weighed = /^2\d(\d{5})(\d{5})\d$/.exec(q);
     if (weighed) {
@@ -382,21 +401,11 @@ Təşəkkür edirik!`;
   const bonusAvailable = byPhone && !byPhone.unlocked ? 0 : customer?.bonusBalance ?? 0;
   const bonusLocked = !!byPhone && !byPhone.unlocked && (customer?.bonusBalance ?? 0) > 0;
 
-  async function pickByPhone(m: PhoneMatch) {
-    let party = customers.find((c) => c.id === m.customerId) ?? null;
-    if (!party) {
-      try {
-        const fresh = await api<Party[]>("/api/customers");
-        setCustomers(fresh);
-        party = fresh.find((c) => c.id === m.customerId) ?? null;
-      } catch {
-        party = null;
-      }
-    }
-    if (!party) { setError("Müştəri tapılmadı, səhifəni yeniləyin"); return; }
-    pickCustomer(party);
+  function pickByPhone(m: PhoneMatch) {
+    pickCustomer(partyFromCard(m, customers));
     setByPhone({ cardId: m.cardId, unlocked: false });
     setPhoneOpen(false);
+    setError(null);
   }
   const bonusAmount = r2(Math.max(0, Math.min(num(bonusInput), bonusAvailable, subtotal - discountAmount)));
   const total = r2(Math.max(0, subtotal - discountAmount - bonusAmount));

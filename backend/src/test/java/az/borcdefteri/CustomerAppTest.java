@@ -114,5 +114,13 @@ class CustomerAppTest extends IntegrationTestBase {
         post(a, "/api/loyalty-cards/" + card.get("id").asText() + "/sms", Map.of()).andExpect(status().isOk()).andExpect(jsonPath("$.sent", is(true)));
         body(post(a, "/api/loyalty-cards", Map.of("firstName", "Orxan", "lastName", "Məmmədli", "phone", "077 333 44 55", "percent", "2", "sendSms", false)));
         verify(gateway, times(2)).send(anyString(), anyString());
+
+        // the provider refuses (e.g. an empty balance): the app gets a clear message, not "server is waking", and the try is logged
+        doThrow(new RuntimeException("insufficient_balance")).when(gateway).send(eq("994709998877"), anyString());
+        anon("POST", "/api/public/customer-app/code", Map.of("phone", "070 999 88 77"), null)
+                .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.error", is("SMS_FAILED")))
+                .andExpect(jsonPath("$.message", containsString("aktivləşdirmə kodu")));
+        assertEquals(1L, jdbcClient.sql("SELECT COUNT(*) FROM sms_messages WHERE phone = '994709998877' AND error LIKE '%insufficient_balance%'")
+                .query(Long.class).single());
     }
 }

@@ -72,7 +72,6 @@ public class CustomerAppService {
 
     /** Sends a 6-digit sign-in code to the phone (at most 3 in 10 minutes per phone). */
     @PostMapping("/code")
-    @Transactional
     public Map<String, Object> sendCode(@RequestBody PhoneRequest req) {
         String phone = phone(req.phone());
         if (!sms.configured()) {
@@ -86,7 +85,11 @@ public class CustomerAppService {
                 .param("id", UUID.randomUUID()).param("p", phone).param("h", hash(phone, code))
                 .param("e", OffsetDateTime.now(clock).plus(CODE_TTL)).update();
         boolean sent = sms.send(null, phone, "HesabPro Kart giriş kodu: " + code + ". Kodu heç kimə deməyin.", "CUSTOMER_LOGIN", null);
-        if (!sent) throw new ApiException(HttpStatus.BAD_GATEWAY, "SMS_FAILED", "SMS göndərilmədi. Bir az sonra yenidən cəhd edin");
+        // no transaction here: a failed SMS stays in sms_messages with the provider's reason (e.g. an empty balance)
+        if (!sent) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "SMS_FAILED",
+                    "SMS göndərilmədi. Hələlik kart nömrəsi və aktivləşdirmə kodu ilə daxil olun (\"Kart nömrəsi və kodla daxil ol\").");
+        }
         return Map.of("sent", true, "expiresInSeconds", CODE_TTL.toSeconds());
     }
 

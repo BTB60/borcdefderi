@@ -213,6 +213,12 @@ public abstract class IntegrationTestBase {
         return id;
     }
 
+    /** Bonus cards are paid: gives the store of that subscription a card balance, as an approved package would. */
+    protected void giveCardCredits(UUID subscriptionId, int cards) {
+        jdbcClient.sql("UPDATE stores SET card_credits = card_credits + :n WHERE id = (SELECT store_id FROM subscriptions WHERE id = :id)")
+                .param("n", cards).param("id", subscriptionId).update();
+    }
+
     protected UUID createCustomer(String token, String name, String phone) throws Exception {
         JsonNode res = body(post(token, "/api/customers", Map.of("name", name, "phone", phone)));
         return UUID.fromString(res.get("id").asText());

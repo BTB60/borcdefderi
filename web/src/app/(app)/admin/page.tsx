@@ -12,6 +12,7 @@ import { TemporaryPasswordModal, type TemporaryPassword } from "@/components/Pas
 import { PlansTab } from "@/components/admin/PlansTab";
 import { PaymentSettingsTab } from "@/components/admin/PaymentSettingsTab";
 import { PaymentRequestsTab } from "@/components/admin/PaymentRequestsTab";
+import { CardCreditsTab } from "@/components/admin/CardCreditsTab";
 import { ExpiringTab } from "@/components/admin/ExpiringTab";
 import { OverviewTab } from "@/components/admin/OverviewTab";
 import { StoreDrawer } from "@/components/admin/StoreDrawer";
@@ -76,6 +77,7 @@ function Admin() {
       {tab === "stores" && <StoresTab onError={setError} onNotice={setNotice} />}
       {tab === "expiring" && <ExpiringStoresTab onError={setError} onNotice={setNotice} />}
       {tab === "subscriptions" && <PaymentRequestsTab onError={setError} onNotice={setNotice} />}
+      {tab === "cards" && <CardCreditsTab onError={setError} onNotice={setNotice} />}
       {tab === "plans" && <PlansTab onError={setError} onNotice={setNotice} />}
       {tab === "revenue" && <RevenueTab onError={setError} />}
       {tab === "costs" && <PlatformCostsTab onError={setError} onNotice={setNotice} />}

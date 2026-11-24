@@ -38,9 +38,9 @@ class CustomerAppTest extends IntegrationTestBase {
     void aCustomerSeesTheirCardsFromEveryStore() throws Exception {
         // two stores give a card to the same phone, written differently
         String a = register("Ayaqqabı Evi");
-        activateSubscription(a, "MONTHLY");
+        giveCardCredits(activateSubscription(a, "MONTHLY"), 50);
         String b = register("Market 24");
-        activateSubscription(b, "MONTHLY");
+        giveCardCredits(activateSubscription(b, "MONTHLY"), 50);
         put(a, "/api/settings/print-design", Map.of("card", Map.of("title", "VIP kart"))).andExpect(status().isOk());
         JsonNode cardA = body(post(a, "/api/loyalty-cards", Map.of("firstName", "Aynur", "lastName", "Əliyeva", "phone", "050 555 44 33", "percent", "7")));
         body(post(b, "/api/loyalty-cards", Map.of("firstName", "Aynur", "lastName", "Əliyeva", "phone", "+994505554433", "percent", "3")));
@@ -96,7 +96,7 @@ class CustomerAppTest extends IntegrationTestBase {
     @Test
     void theNewCardGoesToTheCustomerBySms() throws Exception {
         String a = register("Ətir Dünyası");
-        activateSubscription(a, "MONTHLY");
+        giveCardCredits(activateSubscription(a, "MONTHLY"), 50);
         // no provider: the card is made, nothing is sent, and a resend says SMS is off
         when(gateway.configured()).thenReturn(false);
         JsonNode quiet = body(post(a, "/api/loyalty-cards", Map.of("firstName", "Leyla", "lastName", "Quliyeva", "phone", "055 111 22 33", "percent", "5")));

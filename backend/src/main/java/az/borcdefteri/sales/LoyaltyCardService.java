@@ -63,12 +63,14 @@ public class LoyaltyCardService {
     private final AuditService audit;
     private final az.borcdefteri.subscriptions.PlanService plans;
     private final az.borcdefteri.notifications.SmsService sms;
+    private final CardCreditService credits;
 
     /** Short link to the customers' app (web redirect to the kart-latest APK). */
     static final String APP_LINK = "hesabpro.cloud/kart";
 
     public LoyaltyCardService(JdbcClient jdbc, TenantService tenant, AuditService audit, az.borcdefteri.subscriptions.PlanService plans,
-                              az.borcdefteri.notifications.SmsService sms) {
+                              az.borcdefteri.notifications.SmsService sms, CardCreditService credits) {
+        this.credits = credits;
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.audit = audit;
@@ -143,6 +145,7 @@ public class LoyaltyCardService {
         } else if (jdbc.sql("SELECT COUNT(*) FROM loyalty_cards WHERE customer_id = :c").param("c", customer).query(Long.class).single() > 0) {
             throw ApiException.conflict("CARD_EXISTS", "Bu telefon nömrəsi ilə artıq bonus kartı var");
         }
+        credits.useOne(m.storeId()); // a paid card: one from the store's card balance (rolled back with the card)
         UUID id = UUID.randomUUID();
         jdbc.sql("""
                 INSERT INTO loyalty_cards (id, store_id, customer_id, first_name, last_name, patronymic, phone, percent, activation_code, created_by)

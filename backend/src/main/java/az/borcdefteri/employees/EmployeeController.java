@@ -1,6 +1,8 @@
 package az.borcdefteri.employees;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -8,6 +10,7 @@ import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,9 +25,15 @@ public class EmployeeController {
             @NotBlank @Size(max = 150) String fullName,
             @jakarta.validation.constraints.Pattern(regexp = "^[+0-9 ()-]{0,30}$", message = "Telefon nömrəsi düzgün deyil") String phone,
             @NotNull List<String> permissions,
-            String jobTitle) {}
+            String jobTitle,
+            /** Maaş: MONTHLY (aylıq) or HOURLY (saatlıq); null = not set yet. */
+            @jakarta.validation.constraints.Pattern(regexp = "MONTHLY|HOURLY", message = "Maaş növü: aylıq və ya saatlıq") String payType,
+            @DecimalMin(value = "0.00", message = "Maaş mənfi ola bilməz") @Digits(integer = 12, fraction = 2) BigDecimal payRate) {}
 
-    public record EmployeeUpdate(@NotNull List<String> permissions, boolean active, String jobTitle) {}
+    /** payType: null keeps the pay as it is (older clients), "NONE" clears it. */
+    public record EmployeeUpdate(@NotNull List<String> permissions, boolean active, String jobTitle,
+            @jakarta.validation.constraints.Pattern(regexp = "MONTHLY|HOURLY|NONE", message = "Maaş növü: aylıq və ya saatlıq") String payType,
+            @DecimalMin(value = "0.00", message = "Maaş mənfi ola bilməz") @Digits(integer = 12, fraction = 2) BigDecimal payRate) {}
 
     private final EmployeeService employees;
 
@@ -40,11 +49,12 @@ public class EmployeeController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public EmployeeService.EmployeeView create(@Valid @RequestBody EmployeeCreate req) {
-        return employees.create(req.email(), req.password(), req.fullName(), req.phone(), req.permissions(), req.jobTitle());
+        return employees.create(req.email(), req.password(), req.fullName(), req.phone(), req.permissions(), req.jobTitle(),
+                req.payType(), req.payRate());
     }
 
     @PutMapping("/{memberId}")
     public EmployeeService.EmployeeView update(@PathVariable UUID memberId, @Valid @RequestBody EmployeeUpdate req) {
-        return employees.update(memberId, req.permissions(), req.active(), req.jobTitle());
+        return employees.update(memberId, req.permissions(), req.active(), req.jobTitle(), req.payType(), req.payRate());
     }
 }

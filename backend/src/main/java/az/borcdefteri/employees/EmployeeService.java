@@ -9,6 +9,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -18,13 +19,13 @@ import java.util.UUID;
 public class EmployeeService {
 
     public record EmployeeView(UUID memberId, UUID userId, String email, String fullName, String phone,
-                               boolean active, List<String> permissions, String jobTitle) {}
+                               boolean active, List<String> permissions, String jobTitle, String payType, BigDecimal payRate) {}
 
     /** Vəzifə: Kassir, Anbardar, Mühasib, Satıcı, Digər. */
     public static final Set<String> JOB_TITLES = Set.of("CASHIER", "STOREKEEPER", "ACCOUNTANT", "SELLER", "COURIER", "OTHER");
 
     private static final String SELECT_EMPLOYEES = """
-            SELECT m.id AS member_id, u.id AS user_id, u.email, u.full_name, u.phone, m.active, m.job_title,
+            SELECT m.id AS member_id, u.id AS user_id, u.email, u.full_name, u.phone, m.active, m.job_title, m.pay_type, m.pay_rate,
                    COALESCE((SELECT string_agg(p.permission, ',' ORDER BY p.permission)
                              FROM member_permissions p WHERE p.member_id = m.id), '') AS permissions
             FROM store_members m JOIN users u ON u.id = m.user_id
@@ -59,9 +60,10 @@ public class EmployeeService {
 
     @Transactional
     public EmployeeView create(String email, String password, String fullName, String phone, List<String> permissions,
-                               String jobTitle) {
+                               String jobTitle, String payType, BigDecimal payRate) {
         CurrentMember owner = requireEmployeesModule();
         String job = validateJobTitle(jobTitle);
+        requirePayRate(payType, payRate);
         Integer maxEmployees = plans.limitsFor(owner.storeId()).maxEmployees();
         if (maxEmployees != null) {
             jdbc.sql("SELECT id FROM stores WHERE id = :s FOR UPDATE").param("s", owner.storeId()).query(UUID.class).single();
@@ -88,8 +90,11 @@ public class EmployeeService {
                 """).param("id", userId).param("email", normalized)
                 .param("hash", passwordEncoder.encode(password)).param("name", fullName.trim())
                 .param("phone", blankToNull(phone)).update();
-        jdbc.sql("INSERT INTO store_members (id, store_id, user_id, role, active, job_title) VALUES (:id, :s, :u, 'EMPLOYEE', TRUE, :job)")
-                .param("id", memberId).param("s", owner.storeId()).param("u", userId).param("job", job).update();
+        jdbc.sql("""
+                INSERT INTO store_members (id, store_id, user_id, role, active, job_title, pay_type, pay_rate)
+                VALUES (:id, :s, :u, 'EMPLOYEE', TRUE, :job, :pt, :pr)""")
+                .param("id", memberId).param("s", owner.storeId()).param("u", userId).param("job", job)
+                .param("pt", payType).param("pr", payType == null ? null : money(payRate)).update();
         insertPermissions(memberId, perms);
         audit.log(owner.storeId(), owner.userId(), "EMPLOYEE_CREATED", "EMPLOYEE", memberId.toString(),
                 normalized + " icazələr: " + perms);
@@ -98,6 +103,12 @@ public class EmployeeService {
 
     @Transactional
     public EmployeeView update(UUID memberId, List<String> permissions, boolean active, String jobTitle) {
+        return update(memberId, permissions, active, jobTitle, null, null);
+    }
+
+    @Transactional
+    public EmployeeView update(UUID memberId, List<String> permissions, boolean active, String jobTitle, String payType,
+                               BigDecimal payRate) {
         CurrentMember owner = requireEmployeesModule();
         EmployeeView current = find(owner, memberId); // store-scoped existence check (404 for other stores' members)
         Set<String> perms = validatePermissions(permissions);
@@ -105,11 +116,26 @@ public class EmployeeService {
         String job = jobTitle == null ? current.jobTitle() : validateJobTitle(jobTitle);
         jdbc.sql("UPDATE store_members SET active = :active, job_title = :job WHERE id = :id AND store_id = :s")
                 .param("active", active).param("job", job).param("id", memberId).param("s", owner.storeId()).update();
+        if (payType != null) { // null keeps the pay; NONE clears it
+            String type = "NONE".equals(payType) ? null : payType;
+            requirePayRate(type, payRate);
+            jdbc.sql("UPDATE store_members SET pay_type = :pt, pay_rate = :pr WHERE id = :id AND store_id = :s")
+                    .param("pt", type).param("pr", type == null ? null : money(payRate)).param("id", memberId)
+                    .param("s", owner.storeId()).update();
+        }
         jdbc.sql("DELETE FROM member_permissions WHERE member_id = :id").param("id", memberId).update();
         insertPermissions(memberId, perms);
         audit.log(owner.storeId(), owner.userId(), "EMPLOYEE_UPDATED", "EMPLOYEE", memberId.toString(),
                 "icazələr: " + perms + ", aktiv: " + active);
         return find(owner, memberId);
+    }
+
+    private static void requirePayRate(String payType, BigDecimal payRate) {
+        if (payType != null && payRate == null) throw ApiException.badRequest("RATE_REQUIRED", "Maaşın məbləğini yazın");
+    }
+
+    private static BigDecimal money(BigDecimal v) {
+        return v.setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     private EmployeeView find(CurrentMember owner, UUID memberId) {
@@ -128,7 +154,9 @@ public class EmployeeService {
                         rs.getString("phone"),
                         rs.getBoolean("active"),
                         splitPermissions(rs.getString("permissions")),
-                        rs.getString("job_title")))
+                        rs.getString("job_title"),
+                        rs.getString("pay_type"),
+                        rs.getBigDecimal("pay_rate")))
                 .list();
     }
 

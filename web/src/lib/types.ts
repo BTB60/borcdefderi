@@ -377,6 +377,9 @@ export type JobTitle = "CASHIER" | "STOREKEEPER" | "ACCOUNTANT" | "SELLER" | "CO
 
 export interface Employee {
   jobTitle?: JobTitle | null;
+  /** Maaş: monthly salary or hourly rate (null = not set). */
+  payType?: "MONTHLY" | "HOURLY" | null;
+  payRate?: number | null;
   memberId: string;
   userId: string;
   email: string;

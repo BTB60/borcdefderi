@@ -122,10 +122,12 @@ public class SalesService {
     private final AuditService audit;
     private final BonusService bonus;
     private final ReturnApprovalService approvals;
+    private final az.borcdefteri.customers.CreditLimitService limits;
 
     public SalesService(JdbcClient jdbc, TenantService tenant, InventoryService inventory, CashService cash,
                         PartyAccountService accounts, DebtService debts, AuditService audit, BonusService bonus,
-                        ReturnApprovalService approvals) {
+                        ReturnApprovalService approvals, az.borcdefteri.customers.CreditLimitService limits) {
+        this.limits = limits;
         this.bonus = bonus;
         this.jdbc = jdbc;
         this.tenant = tenant;
@@ -481,22 +483,6 @@ public class SalesService {
      * it through ({@code allow}); anyone else gets CREDIT_LIMIT with the numbers.
      */
     private void checkCreditLimit(CurrentMember m, UUID customerId, BigDecimal credit, boolean allow) {
-        BigDecimal limit = jdbc.sql("SELECT credit_limit FROM customers WHERE id = :c AND store_id = :s")
-                .param("c", customerId).param("s", m.storeId()).query(BigDecimal.class).optional().orElse(null);
-        if (limit == null) return;
-        BigDecimal owes = Money.of(jdbc.sql("""
-                SELECT COALESCE(SUM(remaining_amount), 0) FROM debts
-                WHERE store_id = :s AND customer_id = :c AND status <> 'PAID'
-                """).param("s", m.storeId()).param("c", customerId).query(BigDecimal.class).single());
-        BigDecimal after = Money.of(owes.add(credit));
-        if (after.compareTo(limit) <= 0) return;
-        if (allow && m.isOwner()) return;
-        java.util.Map<String, String> details = new java.util.LinkedHashMap<>();
-        details.put("limit", Money.of(limit).toPlainString());
-        details.put("owes", owes.toPlainString());
-        details.put("after", after.toPlainString());
-        throw new ApiException(org.springframework.http.HttpStatus.CONFLICT, "CREDIT_LIMIT",
-                "Müştərinin borc limiti " + Money.of(limit) + " AZN-dir. İndiki borcu " + owes + " AZN, bu satışla "
-                        + after + " AZN olur" + (m.isOwner() ? "" : ". Mağaza sahibinin icazəsi lazımdır"), details);
+        limits.check(m, customerId, credit, allow);
     }
 }

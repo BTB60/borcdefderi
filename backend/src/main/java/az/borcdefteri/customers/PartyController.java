@@ -25,7 +25,7 @@ public class PartyController {
     /** "Borc əlavə et" on the customer's account. */
     @PostMapping("/customers/{id}/charge")
     public PartyAccountService.ChargeResult chargeCustomer(@PathVariable UUID id, @Valid @RequestBody PartyAccountRequests.Charge req) {
-        return accounts.charge(true, id, req);
+        return accounts.chargeChecked(true, id, req);
     }
 
     /** "Borc ödə" on the customer's account (oldest debt first). */

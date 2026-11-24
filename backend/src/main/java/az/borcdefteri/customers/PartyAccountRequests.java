@@ -31,8 +31,15 @@ public final class PartyAccountRequests {
             @Size(max = 255, message = "Qeyd ən çox 255 simvol ola bilər") String note,
             BigDecimal expectedRemaining,
             /** Optional "son ödəmə tarixi": after it the account shows as overdue (gecikmiş). */
-            LocalDate dueDate
-    ) {}
+            LocalDate dueDate,
+            /** Customers over the credit limit: the owner's "write it anyway". */
+            Boolean allowOverLimit
+    ) {
+        public Charge(DebtType debtType, BigDecimal amount, LocalDate date, String receiptNumber, String note,
+                      BigDecimal expectedRemaining, LocalDate dueDate) {
+            this(debtType, amount, date, receiptNumber, note, expectedRemaining, dueDate, null);
+        }
+    }
 
     /** "Borc ödə": paid against the party's total balance, oldest debt first. */
     public record Pay(

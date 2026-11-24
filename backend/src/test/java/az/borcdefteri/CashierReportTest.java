@@ -83,4 +83,36 @@ class CashierReportTest extends IntegrationTestBase {
                 .andReturn().getResponse().getContentAsByteArray();
         assertThat(new String(pdf, 0, 5)).isEqualTo("%PDF-");
     }
+
+    @Test
+    void writingDebtByHandKeepsToTheLimitToo() throws Exception {
+        String owner = register("Əl Borcu");
+        activateSubscription(owner, "MONTHLY");
+        java.util.UUID c = createCustomer(owner, "Limitli", "+994501238888");
+        put(owner, "/api/customers/" + c, Map.of("name", "Limitli", "phone", "+994501238888", "creditLimit", "100.00")).andExpect(status().isOk());
+        String email = uniqueEmail("kassir");
+        post(owner, "/api/employees", Map.of("email", email, "password", EMPLOYEE_PASSWORD, "fullName", "Kassir",
+                "permissions", perms("CUSTOMER_DEBTS"))).andExpect(status().isCreated());
+        String worker = login(email, EMPLOYEE_PASSWORD);
+
+        // "Borc əlavə et": 80 fits, 30 more does not; the employee cannot override, the owner can
+        post(owner, "/api/customers/" + c + "/charge", Map.of("amount", "80.00")).andExpect(status().isOk());
+        JsonNode err = body(post(worker, "/api/customers/" + c + "/charge", Map.of("amount", "30.00", "allowOverLimit", true))
+                .andExpect(status().isConflict()));
+        assertThat(err.get("error").asText()).isEqualTo("CREDIT_LIMIT");
+        assertThat(err.get("fields").get("after").asText()).isEqualTo("110.00");
+        post(owner, "/api/customers/" + c + "/charge", Map.of("amount", "30.00")).andExpect(status().isConflict());
+        post(owner, "/api/customers/" + c + "/charge", Map.of("amount", "30.00", "allowOverLimit", true)).andExpect(status().isOk());
+
+        // "Borc yaz" and "Borcu artır" are checked as well
+        post(worker, "/api/debts", Map.of("debtType", "CUSTOMER_DEBT", "partyId", c.toString(), "amount", "5.00",
+                "debtDate", java.time.LocalDate.now().toString())).andExpect(status().isConflict());
+        JsonNode debt = body(get(owner, "/api/debts?type=CUSTOMER_DEBT")).get("items").get(0);
+        post(worker, "/api/debts/" + debt.get("id").asText() + "/increase", Map.of("amount", "1.00", "version", debt.get("version").asLong()))
+                .andExpect(status().isConflict());
+
+        // without a limit anything goes
+        put(owner, "/api/customers/" + c, Map.of("name", "Limitli", "noCreditLimit", true)).andExpect(status().isOk());
+        post(worker, "/api/customers/" + c + "/charge", Map.of("amount", "500.00")).andExpect(status().isOk());
+    }
 }

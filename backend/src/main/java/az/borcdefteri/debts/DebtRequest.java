@@ -17,5 +17,12 @@ public record DebtRequest(
         @NotNull LocalDate debtDate,
         LocalDate dueDate,
         @Size(max = 255) String description,
-        @Size(max = 1000) String note
-) {}
+        @Size(max = 1000) String note,
+        /** Customer debts over the credit limit: the owner's "write it anyway". */
+        Boolean allowOverLimit
+) {
+    public DebtRequest(DebtType debtType, UUID partyId, BigDecimal amount, LocalDate debtDate, LocalDate dueDate,
+                       String description, String note) {
+        this(debtType, partyId, amount, debtDate, dueDate, description, note, null);
+    }
+}

@@ -53,7 +53,11 @@ public class DebtService {
     private final AuditService audit;
     private final LedgerWriter ledger;
 
-    public DebtService(JdbcClient jdbc, TenantService tenant, AuditService audit, LedgerWriter ledger) {
+    private final az.borcdefteri.customers.CreditLimitService limits;
+
+    public DebtService(JdbcClient jdbc, TenantService tenant, AuditService audit, LedgerWriter ledger,
+                       az.borcdefteri.customers.CreditLimitService limits) {
+        this.limits = limits;
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.audit = audit;
@@ -126,8 +130,14 @@ public class DebtService {
                 .list();
     }
 
+    /** "Borc yaz" by hand: a customer's credit limit applies (the owner may override). */
     @Transactional
     public DebtView create(DebtRequest req) {
+        if (req.debtType().isCustomer()) {
+            CurrentMember m = tenant.requireBusinessMember();
+            requireAccess(m, req.debtType());
+            limits.check(m, req.partyId(), Money.of(req.amount()), Boolean.TRUE.equals(req.allowOverLimit()));
+        }
         return create(req, null);
     }
 
@@ -218,6 +228,9 @@ public class DebtService {
         requireAccess(m, current.debtType());
         if (current.version() != req.version()) {
             throw ApiException.conflict("VERSION_CONFLICT", "Qeyd başqa istifadəçi tərəfindən dəyişdirilib. Yenidən yükləyin");
+        }
+        if (current.debtType().isCustomer()) {
+            limits.check(m, current.partyId(), Money.of(req.amount()), Boolean.TRUE.equals(req.allowOverLimit()));
         }
         return increaseLocked(m, current, req.amount(), req.date(), req.receiptNumber(), req.note());
     }

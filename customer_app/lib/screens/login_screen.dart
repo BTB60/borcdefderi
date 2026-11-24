@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -23,6 +25,30 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   bool _codeSent = false;
   bool _busy = false;
   String? _error;
+  String? _info;
+  /// Seconds until "Kodu yenidən göndər" can be pressed again.
+  int _wait = 0;
+  Timer? _timer;
+
+  void _startWait() {
+    _timer?.cancel();
+    setState(() => _wait = 60);
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return t.cancel();
+      setState(() => _wait--);
+      if (_wait <= 0) t.cancel();
+    });
+  }
+
+  Future<void> _sendCode({bool again = false}) => _run(() async {
+        await Api.instance.post('/code', {'phone': _phone.text});
+        _code.clear();
+        setState(() {
+          _codeSent = true;
+          _info = again ? 'Yeni kod göndərildi' : null;
+        });
+        _startWait();
+      });
 
   @override
   void initState() {
@@ -40,6 +66,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       c.dispose();
     }
     _intro.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
@@ -47,6 +74,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     setState(() {
       _busy = true;
       _error = null;
+      _info = null;
     });
     try {
       await f();
@@ -113,10 +141,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                       decoration: const InputDecoration(labelText: 'Telefon', hintText: '050 123 45 67', prefixIcon: Icon(Icons.phone))),
                                   const SizedBox(height: 14),
                                   FilledButton(
-                                    onPressed: _busy ? null : () => _run(() async {
-                                      await Api.instance.post('/code', {'phone': _phone.text});
-                                      setState(() => _codeSent = true);
-                                    }),
+                                    onPressed: _busy ? null : () => _sendCode(),
                                     child: const Text('Kod göndər'),
                                   ),
                                 ] else if (sms) ...[
@@ -133,7 +158,23 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                     }),
                                     child: const Text('Daxil ol'),
                                   ),
-                                  TextButton(onPressed: _busy ? null : () => setState(() => _codeSent = false), child: const Text('Nömrəni dəyiş')),
+                                  if (_info != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(_info!, textAlign: TextAlign.center, style: TextStyle(color: Colors.green.shade700)),
+                                    ),
+                                  TextButton.icon(
+                                    onPressed: _busy || _wait > 0 ? null : () => _sendCode(again: true),
+                                    icon: const Icon(Icons.refresh),
+                                    label: Text(_wait > 0 ? 'Kodu yenidən göndər ($_wait san.)' : 'Kodu yenidən göndər'),
+                                  ),
+                                  TextButton(
+                                    onPressed: _busy ? null : () => setState(() {
+                                      _codeSent = false;
+                                      _info = null;
+                                    }),
+                                    child: const Text('Nömrəni dəyiş'),
+                                  ),
                                 ] else ...[
                                   TextField(controller: _card, textCapitalization: TextCapitalization.characters, autofocus: true,
                                       decoration: const InputDecoration(labelText: 'Kart nömrəsi', hintText: 'HP-000123', prefixIcon: Icon(Icons.credit_card))),

@@ -67,7 +67,7 @@ public class SmsService {
             record(storeId, phone == null ? "" : phone, text, purpose, refId, "Telefon nömrəsi yanlışdır");
             return false;
         }
-        if (sentThisMonth(storeId) >= monthlyLimit) {
+        if (storeId != null && sentThisMonth(storeId) >= monthlyLimit) {
             record(storeId, to, text, purpose, refId, "Aylıq SMS limiti bitib (" + monthlyLimit + ")");
             return false;
         }

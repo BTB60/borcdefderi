@@ -70,3 +70,19 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+
+  customer-app:
+    name: HesabPro Kart analyze (Flutter)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: customer_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.47.9"
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze

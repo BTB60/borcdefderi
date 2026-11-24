@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// The pattern drawn over a card's colours.
-enum CardPattern { none, lines, circles, waves, dots, diamonds }
+enum CardPattern { none, lines, circles, waves, dots, diamonds, snow, buta }
 
 /// A ready-made look the customer may pick for a card instead of the store's own design.
 class KartTheme {
@@ -20,6 +20,8 @@ class KartTheme {
 const storeThemeId = 'store';
 
 const cardThemes = <KartTheme>[
+  KartTheme('newyear', 'Yeni il', Color(0xFF0B3D2E), Color(0xFFB91C1C), pattern: CardPattern.snow, accent: Colors.white),
+  KartTheme('novruz', 'Novruz', Color(0xFF166534), Color(0xFFF59E0B), pattern: CardPattern.buta, accent: Color(0xFFFDE68A)),
   KartTheme('gold', 'Qızıl', Color(0xFFB8860B), Color(0xFFF5D67B), text: Color(0xFF3B2A05), pattern: CardPattern.waves, accent: Color(0xFFFFF4C2)),
   KartTheme('silver', 'Gümüş', Color(0xFF8E9AAF), Color(0xFFE3E8EF), text: Color(0xFF1F2937), pattern: CardPattern.lines, accent: Colors.white),
   KartTheme('vip', 'VIP Qara', Color(0xFF0B0B0F), Color(0xFF2A2A35), text: Color(0xFFF5D67B), pattern: CardPattern.diamonds, accent: Color(0xFFD4A537)),
@@ -96,6 +98,36 @@ class PatternPainter extends CustomPainter {
         for (double y = 8; y < s.height; y += 16) {
           for (double x = (y ~/ 16).isOdd ? 16 : 8; x < s.width; x += 16) {
             canvas.drawCircle(Offset(x, y), 1.6, f);
+          }
+        }
+      case CardPattern.snow:
+        final f = Paint()..color = color.withValues(alpha: (color.a * 2.4).clamp(0.0, 1.0));
+        final rnd = Random(7);
+        for (var i = 0; i < 46; i++) {
+          final o = Offset(rnd.nextDouble() * s.width, rnd.nextDouble() * s.height);
+          if (i % 6 == 0) {
+            for (var k = 0; k < 3; k++) {
+              final a = k * pi / 3;
+              canvas.drawLine(o + Offset(cos(a), sin(a)) * 7, o - Offset(cos(a), sin(a)) * 7, p..strokeWidth = 1.6);
+            }
+          } else {
+            canvas.drawCircle(o, 1 + rnd.nextDouble() * 2.4, f);
+          }
+        }
+      case CardPattern.buta:
+        for (double y = 20; y < s.height + 30; y += 46) {
+          for (double x = 20 + ((y ~/ 46).isOdd ? 30 : 0); x < s.width + 30; x += 60) {
+            canvas.save();
+            canvas.translate(x, y);
+            canvas.rotate(-0.35);
+            final path = Path()
+              ..moveTo(0, -14)
+              ..cubicTo(11, -14, 15, -3, 11, 5)
+              ..cubicTo(7, 13, -5, 15, -9, 8)
+              ..cubicTo(-13, 1, -6, -3, -1, -1)
+              ..cubicTo(4, 1, 3, 7, -1, 7);
+            canvas.drawPath(path, p..strokeWidth = 1.8);
+            canvas.restore();
           }
         }
       case CardPattern.diamonds:

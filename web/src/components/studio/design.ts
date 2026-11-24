@@ -27,8 +27,10 @@ export type CardData = { name: string; number: string; balance: string; validUnt
 
 export const SAMPLE: CardData = { name: "Ad Soyad", number: "HP-000000", balance: "0,00 ₼", validUntil: "12/2027", qrText: "HP-000000" };
 
-export type CategoryId = "funny" | "gift" | "vip" | "luxury" | "color3d" | "market" | "cafe" | "kids" | "minimal";
+export type CategoryId = "newyear" | "novruz" | "funny" | "gift" | "vip" | "luxury" | "color3d" | "market" | "cafe" | "kids" | "minimal";
 export const CATEGORIES: { id: CategoryId; label: string; emoji: string; prompt: string; chars: string[] }[] = [
+  { id: "newyear", label: "Yeni il endirimi", emoji: "🎄", prompt: "New Year holiday sale (snow, fir tree, ornaments, gifts, festive lights)", chars: ["snowman", "tree", "ornament", "gift"] },
+  { id: "novruz", label: "Novruz bayramı", emoji: "🌸", prompt: "Novruz holiday sale in Azerbaijan (semeni wheat sprouts, bonfire, shekerbura and pakhlava pastries, spring flowers, painted eggs)", chars: ["semeni", "bonfire", "pastry"] },
   { id: "funny", label: "Gülməli personajlar", emoji: "😂", prompt: "funny cartoon characters", chars: ["bag", "star", "robot", "apple", "cart"] },
   { id: "gift", label: "Hədiyyə və alış-veriş", emoji: "🎁", prompt: "gifts and shopping", chars: ["gift", "bag", "bear"] },
   { id: "vip", label: "Premium və VIP", emoji: "😎", prompt: "premium VIP members", chars: ["crown", "cat", "star"] },
@@ -40,11 +42,12 @@ export const CATEGORIES: { id: CategoryId; label: string; emoji: string; prompt:
   { id: "minimal", label: "Minimalist və modern", emoji: "◻️", prompt: "minimalist modern", chars: ["robot", "diamond", "none"] },
 ];
 
-export type Background = "gradient" | "radial" | "stripes" | "dots" | "waves" | "confetti" | "mesh" | "sunburst" | "grid";
+export type Background = "gradient" | "radial" | "stripes" | "dots" | "waves" | "confetti" | "mesh" | "sunburst" | "grid" | "snow" | "buta";
 export const BACKGROUNDS: { id: Background; label: string }[] = [
   { id: "gradient", label: "Qradiyent" }, { id: "radial", label: "Parıltı" }, { id: "stripes", label: "Zolaqlar" },
   { id: "dots", label: "Nöqtələr" }, { id: "waves", label: "Dalğalar" }, { id: "confetti", label: "Konfeti" },
   { id: "mesh", label: "Rəng ləkələri" }, { id: "sunburst", label: "Günəş şüaları" }, { id: "grid", label: "Tor" },
+  { id: "snow", label: "Qar dənələri" }, { id: "buta", label: "Buta naxışı" },
 ];
 
 export type FontId = "rounded" | "serif" | "bold" | "mono" | "playful" | "elegant";
@@ -80,6 +83,8 @@ export const ICONS: Record<Exclude<IconId, "none">, string> = {
 
 /** Hand-picked palettes per category: [color1, color2, accent, text]. */
 const PALETTES: Record<CategoryId, string[][]> = {
+  newyear: [["#0B3D2E", "#14532D", "#F5D67B", "#FFFFFF"], ["#7F1D1D", "#DC2626", "#FDE68A", "#FFFFFF"], ["#0C1B4D", "#1D4ED8", "#E0F2FE", "#FFFFFF"]],
+  novruz: [["#166534", "#84CC16", "#FACC15", "#FFFFFF"], ["#B91C1C", "#F97316", "#FDE68A", "#FFFFFF"], ["#7C2D12", "#D97706", "#FEF3C7", "#FFFFFF"]],
   funny: [["#FF6B6B", "#FFD93D", "#4D96FF", "#1B1B3A"], ["#00C2FF", "#7B61FF", "#FFE45E", "#FFFFFF"], ["#FF9F1C", "#FF4D6D", "#2EC4B6", "#FFFFFF"]],
   gift: [["#E11D48", "#FB7185", "#FDE047", "#FFFFFF"], ["#7C3AED", "#EC4899", "#FDE68A", "#FFFFFF"], ["#0EA5E9", "#22D3EE", "#F43F5E", "#06283D"]],
   vip: [["#111827", "#4C1D95", "#F5D67B", "#F5D67B"], ["#0F172A", "#1E3A8A", "#FBBF24", "#FFFFFF"], ["#3B0764", "#9D174D", "#FDE68A", "#FFFFFF"]],
@@ -92,21 +97,26 @@ const PALETTES: Record<CategoryId, string[][]> = {
 };
 
 const FONT_BY: Record<CategoryId, FontId[]> = {
+  newyear: ["serif", "elegant", "rounded"], novruz: ["elegant", "serif", "rounded"],
   funny: ["playful", "rounded", "bold"], gift: ["rounded", "playful"], vip: ["elegant", "serif", "bold"], luxury: ["elegant", "serif"],
   color3d: ["bold", "rounded"], market: ["rounded", "bold"], cafe: ["serif", "elegant", "rounded"], kids: ["playful", "rounded"],
   minimal: ["mono", "bold", "rounded"],
 };
 const BG_BY: Record<CategoryId, Background[]> = {
+  newyear: ["snow", "snow", "radial", "confetti"], novruz: ["buta", "buta", "sunburst", "dots"],
   funny: ["confetti", "sunburst", "dots", "waves"], gift: ["confetti", "radial", "stripes"], vip: ["radial", "grid", "mesh"],
   luxury: ["grid", "radial", "stripes"], color3d: ["mesh", "waves", "sunburst"], market: ["waves", "dots", "gradient"],
   cafe: ["gradient", "dots", "radial"], kids: ["confetti", "dots", "waves"], minimal: ["gradient", "grid", "stripes"],
 };
 const ICON_BY: Record<CategoryId, IconId[]> = {
+  newyear: ["star", "gift", "sparkle"], novruz: ["leaf", "sparkle", "heart"],
   funny: ["smile", "star", "sparkle"], gift: ["gift", "heart", "star"], vip: ["crown", "diamond", "star"], luxury: ["diamond", "crown"],
   color3d: ["sparkle", "star"], market: ["cart", "leaf", "star"], cafe: ["cup", "heart"], kids: ["heart", "star", "smile"],
   minimal: ["none", "sparkle", "diamond"],
 };
 const TAGLINES: Record<CategoryId, string[]> = {
+  newyear: ["Yeni il endirimi!", "Bayram bonusları sizinlə", "Yeni ilə hədiyyəli giriş", "Yeni iliniz mübarək!"],
+  novruz: ["Novruz endirimi!", "Bayramınız mübarək!", "Bahar bonusları", "Novruz süfrəsinə bonus"],
   funny: ["Gül, yığ, qazan!", "Hər alış bir təbəssüm", "Bonuslar səni gözləyir"],
   gift: ["Hər alışa hədiyyə", "Sürprizlər burada", "Bonus = hədiyyə"],
   vip: ["Siz xüsusisiniz", "VIP müştəri", "Ən yaxşısı sizin üçün"],
@@ -179,6 +189,20 @@ function backgroundLayer(s: Spec, w: number, h: number): string {
     }
     case "mesh": p = `<circle cx="${w * 0.2}" cy="${h * 0.9}" r="${h * 0.6}" fill="${a}" ${op(0.35)}/><circle cx="${w * 0.95}" cy="${h * 0.1}" r="${h * 0.55}" fill="${s.color2}" ${op(0.5)}/><circle cx="${w * 0.6}" cy="${h * 0.6}" r="${h * 0.35}" fill="#fff" ${op(0.12)}/>`; break;
     case "sunburst": for (let i = 0; i < 24; i++) { const ang = (i / 24) * Math.PI * 2, ang2 = ang + Math.PI / 24, cx = w * 0.78, cy = h * 0.4, R = w; p += `<path d="M${cx} ${cy} L${cx + R * Math.cos(ang)} ${cy + R * Math.sin(ang)} L${cx + R * Math.cos(ang2)} ${cy + R * Math.sin(ang2)} Z" fill="${t}" ${op(0.06)}/>`; } break;
+    case "snow": {
+      let seed = 11; const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+      for (let i = 0; i < 70; i++) {
+        const x = rnd() * w, y = rnd() * h, r = 2 + rnd() * 5;
+        p += i % 5 ? `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" ${op(0.55)}/>`
+          : `<g transform="translate(${x} ${y})" stroke="#fff" stroke-width="2.5" stroke-linecap="round" ${op(0.6)}><path d="M-10 0H10M0 -10V10M-7 -7L7 7M-7 7L7 -7"/></g>`;
+      }
+      p += `<path d="M0 ${h - 40} Q${w * 0.25} ${h - 70} ${w * 0.5} ${h - 45} T${w} ${h - 55} V${h} H0 Z" fill="#fff" ${op(0.35)}/>`;
+      break;
+    }
+    case "buta":
+      for (let y = 40; y < h + 40; y += 90) for (let x = 40 + ((y / 90) % 2) * 60; x < w + 40; x += 120)
+        p += `<path transform="translate(${x} ${y}) rotate(-20)" d="M0 -28 C22 -28 30 -6 22 10 C14 26 -10 30 -18 16 C-26 2 -12 -6 -2 -2 C8 2 6 14 -2 14" fill="none" stroke="${a}" stroke-width="4" ${op(0.35)}/>`;
+      break;
     case "grid": for (let x = 0; x < w; x += 40) p += `<path d="M${x} 0 V${h}" stroke="${a}" ${op(0.15)}/>`; for (let y = 0; y < h; y += 40) p += `<path d="M0 ${y} H${w}" stroke="${a}" ${op(0.15)}/>`; break;
     default: p = `<rect width="${w}" height="${h}" fill="url(#glow)" ${op(0.5)}/>`;
   }

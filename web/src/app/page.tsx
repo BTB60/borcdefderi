@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PlanCard } from "@/components/PlanCard";
-import { StoreBadges } from "@/components/StoreBadges";
+import { KartAppBadge, StoreBadges } from "@/components/StoreBadges";
 import { api, getToken } from "@/lib/api";
 import type { Contact, PeriodCode, Plan } from "@/lib/types";
 
@@ -162,6 +162,11 @@ export default function Home() {
           <h2 className="font-serif text-2xl font-semibold">Telefonda və kompüterdə yanınızda</h2>
           <p className="mt-2 text-white/70">Windows kassa proqramı ilə tam ekran satış, çek printeri və pul qutusu; telefon tətbiqi ilə kamera ilə barkod oxudun, satış edin, borclara baxın. İnternet kəsiləndə də satış davam edir.</p>
           <StoreBadges className="mt-6" />
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <h3 className="font-semibold">Müştəriləriniz üçün: HesabPro Kart</h3>
+            <p className="mt-1 text-sm text-white/70">Müştəri bütün mağazalardakı bonus kartlarını, balansını və endirim reklamlarınızı bir tətbiqdə görür. Kassada kartın barkodunu göstərir.</p>
+            <KartAppBadge className="mt-4" />
+          </div>
         </div>
         <div>
           <h2 className="font-serif text-2xl font-semibold">Tez-tez verilən suallar</h2>

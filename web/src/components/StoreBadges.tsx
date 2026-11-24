@@ -7,6 +7,8 @@ import { Modal } from "@/components/ui";
  * until the App Store version is published). */
 export const ANDROID_APK_URL = "https://github.com/BTB60/borcdefderi/releases/download/mobile-latest/HesabPro.apk";
 /** HesabPro Kassa for Windows (the till app): always the newest Setup. */
+/** HesabPro Kart, the customers' bonus card app (built by CI as the kart-latest release). */
+export const KART_APK_URL = "https://github.com/BTB60/borcdefderi/releases/download/kart-latest/HesabPro-Kart.apk";
 export const WINDOWS_SETUP_URL = "https://github.com/BTB60/borcdefderi/releases/download/desktop-latest/HesabPro-Kassa-Setup.exe";
 const APK_RELEASE_API = "https://api.github.com/repos/BTB60/borcdefderi/releases/tags/mobile-latest";
 const APK_INFO_KEY = "hp_apk_release";
@@ -154,6 +156,26 @@ function IosInstallModal({ open, onClose, platform, safari }: { open: boolean; o
         </div>
       )}
     </Modal>
+  );
+}
+
+/** "HesabPro Kart" download for customers: their bonus cards from every store, in one app (Android APK). */
+export function KartAppBadge({ className = "", dark = true }: { className?: string; dark?: boolean }) {
+  return (
+    <a href={KART_APK_URL} title="HesabPro Kart — müştəri bonus kartı tətbiqini yüklə (Android)"
+      className={`group inline-flex items-center gap-3 rounded-2xl px-4 py-2.5 text-left transition hover:-translate-y-0.5 ${dark
+        ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50"
+        : "bg-white text-navy-800 ring-1 ring-violet-200 hover:ring-violet-400"} ${className}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a small static icon */}
+      <img src="/kart-icon.png" alt="" width={40} height={40} className="h-10 w-10 rounded-xl" />
+      <span className="leading-tight">
+        <span className={`block text-[10px] uppercase tracking-wider ${dark ? "text-white/75" : "text-violet-600"}`}>Müştərilər üçün · Android</span>
+        <span className="block text-lg font-semibold">HesabPro Kart</span>
+      </span>
+      <svg viewBox="0 0 24 24" className="ml-1 h-5 w-5 transition group-hover:translate-y-0.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <path d="M12 4v12m0 0-5-5m5 5 5-5M5 20h14" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </a>
   );
 }
 

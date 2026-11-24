@@ -8,7 +8,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { AuthResponse } from "@/lib/types";
 import { Alert, Button, Field, Input } from "@/components/ui";
-import { StoreBadges } from "@/components/StoreBadges";
+import { KartAppBadge, StoreBadges } from "@/components/StoreBadges";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -121,6 +121,8 @@ export default function LoginPage() {
           <div className="mt-8 border-t border-slate-200 pt-6">
             <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">Mobil tətbiqi yükləyin</p>
             <StoreBadges className="justify-center" />
+            <p className="mb-3 mt-6 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">Müştərisiniz? Bonus kartlarınız bir tətbiqdə</p>
+            <div className="flex justify-center"><KartAppBadge /></div>
           </div>
         </div>
       </main>

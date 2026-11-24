@@ -17,6 +17,9 @@ type LoyaltyCard = {
 };
 type Entry = { id: string; kind: string; amount: number; saleNumber: string | null; note: string | null; createdAt: string };
 
+/** The customers' app (HesabPro Kart), built by CI as the kart-latest release. */
+const KART_APP_URL = "https://github.com/BTB60/borcdefderi/releases/download/kart-latest/HesabPro-Kart.apk";
+
 const KIND: Record<string, string> = { EARN: "Yığıldı", USE: "Xərcləndi", ADJUST: "Əl ilə", REVERSE: "Qaytarma" };
 
 /** Bonus kartları: each card has its own bonus percent; the card number (barcode) is scanned at the till. */
@@ -146,7 +149,7 @@ function CardDetail({ card, design, storeName, onClose, onEdit }: { card: Loyalt
   useEffect(() => {
     api<{ card: LoyaltyCard; entries: Entry[] }>(`/api/loyalty-cards/${card.id}`).then((d) => { setData(d.card); setEntries(d.entries); }).catch(() => setEntries([]));
   }, [card.id]);
-  const share = waLink(data.phone, `Salam, ${data.firstName}! “${storeName}” bonus kartınız hazırdır.\nKart nömrəsi: ${data.number}\nFaiz: hər alışdan ${Number(data.percent)}% bonus.\nBalans: ${formatMoney(data.balance)}\nKassada kart nömrəsini və ya telefon nömrənizi deyin.`);
+  const share = waLink(data.phone, `Salam, ${data.firstName}! “${storeName}” bonus kartınız hazırdır.\nKart nömrəsi: ${data.number}\nFaiz: hər alışdan ${Number(data.percent)}% bonus.\nBalans: ${formatMoney(data.balance)}\nKassada kart nömrəsini və ya telefon nömrənizi deyin.\n\nBütün bonus kartlarınızı “HesabPro Kart” tətbiqində görün: ${KART_APP_URL}\nGiriş üçün aktivləşdirmə kodu: ${data.activationCode}`);
   return (
     <Modal open size="xl" title={`${data.fullName} — bonus kartı`} onClose={onClose}
       footer={<><Button variant="ghost" onClick={onClose}>Bağla</Button><Button variant="outline" onClick={onEdit}>Dəyiş</Button></>}>
@@ -166,6 +169,10 @@ function CardDetail({ card, design, storeName, onClose, onEdit }: { card: Loyalt
             ))}
           </div>
           <p className="mb-1 text-xs text-slate-500">Telefon: {data.phone} · yaradılıb {formatDateTime(data.createdAt)}</p>
+          <p className="mb-1 text-xs text-slate-600">
+            “HesabPro Kart” tətbiqi üçün aktivləşdirmə kodu: <b className="font-mono tracking-widest text-navy-800">{data.activationCode}</b>
+            <span className="text-slate-400"> · müştəri kart nömrəsi və bu kodla daxil olur</span>
+          </p>
           <h3 className="mb-2 mt-3 text-sm font-semibold text-navy-800">Bonus tarixçəsi</h3>
           {!entries ? <Spinner /> : entries.length === 0 ? <p className="text-sm text-slate-500">Hələ bonus hərəkəti yoxdur.</p> : (
             <div className="max-h-72 divide-y divide-slate-100 overflow-y-auto rounded-xl ring-1 ring-slate-200">

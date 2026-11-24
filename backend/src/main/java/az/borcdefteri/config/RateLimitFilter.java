@@ -32,7 +32,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        boolean login = "POST".equalsIgnoreCase(request.getMethod()) && uri.startsWith("/api/auth/");
+        boolean login = "POST".equalsIgnoreCase(request.getMethod())
+                && (uri.startsWith("/api/auth/") || uri.startsWith("/api/public/customer-app/")); // HesabPro Kart sign-in too
         // Password checks on the profile (change password / change e-mail) are limited the same way.
         boolean passwordCheck = "PUT".equalsIgnoreCase(request.getMethod())
                 && (uri.equals("/api/profile/password") || uri.equals("/api/profile"));

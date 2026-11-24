@@ -7,6 +7,8 @@ import '../effects.dart';
 import '../main.dart';
 import '../models.dart';
 import '../promo_widgets.dart';
+import '../theme_picker.dart';
+import '../themes.dart';
 import 'login_screen.dart';
 
 const _kind = {'EARN': 'Yığıldı', 'USE': 'Xərcləndi', 'ADJUST': 'Mağaza tərəfindən', 'REVERSE': 'Qaytarma'};
@@ -29,6 +31,8 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
   String? _name;
   List<LoyaltyCard>? _cards;
   List<Promo> _promos = const [];
+  /// The look the customer chose per card (card id -> theme id); missing = the store's design.
+  Map<String, String> _themes = const {};
   String? _error;
   int _page = 0;
   bool _showHello = true;
@@ -77,6 +81,8 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
       });
       _loadHistory();
       _loadPromos();
+      final themes = await ThemeStore.load(_cards!.map((c) => c.id));
+      if (mounted) setState(() => _themes = themes);
     } on ApiException catch (e) {
       if (e.status == 401) return _logout();
       if (mounted) setState(() => _error = e.message);
@@ -104,6 +110,13 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
     } catch (_) {
       _history.remove(card.id);
     }
+  }
+
+  Future<void> _pickTheme(LoyaltyCard card) async {
+    final id = await showThemePicker(context, card, _themes[card.id] ?? storeThemeId);
+    if (id == null || !mounted) return;
+    await ThemeStore.save(card.id, id);
+    setState(() => _themes = {..._themes}..remove(card.id)..addAll(id == storeThemeId ? {} : {card.id: id}));
   }
 
   Future<void> _logout() async {
@@ -181,7 +194,9 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
                       ),
                     );
                   },
-                  child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16), child: FlipCard(card: cards[i])),
+                  child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                      child: FlipCard(card: cards[i], theme: themeById(_themes[cards[i].id]))),
                 ),
               ),
             ),
@@ -197,7 +212,16 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
                   ),
               ]),
             const SizedBox(height: 6),
-            Center(child: Text('Barkodu görmək üçün karta toxunun', style: TextStyle(color: Colors.grey.shade600, fontSize: 12))),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Text('Barkod üçün karta toxunun', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+              const SizedBox(width: 6),
+              TextButton.icon(
+                style: TextButton.styleFrom(foregroundColor: const Color(0xFF7C3AED), visualDensity: VisualDensity.compact),
+                onPressed: () => _pickTheme(cards[_page.clamp(0, cards.length - 1)]),
+                icon: const Icon(Icons.palette_outlined, size: 18),
+                label: const Text('Dizaynı seç', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+            ]),
             if (_promos.isNotEmpty) ...[
               Reveal(
                 delay: const Duration(milliseconds: 300),

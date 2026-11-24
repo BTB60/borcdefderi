@@ -468,6 +468,16 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
   double get _total => _r((_subtotal - _discountSum - _bonusUsed).clamp(0, double.infinity).toDouble());
   double get _cardPaid => _p(_card.text);
 
+  /// Bonus + card + cash: until the cashier types the cash, it is what the card and bonus leave
+  /// (7.30 − 0.30 bonus − 1.00 card → 6.00 cash).
+  bool _cashManual = false;
+  void _autoCash() {
+    if (_cashManual) return;
+    if (_cardPaid <= 0 && _bonusUsed <= 0) return;
+    final rest = _r((_total - _cardPaid).clamp(0, double.infinity).toDouble());
+    _cash.text = rest > 0 ? rest.toStringAsFixed(2) : '';
+  }
+
   /// Cash the customer handed over (may be more than owed, e.g. 10 ₼ for 4 ₼).
   double get _tendered => _p(_cash.text);
 
@@ -871,12 +881,14 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                       suffixText: '₼',
                       prefixIcon: Icon(Icons.card_giftcard, color: Colors.green.shade700),
                       suffixIcon: TextButton(
-                        onPressed: () => setState(() => _bonus.text = _amount(
-                            _r(_bonusBalance.clamp(0, (_subtotal - _discountSum).clamp(0, double.infinity)).toDouble()))),
+                        onPressed: () => setState(() {
+                          _bonus.text = _amount(_r(_bonusBalance.clamp(0, (_subtotal - _discountSum).clamp(0, double.infinity)).toDouble()));
+                          _autoCash();
+                        }),
                         child: const Text('Hamısı'),
                       ),
                     ),
-                    onChanged: (_) => setState(() {}),
+                    onChanged: (_) => setState(_autoCash),
                   ),
                 ],
                 const Divider(height: 24),
@@ -907,6 +919,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
             onPressed: () => setState(() {
               _cash.text = _total.toStringAsFixed(2);
               _card.clear();
+              _cashManual = true;
             }),
           ),
           ActionChip(
@@ -915,6 +928,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
             onPressed: () => setState(() {
               _card.text = _total.toStringAsFixed(2);
               _cash.clear();
+              _cashManual = false;
             }),
           ),
           ActionChip(
@@ -923,6 +937,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
             onPressed: () => setState(() {
               _cash.clear();
               _card.clear();
+              _cashManual = true;
             }),
           ),
         ]),
@@ -935,7 +950,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
             suffixText: '₼',
             prefixIcon: Icon(Icons.payments_outlined),
           ),
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) => setState(() => _cashManual = true),
         ),
         const SizedBox(height: 8),
         // quick banknotes: tap to set what the customer handed over
@@ -945,7 +960,10 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
               ChoiceChip(
                 label: Text('$note ₼'),
                 selected: _tendered == note,
-                onSelected: (_) => setState(() => _cash.text = '$note'),
+                onSelected: (_) => setState(() {
+                  _cash.text = '$note';
+                  _cashManual = true;
+                }),
               ),
         ]),
         const SizedBox(height: 12),
@@ -958,11 +976,14 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
             prefixIcon: const Icon(Icons.credit_card),
             // bonus + cash + card: the card takes what is left
             suffixIcon: TextButton(
-              onPressed: () => setState(() => _card.text = _r((_total - _tendered).clamp(0, double.infinity).toDouble()).toStringAsFixed(2)),
+              onPressed: () => setState(() {
+                _card.text = _r((_total - (_cashManual ? _tendered : 0)).clamp(0, double.infinity).toDouble()).toStringAsFixed(2);
+                _autoCash();
+              }),
               child: const Text('Qalanı'),
             ),
           ),
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) => setState(_autoCash),
         ),
         if (_cart.isNotEmpty && change > 0)
           _notice(Icons.currency_exchange, 'Müştəriyə qaytarın', formatMoney(change), Colors.green),

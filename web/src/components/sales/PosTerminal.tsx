@@ -128,10 +128,10 @@ function partyFromCard(m: PhoneMatch, customers: Party[]): Party {
 }
 
 /** Mixed payment: fills the field with what is left after the other part (and the bonus). */
-function RestButton({ onClick }: { onClick: () => void }) {
+function RestButton({ onClick, label = "Qalanı" }: { onClick: () => void; label?: string }) {
   return (
-    <button type="button" onClick={onClick} className="float-right rounded bg-white px-1.5 text-[11px] font-semibold text-navy-700 ring-1 ring-slate-200 hover:ring-gold-500">
-      Qalanı
+    <button type="button" tabIndex={-1} onClick={onClick} className="float-right rounded bg-white px-1.5 text-[11px] font-semibold text-navy-700 ring-1 ring-slate-200 hover:ring-gold-500">
+      {label}
     </button>
   );
 }
@@ -172,6 +172,8 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
   const [customerOpen, setCustomerOpen] = useState(false);
   const [discount, setDiscount] = useState("");
   const [bonusInput, setBonusInput] = useState("");
+  // Qarışıq: cash is worked out from the card and bonus parts until the cashier types it
+  const [cashManual, setCashManual] = useState(false);
   // a bonus card found by phone (no card at hand): its bonus is spent only after the SMS code
   const [byPhone, setByPhone] = useState<{ cardId: string; unlocked: boolean } | null>(null);
   const [phoneOpen, setPhoneOpen] = useState(false);
@@ -430,7 +432,7 @@ Təşəkkür edirik!`;
   // the bonus card pays the whole receipt: nothing left for cash or card
   const bonusCovers = bonusAmount > 0 && total <= 0.004;
   const payable = r2(Math.max(0, subtotal - discountAmount)); // before the bonus
-  if (bonusCovers) {
+  if (bonusCovers && mode !== "mixed") {
     // nothing to take
   } else if (mode === "cash") {
     const g = given.trim() === "" ? total : num(given);
@@ -439,8 +441,14 @@ Təşəkkür edirik!`;
   } else if (mode === "card") {
     paidCard = total;
   } else if (mode === "mixed") {
-    paidCash = num(cash);
     paidCard = num(card);
+    const due = Math.max(0, total - paidCard);
+    if (!cashManual) paidCash = due;
+    else {
+      const tendered = num(cash);
+      paidCash = Math.min(tendered, due);
+      change = r2(Math.max(0, tendered - due));
+    }
   } else {
     paidCash = num(cash); // optional advance
   }
@@ -451,6 +459,60 @@ Təşəkkür edirik!`;
   const stockProblem = lines.find((l) => num(l.quantity) > l.product.stockQty);
   const needsCustomer = credit > 0.004 && !customer;
   const canSell = !busy && cart.length > 0 && !over && !needsCustomer && !stockProblem && total >= 0;
+
+  /**
+   * Qarışıq ödəniş: bonus card + card + cash. The cashier writes the bonus and the card part;
+   * cash fills itself with what is left (7.30 − 0.30 bonus − 1.00 card = 6.00) until the cashier types it
+   * (e.g. the customer hands over 10 ₼ → change).
+   */
+  const mixedFields = (big: boolean) => {
+    const lbl = big ? "text-sm text-slate-600" : "text-xs text-slate-500";
+    const box = big
+      ? "mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-right text-xl font-semibold tabular-nums outline-none focus:border-gold-500"
+      : "mt-0.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-right font-semibold tabular-nums outline-none focus:border-gold-500";
+    const showBonus = !!customer && (bonusAvailable > 0 || bonusLocked);
+    const due = r2(Math.max(0, total - num(card)));
+    return (
+      <div className="space-y-2">
+        <div className={cx("grid gap-2", showBonus ? "grid-cols-3" : "grid-cols-2")}>
+          {showBonus && (bonusLocked && byPhone ? (
+            <div className={lbl}>🎫 Bonus kartı
+              <div className="mt-1"><BonusCodeGate cardId={byPhone.cardId} onUnlocked={() => setByPhone({ ...byPhone, unlocked: true })} /></div>
+            </div>
+          ) : (
+            <label className={lbl}>🎫 Bonus kartı
+              <RestButton label="Hamısı" onClick={() => setBonusInput(String(r2(Math.min(bonusAvailable, payable))))} />
+              <input value={bonusInput} inputMode="decimal" placeholder="0" aria-label="Bonus kartından"
+                onChange={(e) => setBonusInput(e.target.value.replace(/[^\d.,]/g, ""))} className={cx(box, "text-emerald-700")} />
+              <span className="mt-0.5 block text-[11px] text-emerald-700">balans {formatMoney(bonusAvailable)}</span>
+            </label>
+          ))}
+          <label className={lbl}>💳 Kart (₼)
+            <RestButton onClick={() => setCard(String(r2(Math.max(0, total - (cashManual ? num(cash) : 0)))))} />
+            <input autoFocus={big} value={card} inputMode="decimal" placeholder="0"
+              onChange={(e) => setCard(e.target.value.replace(/[^\d.,]/g, ""))} className={box} />
+          </label>
+          <label className={lbl}>💵 Nağd (₼)
+            {cashManual
+              ? <RestButton label="Avto" onClick={() => { setCashManual(false); setCash(""); }} />
+              : <span className="float-right text-[11px] font-semibold text-emerald-700">avto</span>}
+            <input value={cashManual ? cash : due > 0 ? due.toFixed(2) : ""} inputMode="decimal" placeholder="0"
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => { setCashManual(true); setCash(e.target.value.replace(/[^\d.,]/g, "")); }} className={box} />
+          </label>
+        </div>
+        {!customer && <p className="text-xs text-slate-500">Bonus kartı ilə ödəmək üçün çekdə müştərini seçin.</p>}
+        {bonusCovers && <p className="text-sm font-medium text-emerald-700">✓ Hamısı bonus kartı ilə ödənilir — nağd və kart lazım deyil.</p>}
+        {change > 0 && (
+          <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-4 py-2.5 text-emerald-800 ring-1 ring-emerald-200">
+            <span className="text-sm font-medium">Qaytarılacaq pul</span>
+            <span className="font-serif text-2xl font-semibold tabular-nums">{formatMoney(change)}</span>
+          </div>
+        )}
+        {big && credit > 0.004 && <p className={cx("text-sm", customer ? "text-amber-700" : "text-rose-700")}>{formatMoney(credit)} borca{customer ? ` — ${customer.name}` : " — əvvəlcə çekdə müştəri seçin"}</p>}
+      </div>
+    );
+  };
 
   // Çeki gözlət: put the receipt aside, serve the next customer, open it again later (F3)
   const [parked, setParked] = useState<Parked[]>([]);
@@ -483,7 +545,7 @@ Təşəkkür edirik!`;
   };
 
   const reset = () => {
-    setCart([]); setDiscount(""); setBonusInput(""); setLevel("RETAIL"); setPercent(false); setGiven(""); setCash(""); setCard(""); setNote(""); setShowNote(false);
+    setCart([]); setDiscount(""); setBonusInput(""); setLevel("RETAIL"); setPercent(false); setGiven(""); setCash(""); setCard(""); setCashManual(false); setNote(""); setShowNote(false);
     setCustomer(null); setCustomerQuery(""); setByPhone(null); setMode("cash"); setEditing(null); setError(null); setRequestId(crypto.randomUUID());
   };
 
@@ -909,13 +971,13 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
               {discountAmount > 0 && <span className="w-20 text-right tabular-nums text-rose-600">−{formatMoney(discountAmount)}</span>}
             </div>
           </div>
-          {bonusLocked && byPhone && (
+          {bonusLocked && byPhone && mode !== "mixed" && (
             <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
               <span>Bonus <span className="text-xs text-emerald-700">(balans {formatMoney(customer?.bonusBalance ?? 0)})</span></span>
               <BonusCodeGate cardId={byPhone.cardId} onUnlocked={() => setByPhone({ ...byPhone, unlocked: true })} />
             </div>
           )}
-          {bonusAvailable > 0 && (
+          {bonusAvailable > 0 && mode !== "mixed" && (
             <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
               <span>🎫 Bonus kartı ilə <span className="text-xs text-emerald-700">(balans {formatMoney(bonusAvailable)})</span></span>
               <div className="flex items-center gap-1.5">
@@ -937,7 +999,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             <span className="font-serif text-3xl font-semibold tabular-nums text-gold-400">{formatMoney(total)}</span>
           </div>
 
-          {bonusCovers ? (
+          {bonusCovers && mode !== "mixed" ? (
             <p className="rounded-xl bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-800 ring-1 ring-emerald-200">
               ✓ Hamısı bonus kartı ilə ödənilir — {formatMoney(bonusAmount)}. Nağd və kart lazım deyil.
             </p>
@@ -945,7 +1007,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
 
           <div className="grid grid-cols-4 gap-1 rounded-xl bg-white p-1 ring-1 ring-slate-200" role="tablist" aria-label="Ödəniş üsulu">
             {([["cash", "Nağd"], ["card", "Kart"], ["mixed", "Qarışıq"], ["credit", "Borca"]] as const).map(([k, label]) => (
-              <button key={k} type="button" role="tab" aria-selected={mode === k} onClick={() => { setMode(k); setCash(""); setCard(""); setGiven(""); }}
+              <button key={k} type="button" role="tab" aria-selected={mode === k} onClick={() => { setMode(k); setCash(""); setCard(""); setGiven(""); setCashManual(false); }}
                 className={cx("rounded-lg py-2 text-sm font-medium transition", mode === k ? "bg-gold-500 text-navy-900 shadow" : "text-slate-600 hover:bg-slate-100")}>
                 {label}
               </button>
@@ -976,22 +1038,13 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
             </div>
           )}
           {mode === "card" && total > 0 && <p className="rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-800">Kartla {formatMoney(total)} ödənilir.</p>}
-          {(mode === "mixed" || mode === "credit") && (
-            <div className={cx("grid gap-2", mode === "mixed" ? "grid-cols-2" : "grid-cols-1")}>
-              <label className="text-xs text-slate-500">{mode === "credit" ? "İlkin ödəniş, nağd (istəyə bağlı)" : "Nağd (₼)"}
-                {mode === "mixed" && <RestButton onClick={() => setCash(String(r2(Math.max(0, total - num(card)))))} />}
-                <input value={cash} onChange={(e) => setCash(e.target.value)} inputMode="decimal" placeholder="0"
-                  className="mt-0.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-right font-semibold tabular-nums outline-none focus:border-gold-500" />
-              </label>
-              {mode === "mixed" && (
-                <label className="text-xs text-slate-500">Kart (₼)
-                  <RestButton onClick={() => setCard(String(r2(Math.max(0, total - num(cash)))))} />
-                  <input value={card} onChange={(e) => setCard(e.target.value)} inputMode="decimal" placeholder="0"
-                    className="mt-0.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-right font-semibold tabular-nums outline-none focus:border-gold-500" />
-                </label>
-              )}
-            </div>
+          {mode === "credit" && (
+            <label className="text-xs text-slate-500">İlkin ödəniş, nağd (istəyə bağlı)
+              <input value={cash} onChange={(e) => setCash(e.target.value)} inputMode="decimal" placeholder="0"
+                className="mt-0.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-right font-semibold tabular-nums outline-none focus:border-gold-500" />
+            </label>
           )}
+          {mode === "mixed" && mixedFields(false)}
 
           </>)}
 
@@ -1138,14 +1191,14 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
               </span>
               <span className="font-serif text-4xl font-semibold tabular-nums text-gold-400">{formatMoney(total)}</span>
             </div>
-            {bonusCovers ? (
+            {bonusCovers && mode !== "mixed" ? (
               <p className="rounded-xl bg-emerald-50 px-4 py-3 font-medium text-emerald-800 ring-1 ring-emerald-200">
                 ✓ Hamısı bonus kartı ilə ödənilir — {formatMoney(bonusAmount)}. Nağd və kart lazım deyil.
               </p>
             ) : (<>
             <div className="mb-4 grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1">
               {([["cash", "Nağd"], ["card", "Kart"], ["mixed", "Qarışıq"], ["credit", "Borca"]] as const).map(([k, label]) => (
-                <button key={k} type="button" tabIndex={-1} onClick={() => { setMode(k); setCash(""); setCard(""); setGiven(""); }}
+                <button key={k} type="button" tabIndex={-1} onClick={() => { setMode(k); setCash(""); setCard(""); setGiven(""); setCashManual(false); }}
                   className={cx("rounded-lg py-2 text-sm font-medium", mode === k ? "bg-gold-500 text-navy-900 shadow" : "text-slate-600")}>{label}</button>
               ))}
             </div>
@@ -1184,23 +1237,16 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
               </>
             )}
             {mode === "card" && <p className="rounded-xl bg-sky-50 px-4 py-3 text-sky-800">Kartla <b>{formatMoney(total)}</b> ödənilir.</p>}
-            {(mode === "mixed" || mode === "credit") && (
-              <div className={cx("grid gap-3", mode === "mixed" ? "grid-cols-2" : "grid-cols-1")}>
-                <label className="text-sm text-slate-600">{mode === "credit" ? "İlkin ödəniş, nağd" : "Nağd (₼)"}
-                  {mode === "mixed" && <RestButton onClick={() => setCash(String(r2(Math.max(0, total - num(card)))))} />}
+            {mode === "credit" && (
+              <div className="grid gap-3">
+                <label className="text-sm text-slate-600">İlkin ödəniş, nağd
                   <input autoFocus value={cash} inputMode="decimal" placeholder="0" onChange={(e) => setCash(e.target.value.replace(/[^\d.,]/g, ""))}
                     className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-right text-xl font-semibold tabular-nums outline-none focus:border-gold-500" />
                 </label>
-                {mode === "mixed" && (
-                  <label className="text-sm text-slate-600">Kart (₼)
-                    <RestButton onClick={() => setCard(String(r2(Math.max(0, total - num(cash)))))} />
-                    <input value={card} inputMode="decimal" placeholder="0" onChange={(e) => setCard(e.target.value.replace(/[^\d.,]/g, ""))}
-                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-right text-xl font-semibold tabular-nums outline-none focus:border-gold-500" />
-                  </label>
-                )}
                 {credit > 0.004 && <p className={cx("text-sm", customer ? "text-amber-700" : "text-rose-700")}>{formatMoney(credit)} borca{customer ? ` — ${customer.name}` : " — əvvəlcə çekdə müştəri seçin"}</p>}
               </div>
             )}
+            {mode === "mixed" && mixedFields(true)}
             {over && <p className="mt-3 text-sm text-rose-700">Ödəniş yekundan çoxdur.</p>}
             </>)}
             {stockProblem && <p className="mt-3 text-sm text-rose-700">“{stockProblem.product.name}” anbarda kifayət deyil.</p>}

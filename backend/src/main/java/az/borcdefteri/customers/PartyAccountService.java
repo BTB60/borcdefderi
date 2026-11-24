@@ -36,12 +36,26 @@ public class PartyAccountService {
     private final PartyService parties;
     private final DebtService debts;
     private final PaymentService payments;
+    private final CreditLimitService limits;
 
-    public PartyAccountService(TenantService tenant, PartyService parties, DebtService debts, PaymentService payments) {
+    public PartyAccountService(TenantService tenant, PartyService parties, DebtService debts, PaymentService payments,
+                               CreditLimitService limits) {
+        this.limits = limits;
         this.tenant = tenant;
         this.parties = parties;
         this.debts = debts;
         this.payments = payments;
+    }
+
+    /** "Borc əlavə et" typed in by a user: a customer's credit limit applies (the owner may override). */
+    @Transactional
+    public ChargeResult chargeChecked(boolean customer, UUID partyId, PartyAccountRequests.Charge req) {
+        if (customer) {
+            CurrentMember m = tenant.requireBusinessMember();
+            resolveType(m, true, partyId, req.debtType());
+            limits.check(m, partyId, Money.of(req.amount()), Boolean.TRUE.equals(req.allowOverLimit()));
+        }
+        return charge(customer, partyId, req);
     }
 
     @Transactional

@@ -18,5 +18,11 @@ public record DebtIncreaseRequest(
         LocalDate date,
         @Size(max = 60, message = "Çek nömrəsi ən çox 60 simvol ola bilər") String receiptNumber,
         @Size(max = 500, message = "Qeyd ən çox 500 simvol ola bilər") String note,
-        @NotNull Long version
-) {}
+        @NotNull Long version,
+        /** Customer debts over the credit limit: the owner's "write it anyway". */
+        Boolean allowOverLimit
+) {
+    public DebtIncreaseRequest(BigDecimal amount, LocalDate date, String receiptNumber, String note, Long version) {
+        this(amount, date, receiptNumber, note, version, null);
+    }
+}

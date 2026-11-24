@@ -6,6 +6,7 @@ import { WhatsAppIcon } from "@/components/debts/DebtModals";
 import { ApiError, api, download } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { METHOD_LABEL, formatMoney, todayBaku } from "@/lib/format";
+import { withCreditLimit } from "@/lib/creditLimit";
 import type { DebtType, Payment, PaymentMethod, PartyProfile } from "@/lib/types";
 import { paymentConfirmationText, waLink } from "@/lib/whatsapp";
 
@@ -44,7 +45,7 @@ function useBalances(isCustomer: boolean, partyId: string) {
 
 /** "Borc əlavə et" and "Borc ödə" on the customer / company account. */
 export function AccountModal({ mode, isCustomer, partyId, initialType, onClose, onSaved }: Props) {
-  const { can, me } = useAuth();
+  const { can, me, isOwner } = useAuth();
   const { profile, balances, error: loadError } = useBalances(isCustomer, partyId);
   const candidates: DebtType[] = isCustomer ? ["CUSTOMER_DEBT"] : ["COMPANY_RECEIVABLE", "COMPANY_PAYABLE"];
   const types = candidates.filter((t) => can(PERM[t]));
@@ -72,7 +73,7 @@ export function AccountModal({ mode, isCustomer, partyId, initialType, onClose, 
     const base = `/api/${isCustomer ? "customers" : "companies"}/${partyId}`;
     try {
       if (mode === "charge") {
-        const res = await api<{ remainingAfter: number }>(`${base}/charge`, {
+        const res = await withCreditLimit(isOwner, (allow) => api<{ remainingAfter: number }>(`${base}/charge`, {
           method: "POST",
           json: {
             debtType: current,
@@ -82,8 +83,9 @@ export function AccountModal({ mode, isCustomer, partyId, initialType, onClose, 
             note: form.note.trim() || null,
             dueDate: form.dueDate || null,
             expectedRemaining: balance.toFixed(2),
+            allowOverLimit: allow || null,
           },
-        });
+        }));
         onSaved(`Borc əlavə edildi. ${name} — qalıq borc: ${formatMoney(res.remainingAfter)}`);
       } else {
         const res = await api<{ payments: Payment[]; remainingAfter: number }>(`${base}/pay`, {
@@ -190,6 +192,16 @@ export function AccountModal({ mode, isCustomer, partyId, initialType, onClose, 
               </p>
             </div>
           </div>
+          {mode === "charge" && isCustomer && profile?.party.creditLimit != null && (() => {
+            const limit = profile.party.creditLimit;
+            const after = balance + (valid ? value : 0);
+            return (
+              <p className={`-mt-3 mb-4 text-xs ${after > limit + 1e-9 ? "font-semibold text-rose-600" : "text-slate-500"}`}>
+                Borc limiti: {formatMoney(limit)} · yazıla bilən: {formatMoney(Math.max(0, limit - balance))}
+                {after > limit + 1e-9 ? ` — limit ${formatMoney(after - limit)} keçilir${isOwner ? " (sahib təsdiqləyə bilər)" : ""}` : ""}
+              </p>
+            );
+          })()}
           {mode === "pay" && balance <= 0 && <div className="mb-4"><Alert kind="info">Bu hesab üzrə ödəniləcək borc yoxdur.</Alert></div>}
           {error && <div className="mb-4"><Alert>{error}</Alert></div>}
           <form id="account-form" onSubmit={submit} className="space-y-4">

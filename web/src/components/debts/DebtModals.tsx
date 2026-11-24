@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { PaymentCancelModal, PaymentEditModal } from "@/components/payments/PaymentEditModals";
 import type { Debt, DebtType, LedgerEntry, Party, Payment, PaymentMethod } from "@/lib/types";
 import { paymentConfirmationText, waLink } from "@/lib/whatsapp";
+import { withCreditLimit } from "@/lib/creditLimit";
 
 const TODAY = todayBaku;
 const METHODS: PaymentMethod[] = ["CASH", "CARD", "TRANSFER", "OTHER"];
@@ -29,6 +30,7 @@ function matchParties(list: Party[], q: string): Party[] {
 
 export function DebtFormModal({ type, initialPartyId = "", onClose, onSaved }: { type: DebtType; initialPartyId?: string; onClose: () => void; onSaved: () => void }) {
   const isCustomer = type === "CUSTOMER_DEBT";
+  const { isOwner } = useAuth();
   const [parties, setParties] = useState<Party[] | null>(null);
   const [form, setForm] = useState({ partyId: initialPartyId, amount: "", debtDate: TODAY(), dueDate: "", description: "", note: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -51,7 +53,7 @@ export function DebtFormModal({ type, initialPartyId = "", onClose, onSaved }: {
     setErrors({});
     try {
       // Adds to the party's account: an existing balance grows instead of a separate new debt appearing.
-      await api(`/api/${isCustomer ? "customers" : "companies"}/${form.partyId}/charge`, {
+      await withCreditLimit(isOwner, (allow) => api(`/api/${isCustomer ? "customers" : "companies"}/${form.partyId}/charge`, {
         method: "POST",
         json: {
           debtType: type,
@@ -59,8 +61,9 @@ export function DebtFormModal({ type, initialPartyId = "", onClose, onSaved }: {
           date: form.debtDate,
           receiptNumber: form.note || null,
           note: form.description || null,
+          allowOverLimit: allow || null,
         },
-      });
+      }));
       onSaved();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -126,6 +129,7 @@ export function DebtFormModal({ type, initialPartyId = "", onClose, onSaved }: {
 
 /** "Borc artır": the party took more on credit; kept as its own history entry. */
 export function DebtIncreaseModal({ debt, onClose, onSaved }: { debt: Debt; onClose: () => void; onSaved: (updated: Debt) => void }) {
+  const { isOwner } = useAuth();
   const [form, setForm] = useState({ amount: "", date: TODAY(), receiptNumber: "", note: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +144,7 @@ export function DebtIncreaseModal({ debt, onClose, onSaved }: { debt: Debt; onCl
     setError(null);
     setErrors({});
     try {
-      const updated = await api<Debt>(`/api/debts/${debt.id}/increase`, {
+      const updated = await withCreditLimit(isOwner, (allow) => api<Debt>(`/api/debts/${debt.id}/increase`, {
         method: "POST",
         json: {
           amount: form.amount.trim(),
@@ -148,8 +152,9 @@ export function DebtIncreaseModal({ debt, onClose, onSaved }: { debt: Debt; onCl
           receiptNumber: form.receiptNumber.trim() || null,
           note: form.note.trim() || null,
           version: debt.version,
+          allowOverLimit: allow || null,
         },
-      });
+      }));
       onSaved(updated);
     } catch (err) {
       if (err instanceof ApiError) {

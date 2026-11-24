@@ -140,7 +140,10 @@ public class SaleReceiptService {
             PdfPTable sums = new PdfPTable(new float[]{3f, 2f});
             sums.setWidthPercentage(100);
             line(sums, "Cəmi", s.subtotal(), cell);
-            if (s.discount().signum() > 0) line(sums, "Endirim", s.discount().negate(), cell);
+            java.math.BigDecimal bonusUsed = s.bonusUsed() == null ? java.math.BigDecimal.ZERO : s.bonusUsed();
+            java.math.BigDecimal plainDiscount = s.discount().subtract(bonusUsed);
+            if (plainDiscount.signum() > 0) line(sums, "Endirim", plainDiscount.negate(), cell);
+            if (bonusUsed.signum() > 0) line(sums, "Bonus kartı ilə", bonusUsed.negate(), cell);
             line(sums, "YEKUN", s.total(), d.boldTotal() ? new Font(bold, 11 * k) : cell);
             if (s.paidCash().signum() > 0) line(sums, "Nağd", s.paidCash(), cell);
             if (s.paidCard().signum() > 0) line(sums, "Kart", s.paidCard(), cell);

@@ -185,7 +185,8 @@ export function receiptHtml(sale: Sale, store: { name: string | null }, opts: { 
     ${opts.offline ? '<div class="c"><b>İnternetsiz satış — sonra göndəriləcək</b></div>' : ""}
     <hr><table>${rows}</table><hr>
     <table>
-      ${sale.discount > 0 ? line("Endirim", -sale.discount) : ""}
+      ${sale.discount - (sale.bonusUsed ?? 0) > 0.004 ? line("Endirim", -(sale.discount - (sale.bonusUsed ?? 0))) : ""}
+      ${(sale.bonusUsed ?? 0) > 0 ? line("Bonus kartı ilə", -(sale.bonusUsed ?? 0)) : ""}
       ${line("YEKUN", sale.total, "big")}
       ${sale.paidCash > 0 ? line("Nağd", sale.paidCash) : ""}
       ${sale.paidCard > 0 ? line("Kart", sale.paidCard) : ""}

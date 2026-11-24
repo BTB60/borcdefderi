@@ -888,7 +888,19 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
 
         // ----- payment -----
         _section('Ödəniş'),
+        if (_bonusUsed > 0 && _total <= 0.004)
+          _notice(Icons.card_giftcard, 'Hamısı bonus kartı ilə ödənilir', formatMoney(_bonusUsed), Colors.green),
         Wrap(spacing: 8, runSpacing: 8, children: [
+          if (_bonusBalance > 0 && !_bonusLocked)
+            ActionChip(
+              avatar: Icon(Icons.card_giftcard, size: 18, color: Colors.green.shade700),
+              label: const Text('Hamısı bonusla'),
+              onPressed: () => setState(() {
+                _bonus.text = _amount(_r(_bonusBalance.clamp(0, (_subtotal - _discountSum).clamp(0, double.infinity)).toDouble()));
+                _cash.clear();
+                _card.clear();
+              }),
+            ),
           ActionChip(
             avatar: const Icon(Icons.payments_outlined, size: 18),
             label: const Text('Hamısı nağd'),
@@ -940,7 +952,16 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
         TextField(
           controller: _card,
           keyboardType: _decimal,
-          decoration: const InputDecoration(labelText: 'Kartla', suffixText: '₼', prefixIcon: Icon(Icons.credit_card)),
+          decoration: InputDecoration(
+            labelText: 'Kartla',
+            suffixText: '₼',
+            prefixIcon: const Icon(Icons.credit_card),
+            // bonus + cash + card: the card takes what is left
+            suffixIcon: TextButton(
+              onPressed: () => setState(() => _card.text = _r((_total - _tendered).clamp(0, double.infinity).toDouble()).toStringAsFixed(2)),
+              child: const Text('Qalanı'),
+            ),
+          ),
           onChanged: (_) => setState(() {}),
         ),
         if (_cart.isNotEmpty && change > 0)

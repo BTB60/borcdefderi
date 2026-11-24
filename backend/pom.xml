@@ -93,6 +93,12 @@
             <version>${poi.version}</version>
         </dependency>
         <dependency>
+            <!-- QR codes on bonus cards (Card Studio) -->
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+        <dependency>
             <groupId>com.github.librepdf</groupId>
             <artifactId>openpdf</artifactId>
             <version>${openpdf.version}</version>

@@ -64,10 +64,12 @@ class Api {
     } on http.ClientException {
       throw const ApiException(0, 'NETWORK', 'Serverə qoşulmaq olmadı. İnterneti yoxlayın.');
     }
-    if (res.statusCode == 502 || res.statusCode == 503 && res.body.isEmpty || res.statusCode == 504) {
+    final text = utf8.decode(res.bodyBytes);
+    // a gateway error page (the server is still starting) has no JSON message; our own errors do
+    final ours = text.trimLeft().startsWith('{');
+    if ((res.statusCode == 502 || res.statusCode == 503 || res.statusCode == 504) && !ours) {
       throw const ApiException(0, 'NETWORK', 'Server oyanır. Bir neçə saniyə sonra yenidən cəhd edin.');
     }
-    final text = utf8.decode(res.bodyBytes);
     if (res.statusCode >= 200 && res.statusCode < 300) return text.isEmpty ? null : jsonDecode(text);
     var code = 'ERROR', message = 'Xəta baş verdi';
     try {

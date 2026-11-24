@@ -159,6 +159,90 @@ public class LoyaltyCardService {
         return card;
     }
 
+    // ---------- "Kart yoxdur": the till finds the card by the customer's phone ----------
+
+    public record PhoneMatch(UUID cardId, UUID customerId, String number, String fullName, String phone, BigDecimal percent,
+                             BigDecimal balance, boolean active, boolean smsOn) {}
+
+    /** The store's card(s) for a phone number (matched on its last 9 digits, however it was typed). */
+    @GetMapping("/lookup")
+    public List<PhoneMatch> lookup(@RequestParam String phone) {
+        CurrentMember m = requireAccess();
+        String digits = phone == null ? "" : phone.replaceAll("[^0-9]", "");
+        if (digits.length() < 9) throw ApiException.badRequest("INVALID_PHONE", "Telefon nömrəsini tam yazın");
+        String last9 = digits.substring(digits.length() - 9);
+        boolean smsOn = sms.configured();
+        List<PhoneMatch> found = jdbc.sql(SELECT + " WHERE lc.store_id = :s AND right(regexp_replace(lc.phone, '[^0-9]', '', 'g'), 9) = :p ORDER BY lc.active DESC, lc.created_at DESC")
+                .param("s", m.storeId()).param("p", last9).query((rs, n) -> map(rs)).list().stream()
+                .map(c -> new PhoneMatch(c.id(), c.customerId(), c.number(), c.fullName(), c.phone(), c.percent(), c.balance(), c.active(), smsOn))
+                .toList();
+        audit.log(m.storeId(), m.userId(), "BONUS_CARD_BY_PHONE", "CUSTOMER", found.isEmpty() ? null : found.get(0).customerId().toString(),
+                "Kart telefonla axtarıldı: ***" + last9.substring(5) + (found.isEmpty() ? " (tapılmadı)" : " → " + found.get(0).number()));
+        return found;
+    }
+
+    /** A 4-digit code to the card's phone: the customer reads it out before paying with the bonus. */
+    @PostMapping("/{id}/bonus-code")
+    @Transactional
+    public Map<String, Object> sendBonusCode(@PathVariable UUID id) {
+        CurrentMember m = requireAccess();
+        Card card = load(m.storeId(), id);
+        if (!card.active()) throw ApiException.conflict("CARD_BLOCKED", "Kart bloklanıb");
+        if (!sms.configured()) {
+            audit.log(m.storeId(), m.userId(), "BONUS_CODE_SKIPPED", "CUSTOMER", card.customerId().toString(),
+                    card.number() + ": SMS qoşulmayıb, bonus kodsuz açıldı");
+            return Map.of("sent", false, "smsOn", false);
+        }
+        long recent = jdbc.sql("SELECT COUNT(*) FROM bonus_spend_codes WHERE card_id = :c AND created_at > now() - interval '10 minutes'")
+                .param("c", id).query(Long.class).single();
+        if (recent >= 3) throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_CODES", "Çox kod istənildi. 10 dəqiqə sonra yenidən cəhd edin");
+        String code = String.format("%04d", new SecureRandom().nextInt(10_000));
+        jdbc.sql("""
+                INSERT INTO bonus_spend_codes (id, store_id, card_id, code_hash, expires_at, created_by)
+                VALUES (:id, :s, :c, :h, now() + interval '10 minutes', :by)""")
+                .param("id", UUID.randomUUID()).param("s", m.storeId()).param("c", id).param("h", hash(id, code)).param("by", m.userId()).update();
+        String store = jdbc.sql("SELECT name FROM stores WHERE id = :s").param("s", m.storeId()).query(String.class).optional().orElse("");
+        boolean sent = sms.send(m.storeId(), card.phone(), (store.isBlank() ? "" : store + ": ") + "bonusla odenis kodu " + code
+                + ". Kodu yalniz kassada kassire deyin.", "BONUS_CODE", id);
+        if (!sent) throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "SMS_FAILED", "SMS göndərilmədi. Bonussuz davam edin və ya bir az sonra yenidən cəhd edin");
+        return Map.of("sent", true, "smsOn", true, "phone", "***" + card.phone().replaceAll("[^0-9]", "").replaceAll(".*(\\d{4})$", "$1"));
+    }
+
+    public record CodeCheck(String code) {}
+
+    @PostMapping("/{id}/bonus-code/verify")
+    @Transactional
+    public Map<String, Object> verifyBonusCode(@PathVariable UUID id, @RequestBody CodeCheck body) {
+        CurrentMember m = requireAccess();
+        Card card = load(m.storeId(), id);
+        String code = body == null || body.code() == null ? "" : body.code().replaceAll("\\D", "");
+        record Row(UUID id, String hash, int attempts) {}
+        Row row = jdbc.sql("""
+                SELECT id, code_hash, attempts FROM bonus_spend_codes
+                WHERE card_id = :c AND store_id = :s AND NOT used AND expires_at > now() ORDER BY created_at DESC LIMIT 1 FOR UPDATE""")
+                .param("c", id).param("s", m.storeId())
+                .query((rs, n) -> new Row(rs.getObject("id", UUID.class), rs.getString("code_hash"), rs.getInt("attempts"))).optional()
+                .orElseThrow(() -> ApiException.badRequest("CODE_EXPIRED", "Kodun vaxtı bitib. Yeni kod göndərin"));
+        if (row.attempts() >= 5) throw ApiException.badRequest("CODE_EXPIRED", "Çox səhv cəhd. Yeni kod göndərin");
+        if (!java.security.MessageDigest.isEqual(row.hash().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                hash(id, code).getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
+            jdbc.sql("UPDATE bonus_spend_codes SET attempts = attempts + 1 WHERE id = :id").param("id", row.id()).update();
+            throw ApiException.badRequest("WRONG_CODE", "Kod səhvdir");
+        }
+        jdbc.sql("UPDATE bonus_spend_codes SET used = TRUE WHERE id = :id").param("id", row.id()).update();
+        audit.log(m.storeId(), m.userId(), "BONUS_CODE_OK", "CUSTOMER", card.customerId().toString(), card.number() + ": SMS kodu təsdiqləndi");
+        return Map.of("ok", true);
+    }
+
+    private static String hash(UUID cardId, String code) {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest((cardId + ":" + code).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(d);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     /** Sends the card's number and the app's activation code to the customer's phone again. */
     @PostMapping("/{id}/sms")
     public Map<String, Object> resendSms(@PathVariable UUID id) {

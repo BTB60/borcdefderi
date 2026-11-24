@@ -15,6 +15,7 @@ import type { Party, Product, Sale } from "@/lib/types";
 import { WeightEntry } from "@/components/sales/WeightEntry";
 import { FreeAmount } from "@/components/sales/FreeAmount";
 import { SerialEntry } from "@/components/sales/SerialEntry";
+import { BonusByPhoneModal, BonusCodeGate, type PhoneMatch } from "@/components/sales/BonusByPhone";
 import { isWeighed, qtyWithUnit, unitKind } from "@/lib/units";
 import { shortBranch, useBranchStock } from "@/lib/branchStock";
 
@@ -152,6 +153,9 @@ export function PosTerminal({ onSold, fill = false }: { onSold?: () => void; /**
   const [customerOpen, setCustomerOpen] = useState(false);
   const [discount, setDiscount] = useState("");
   const [bonusInput, setBonusInput] = useState("");
+  // a bonus card found by phone (no card at hand): its bonus is spent only after the SMS code
+  const [byPhone, setByPhone] = useState<{ cardId: string; unlocked: boolean } | null>(null);
+  const [phoneOpen, setPhoneOpen] = useState(false);
   // Top 2 (pərakəndə) is the till's normal price; the cashier switches to Top 1 (topdan) for a wholesale sale
   const [level, setLevel] = useState<"RETAIL" | "WHOLESALE">("RETAIL");
   const priceOf = useCallback((p: Product, lv: "RETAIL" | "WHOLESALE") =>
@@ -366,7 +370,25 @@ Təşəkkür edirik!`;
   const lines = cart.map((l) => ({ ...l, total: r2(Math.max(0, num(l.quantity) * num(l.price) - num(l.discount))) }));
   const subtotal = r2(lines.reduce((s, l) => s + l.total, 0));
   const discountAmount = r2(Math.min(subtotal, percent ? (subtotal * Math.min(100, num(discount))) / 100 : num(discount)));
-  const bonusAvailable = customer?.bonusBalance ?? 0;
+  const bonusAvailable = byPhone && !byPhone.unlocked ? 0 : customer?.bonusBalance ?? 0;
+  const bonusLocked = !!byPhone && !byPhone.unlocked && (customer?.bonusBalance ?? 0) > 0;
+
+  async function pickByPhone(m: PhoneMatch) {
+    let party = customers.find((c) => c.id === m.customerId) ?? null;
+    if (!party) {
+      try {
+        const fresh = await api<Party[]>("/api/customers");
+        setCustomers(fresh);
+        party = fresh.find((c) => c.id === m.customerId) ?? null;
+      } catch {
+        party = null;
+      }
+    }
+    if (!party) { setError("Müştəri tapılmadı, səhifəni yeniləyin"); return; }
+    pickCustomer(party);
+    setByPhone({ cardId: m.cardId, unlocked: false });
+    setPhoneOpen(false);
+  }
   const bonusAmount = r2(Math.max(0, Math.min(num(bonusInput), bonusAvailable, subtotal - discountAmount)));
   const total = r2(Math.max(0, subtotal - discountAmount - bonusAmount));
   // pieces only: 1,25 kq of tomatoes is one item, not 1,25
@@ -439,7 +461,7 @@ Təşəkkür edirik!`;
 
   const reset = () => {
     setCart([]); setDiscount(""); setBonusInput(""); setLevel("RETAIL"); setPercent(false); setGiven(""); setCash(""); setCard(""); setNote(""); setShowNote(false);
-    setCustomer(null); setCustomerQuery(""); setMode("cash"); setEditing(null); setError(null); setRequestId(crypto.randomUUID());
+    setCustomer(null); setCustomerQuery(""); setByPhone(null); setMode("cash"); setEditing(null); setError(null); setRequestId(crypto.randomUUID());
   };
 
   async function submit(allowOverLimit = false) {
@@ -579,6 +601,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
   function pickCustomer(c: Party | null) {
     setCustomer(c);
     setBonusInput("");
+    setByPhone(null);
     if (c?.discountPercent && c.discountPercent > 0) {
       setPercent(true);
       setDiscount(String(c.discountPercent));
@@ -737,7 +760,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
           {customer ? (
             <div className="flex items-center justify-between gap-3 rounded-xl bg-navy-50 px-3 py-2">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-navy-800">{customer.name}</p>
+                <p className="truncate text-sm font-semibold text-navy-800">{customer.name}{byPhone && <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">🎫 telefonla</span>}</p>
                 <p className="text-xs text-slate-500">{[customer.code, customer.phone, customer.openBalance > 0 && `borc ${formatMoney(customer.openBalance)}`,
                   customer.discountPercent ? `endirim ${customer.discountPercent}%` : null,
                   bonusAvailable > 0 ? `bonus ${formatMoney(bonusAvailable)}` : null].filter(Boolean).join(" · ")}</p>
@@ -753,8 +776,12 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
                 onFocus={() => setCustomerOpen(true)}
                 onBlur={() => setTimeout(() => setCustomerOpen(false), 150)}
                 placeholder="Müştəri (istəyə bağlı) — ad, telefon, kod"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-gold-500"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 pr-28 text-sm outline-none focus:border-gold-500"
               />
+              <button type="button" onClick={() => setPhoneOpen(true)} title="Kart yanında deyil? Telefon nömrəsi ilə tap"
+                className="absolute right-7 top-[18px] rounded-lg bg-violet-600 px-2.5 py-1 text-xs font-semibold text-white shadow hover:bg-violet-700">
+                🎫 Bonus kartı
+              </button>
               {customerOpen && customerMatches.length > 0 && (
                 <ul className="absolute left-5 right-5 z-20 mt-1 max-h-64 overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
                   {customerMatches.map((c) => (
@@ -859,6 +886,12 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
               {discountAmount > 0 && <span className="w-20 text-right tabular-nums text-rose-600">−{formatMoney(discountAmount)}</span>}
             </div>
           </div>
+          {bonusLocked && byPhone && (
+            <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
+              <span>Bonus <span className="text-xs text-emerald-700">(balans {formatMoney(customer?.bonusBalance ?? 0)})</span></span>
+              <BonusCodeGate cardId={byPhone.cardId} onUnlocked={() => setByPhone({ ...byPhone, unlocked: true })} />
+            </div>
+          )}
           {bonusAvailable > 0 && (
             <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
               <span>Bonus <span className="text-xs text-emerald-700">(balans {formatMoney(bonusAvailable)})</span></span>
@@ -997,6 +1030,7 @@ Limiti keçərək yenə də nisyə satılsın?`)) {
               </label>
             </div>
           )}
+          {phoneOpen && <BonusByPhoneModal onClose={() => setPhoneOpen(false)} onPick={pickByPhone} />}
           {pinOpen && <SetPinModal onClose={() => setPinOpen(false)} />}
           {app?.printLabels && (
             <button type="button" onClick={() => setLabelsOpen(true)} className="text-left text-xs font-medium text-slate-500 hover:text-navy-800">🏷 Etiket çap et (etiket printerinə)</button>

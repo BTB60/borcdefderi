@@ -2,6 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  async redirects() {
+    // hesabpro.cloud/kart: the customers' bonus card app (HesabPro Kart), sent in the card SMS
+    return [{ source: "/kart", destination: "https://github.com/BTB60/borcdefderi/releases/download/kart-latest/HesabPro-Kart.apk", permanent: false }];
+  },
   async headers() {
     return [
       {

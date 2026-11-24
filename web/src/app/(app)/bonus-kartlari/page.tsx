@@ -18,7 +18,7 @@ type LoyaltyCard = {
 type Entry = { id: string; kind: string; amount: number; saleNumber: string | null; note: string | null; createdAt: string };
 
 /** The customers' app (HesabPro Kart), built by CI as the kart-latest release. */
-const KART_APP_URL = "https://github.com/BTB60/borcdefderi/releases/download/kart-latest/HesabPro-Kart.apk";
+const KART_APP_URL = "https://hesabpro.cloud/kart";
 
 const KIND: Record<string, string> = { EARN: "Yığıldı", USE: "Xərcləndi", ADJUST: "Əl ilə", REVERSE: "Qaytarma" };
 
@@ -96,8 +96,10 @@ export default function LoyaltyCardsPage() {
 function CardModal({ card, onClose, onSaved }: { card: LoyaltyCard | null; onClose: () => void; onSaved: (c: LoyaltyCard, created: boolean) => void }) {
   const [form, setForm] = useState({
     firstName: card?.firstName ?? "", lastName: card?.lastName ?? "", patronymic: card?.patronymic ?? "", phone: card?.phone ?? "",
-    percent: card ? String(card.percent) : "", active: card?.active ?? true,
+    percent: card ? String(card.percent) : "", active: card?.active ?? true, sendSms: true,
   });
+  const [smsOn, setSmsOn] = useState(false);
+  useEffect(() => { if (!card) api<{ configured: boolean }>("/api/settings/sms").then((s) => setSmsOn(s.configured)).catch(() => undefined); }, [card]);
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -109,7 +111,8 @@ function CardModal({ card, onClose, onSaved }: { card: LoyaltyCard | null; onClo
     setFields({});
     try {
       const saved = await api<LoyaltyCard>(card ? `/api/loyalty-cards/${card.id}` : "/api/loyalty-cards", {
-        method: card ? "PUT" : "POST", json: { ...form, patronymic: form.patronymic || null, percent: form.percent.replace(",", ".") },
+        method: card ? "PUT" : "POST",
+        json: { ...form, patronymic: form.patronymic || null, percent: form.percent.replace(",", "."), sendSms: !card && smsOn && form.sendSms },
       });
       onSaved(saved, !card);
     } catch (err) {
@@ -137,6 +140,12 @@ function CardModal({ card, onClose, onSaved }: { card: LoyaltyCard | null; onClo
             Kart aktivdir (söndürülsə, bonus yığılmır və xərclənmir)
           </label>
         )}
+        {!card && smsOn && (
+          <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
+            <input type="checkbox" checked={form.sendSms} onChange={(e) => setForm({ ...form, sendSms: e.target.checked })} />
+            Kart nömrəsini və tətbiqin aktivləşdirmə kodunu müştəriyə SMS ilə göndər
+          </label>
+        )}
         {!card && <p className="text-xs text-slate-500 sm:col-span-2">Bu telefon nömrəsi ilə müştəri varsa, kart ona bağlanır; yoxdursa, müştəri avtomatik yaradılır.</p>}
       </form>
     </Modal>
@@ -146,6 +155,16 @@ function CardModal({ card, onClose, onSaved }: { card: LoyaltyCard | null; onClo
 function CardDetail({ card, design, storeName, onClose, onEdit }: { card: LoyaltyCard; design: CardDesign | null; storeName: string; onClose: () => void; onEdit: () => void }) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [data, setData] = useState<LoyaltyCard>(card);
+  const [sms, setSms] = useState<{ busy?: boolean; ok?: string; error?: string }>({});
+  async function sendSms() {
+    setSms({ busy: true });
+    try {
+      await api(`/api/loyalty-cards/${card.id}/sms`, { method: "POST" });
+      setSms({ ok: `SMS göndərildi: ${data.phone}` });
+    } catch (e) {
+      setSms({ error: e instanceof ApiError ? e.message : "SMS göndərilmədi" });
+    }
+  }
   useEffect(() => {
     api<{ card: LoyaltyCard; entries: Entry[] }>(`/api/loyalty-cards/${card.id}`).then((d) => { setData(d.card); setEntries(d.entries); }).catch(() => setEntries([]));
   }, [card.id]);
@@ -160,7 +179,10 @@ function CardDetail({ card, design, storeName, onClose, onEdit }: { card: Loyalt
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="gold" onClick={() => printLoyaltyCard({ store: storeName, name: data.fullName, code: data.number, percent: Number(data.percent), design })}>Kartı çap et</Button>
             {share && <a href={share} target="_blank" rel="noreferrer" className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">WhatsApp ilə göndər</a>}
+            {data.active && <Button variant="outline" disabled={sms.busy} onClick={sendSms}>{sms.busy ? "Göndərilir…" : "SMS ilə göndər"}</Button>}
           </div>
+          {sms.ok && <p className="mt-2 text-xs text-emerald-700">{sms.ok}</p>}
+          {sms.error && <p className="mt-2 text-xs text-rose-600">{sms.error}</p>}
         </div>
         <div>
           <div className="mb-3 grid grid-cols-3 gap-2 text-center">

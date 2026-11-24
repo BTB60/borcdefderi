@@ -69,4 +69,20 @@ class CardCreditTest extends IntegrationTestBase {
         get(owner, "/api/card-credits").andExpect(jsonPath("$.credits", is(24))).andExpect(jsonPath("$.history.length()", is(3)));
         mvc.perform(MockMvcRequestBuilders.get("/api/card-credits")).andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void theAdminSetsThePriceOfACard() throws Exception {
+        String owner = register("Qiymət Mağaza");
+        activateSubscription(owner, "MONTHLY");
+        get(adminToken(), "/api/admin/card-credits/price").andExpect(jsonPath("$.price", is(0.85)));
+        put(owner, "/api/admin/card-credits/price", Map.of("price", "0.10")).andExpect(status().isForbidden());
+        put(adminToken(), "/api/admin/card-credits/price", Map.of("price", "0")).andExpect(status().isBadRequest());
+        put(adminToken(), "/api/admin/card-credits/price", Map.of("price", "1.20")).andExpect(jsonPath("$.price", is(1.2)));
+
+        // the store sees the new price, and a new request is counted with it
+        get(owner, "/api/card-credits").andExpect(jsonPath("$.pricePerCard", is(1.2)));
+        mvc.perform(multipart("/api/card-credits/requests").param("quantity", "20").header("Authorization", "Bearer " + owner))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.amount", is(24.0)));
+        put(adminToken(), "/api/admin/card-credits/price", Map.of("price", "0.85")).andExpect(status().isOk());
+    }
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, Card, EmptyState, Spinner, Table, Td, Th, useConfirm } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Input, Spinner, Table, Td, Th, useConfirm } from "@/components/ui";
+import { useAuth } from "@/lib/auth";
 import { ApiError, api, openProtected } from "@/lib/api";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { CREDIT_STATUS, type CreditRequest } from "@/components/CardCredits";
@@ -14,6 +15,29 @@ export function CardCreditsTab({ onError, onNotice }: Props) {
   const [items, setItems] = useState<CreditRequest[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
+  const { isSuperAdmin } = useAuth();
+  const [price, setPrice] = useState<number | null>(null);
+  const [priceInput, setPriceInput] = useState("");
+  const [savingPrice, setSavingPrice] = useState(false);
+  useEffect(() => {
+    api<{ price: number }>("/api/admin/card-credits/price").then((r) => { setPrice(r.price); setPriceInput(String(r.price)); }).catch(() => undefined);
+  }, []);
+
+  async function savePrice() {
+    const next = Number(priceInput.replace(",", "."));
+    if (!(next > 0)) { onError("Qiyməti düzgün yazın"); return; }
+    if (!(await confirm(`1 bonus kartının qiyməti ${formatMoney(price ?? 0)} → ${formatMoney(next)} olsun? Yeni sorğular bu qiymətlə hesablanacaq, göndərilmiş sorğular dəyişmir.`, { confirmLabel: "Dəyiş" }))) return;
+    setSavingPrice(true); onError(null);
+    try {
+      const r = await api<{ price: number }>("/api/admin/card-credits/price", { method: "PUT", json: { price: next.toFixed(2) } });
+      setPrice(r.price); setPriceInput(String(r.price));
+      onNotice?.(`1 bonus kartı artıq ${formatMoney(r.price)}`);
+    } catch (e) {
+      onError(e instanceof ApiError ? e.message : "Qiymət dəyişmədi");
+    } finally {
+      setSavingPrice(false);
+    }
+  }
 
   const load = useCallback(() => {
     setItems(null);
@@ -54,6 +78,23 @@ export function CardCreditsTab({ onError, onNotice }: Props) {
             </button>
           ))}
         </div>
+      </div>
+      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-2xl bg-violet-50 px-4 py-3 ring-1 ring-violet-200">
+        <div className="flex-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">1 bonus kartının qiyməti</p>
+          <p className="text-2xl font-black text-navy-800">{price == null ? "…" : formatMoney(price)}</p>
+          <p className="text-xs text-slate-500">Mağazalar paket alanda bu qiymətlə hesablanır (məs. 50 kart = {formatMoney((price ?? 0) * 50)}).</p>
+        </div>
+        {isSuperAdmin && (
+          <div className="flex items-end gap-2">
+            <label className="text-xs text-slate-600">Yeni qiymət (₼)
+              <Input className="mt-1 w-28" inputMode="decimal" value={priceInput} onChange={(e) => setPriceInput(e.target.value)} />
+            </label>
+            <Button disabled={savingPrice || priceInput.trim() === "" || Number(priceInput.replace(",", ".")) === price} onClick={savePrice}>
+              {savingPrice ? "…" : "Qiyməti dəyiş"}
+            </Button>
+          </div>
+        )}
       </div>
       {!items ? <Spinner /> : items.length === 0 ? <EmptyState title={status === "PENDING" ? "Gözləyən sorğu yoxdur" : "Hələ sorğu yoxdur"} /> : (
         <Table>

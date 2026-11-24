@@ -133,9 +133,15 @@ class _PaymentRequestsScreenState extends State<PaymentRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     const filters = {'PENDING': 'Gözləyən', 'ACTIVE': 'Təsdiqlənmiş', 'REJECTED': 'Rədd edilmiş', '': 'Hamısı'};
-    return Scaffold(
-      appBar: AppBar(title: const Text('Ödəniş sorğuları')),
-      body: RefreshIndicator(
+    // two kinds of payments to check: subscriptions and bonus card packages
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+      appBar: AppBar(
+        title: const Text('Ödəniş sorğuları'),
+        bottom: const TabBar(tabs: [Tab(text: 'Abunəlik'), Tab(text: 'Bonus kart paketləri')]),
+      ),
+      body: TabBarView(children: [RefreshIndicator(
         onRefresh: _refresh,
         child: FutureBuilder<List<Map<String, dynamic>>>(
           future: _items,
@@ -186,7 +192,202 @@ class _PaymentRequestsScreenState extends State<PaymentRequestsScreen> {
           },
         ),
       ),
+      _CardCreditRequests(session: widget.session),
+      ]),
+      ),
     );
+  }
+}
+
+// ---------------------------------------------------------------- bonus card packages
+
+/// Bonus kart paketləri: stores pay for card packages; approving adds the cards to the store's balance.
+class _CardCreditRequests extends StatefulWidget {
+  const _CardCreditRequests({required this.session});
+
+  final Session session;
+
+  @override
+  State<_CardCreditRequests> createState() => _CardCreditRequestsState();
+}
+
+class _CardCreditRequestsState extends State<_CardCreditRequests> with AutomaticKeepAliveClientMixin {
+  String _status = 'PENDING';
+  late Future<List<Map<String, dynamic>>> _items;
+  String? _busy;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  void _load() {
+    _items = widget.session.api
+        .get('/api/admin/card-credit-requests', query: {'status': _status})
+        .then((j) => (j as List).cast<Map<String, dynamic>>());
+  }
+
+  Future<void> _refresh() async {
+    setState(_load);
+    await _items.catchError((Object _) => <Map<String, dynamic>>[]);
+  }
+
+  Future<void> _receipt(Map<String, dynamic> r) async {
+    try {
+      final bytes = Uint8List.fromList(await widget.session.api.getBytes('/api/card-credits/requests/${r['id']}/receipt'));
+      if (!mounted) return;
+      final isPdf = bytes.length > 4 && String.fromCharCodes(bytes.take(4)) == '%PDF';
+      if (isPdf) {
+        final name = 'kart-qebz-${'${r['id']}'.substring(0, 8)}.pdf';
+        await SharePlus.instance.share(ShareParams(
+          files: [XFile.fromData(bytes, mimeType: 'application/pdf', name: name)],
+          fileNameOverrides: [name],
+        ));
+      } else {
+        await showProductImage(context, bytes, 'Qəbz — ${r['storeName'] ?? ''}');
+      }
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  Future<void> _approve(Map<String, dynamic> r) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Təsdiq et'),
+        content: Text('“${r['storeName']}”: ${r['quantity']} kart (${formatMoney(_n(r['amount']))}) mağazanın balansına əlavə olunacaq.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Geri')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Təsdiq et')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _run(r, () => widget.session.api.post('/api/admin/card-credit-requests/${r['id']}/approve'), '${r['quantity']} kart əlavə olundu');
+  }
+
+  Future<void> _reject(Map<String, dynamic> r) async {
+    final ctrl = TextEditingController(text: 'Ödəniş daxil olmayıb');
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rədd et'),
+        content: TextField(controller: ctrl, autofocus: true, maxLength: 300, decoration: const InputDecoration(labelText: 'Səbəb (mağaza görəcək)')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Geri')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Rədd et'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null) return;
+    await _run(r, () => widget.session.api.post('/api/admin/card-credit-requests/${r['id']}/reject', {'reason': reason}), 'Sorğu rədd edildi');
+  }
+
+  Future<void> _run(Map<String, dynamic> r, Future<dynamic> Function() call, String done) async {
+    setState(() => _busy = '${r['id']}');
+    try {
+      await call();
+      if (!mounted) return;
+      _toast(context, done);
+      await _refresh();
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    const filters = {'PENDING': 'Gözləyən', 'ALL': 'Hamısı'};
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: FutureBuilder<List<Map<String, dynamic>>>(
+        future: _items,
+        builder: (context, snap) {
+          final items = snap.data ?? const [];
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            children: [
+              Row(children: [
+                for (final f in filters.entries)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(label: Text(f.value), selected: _status == f.key, onSelected: (_) {
+                      _status = f.key;
+                      _refresh();
+                    }),
+                  ),
+              ]),
+              const SizedBox(height: 8),
+              if (snap.hasError) ErrorBanner(errorMessage(snap.error!)),
+              if (snap.connectionState != ConnectionState.done) const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator())),
+              if (snap.connectionState == ConnectionState.done && !snap.hasError && items.isEmpty)
+                EmptyState(title: _status == 'PENDING' ? 'Gözləyən kart paketi yoxdur' : 'Sorğu tapılmadı'),
+              for (final r in items)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Expanded(child: Text('${r['storeName'] ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
+                        _CreditStatus('${r['status']}'),
+                      ]),
+                      const SizedBox(height: 4),
+                      Text('${r['quantity']} kart · ${formatMoney(_n(r['amount']))}', style: const TextStyle(fontWeight: FontWeight.w800, color: navy, fontSize: 18)),
+                      Text([
+                        if (r['paymentMethod'] != null) '${r['paymentMethod']}',
+                        if (r['payerReference'] != null) '${r['payerReference']}',
+                        if (_d(r['requestedAt']) != null) formatDateTime(_d(r['requestedAt'])!),
+                      ].join(' · '), style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                      if (r['note'] != null) Text('${r['note']}', style: const TextStyle(fontSize: 13)),
+                      if (r['rejectReason'] != null) Text('${r['rejectReason']}', style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
+                      Wrap(spacing: 4, children: [
+                        if (r['hasReceipt'] == true) TextButton.icon(onPressed: () => _receipt(r), icon: const Icon(Icons.image_outlined, size: 18), label: const Text('Qəbz')),
+                        if (r['status'] == 'PENDING') ...[
+                          FilledButton.icon(
+                            onPressed: _busy == null ? () => _approve(r) : null,
+                            icon: const Icon(Icons.check),
+                            label: const Text('Təsdiq et'),
+                          ),
+                          TextButton(onPressed: _busy == null ? () => _reject(r) : null, child: Text('Rədd et', style: TextStyle(color: Colors.red.shade700))),
+                        ],
+                      ]),
+                    ]),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CreditStatus extends StatelessWidget {
+  const _CreditStatus(this.status);
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (status) {
+      'APPROVED' => ('Təsdiqlənib', Colors.green),
+      'REJECTED' => ('Rədd edilib', Colors.red),
+      'GRANT' => ('Admin əlavə edib', Colors.blue),
+      _ => ('Gözləyir', Colors.orange),
+    };
+    return Text(label, style: TextStyle(color: color.shade700, fontSize: 12, fontWeight: FontWeight.w600));
   }
 }
 

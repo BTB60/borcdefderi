@@ -83,3 +83,6 @@ class Api {
 
 /// Server-made barcode picture of a card number (what the till scans).
 String barcodeUrl(String code) => '$apiBaseUrl/api/public/barcode.png?text=${Uri.encodeQueryComponent(code)}';
+
+/// A promo post's picture (public by id; ?v= changes with a new picture, so it may be cached).
+String promoImageUrl(String id, int version) => '$apiBaseUrl/api/public/promos/$id/image?v=$version';

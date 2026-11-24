@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'api.dart';
+import 'effects.dart';
 import 'models.dart';
 
 final _money = NumberFormat('#,##0.00', 'az');
@@ -119,36 +120,66 @@ class FlipCard extends StatefulWidget {
   State<FlipCard> createState() => _FlipCardState();
 }
 
-class _FlipCardState extends State<FlipCard> with SingleTickerProviderStateMixin {
+class _FlipCardState extends State<FlipCard> with TickerProviderStateMixin {
   late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
+  // the card leans after the finger and springs back when let go
+  late final AnimationController _back = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+  Offset _tilt = Offset.zero, _from = Offset.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _back.addListener(() => setState(() => _tilt = Offset.lerp(_from, Offset.zero, Curves.elasticOut.transform(_back.value))!));
+  }
 
   @override
   void dispose() {
     _c.dispose();
+    _back.dispose();
     super.dispose();
+  }
+
+  void _lean(PointerEvent d, Size size) {
+    _back.stop();
+    final x = (d.localPosition.dx / size.width - 0.5) * 2, y = (d.localPosition.dy / size.height - 0.5) * 2;
+    setState(() => _tilt = Offset(x.clamp(-1.0, 1.0), y.clamp(-1.0, 1.0)));
+  }
+
+  void _release() {
+    _from = _tilt;
+    _back.forward(from: 0);
   }
 
   void _flip() => _c.status == AnimationStatus.completed || _c.status == AnimationStatus.forward ? _c.reverse() : _c.forward();
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: _flip,
-        child: AnimatedBuilder(
-          animation: _c,
-          builder: (_, _) {
-            final t = Curves.easeInOutBack.transform(_c.value).clamp(0.0, 1.0);
-            final angle = t * pi;
-            final back = angle > pi / 2;
-            return Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.0012)
-                ..rotateY(angle),
-              child: back
-                  ? Transform(alignment: Alignment.center, transform: Matrix4.identity()..rotateY(pi), child: CardBack(card: widget.card))
-                  : CardFront(card: widget.card),
-            );
-          },
+  Widget build(BuildContext context) => LayoutBuilder(
+        // raw pointer events: the card leans without taking the swipe away from the page view
+        builder: (_, box) => Listener(
+          onPointerMove: (d) => _lean(d, box.biggest),
+          onPointerUp: (_) => _release(),
+          onPointerCancel: (_) => _release(),
+          child: GestureDetector(
+          onTap: _flip,
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (_, _) {
+              final t = Curves.easeInOutBack.transform(_c.value).clamp(0.0, 1.0);
+              final angle = t * pi;
+              final back = angle > pi / 2;
+              return Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, 0.0012)
+                  ..rotateX(-_tilt.dy * 0.18)
+                  ..rotateY(angle + _tilt.dx * 0.22),
+                child: back
+                    ? Transform(alignment: Alignment.center, transform: Matrix4.identity()..rotateY(pi), child: CardBack(card: widget.card))
+                    : Shine(child: CardFront(card: widget.card)),
+              );
+            },
+          ),
+          ),
         ),
       );
 }

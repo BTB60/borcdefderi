@@ -3,8 +3,10 @@ import 'package:intl/intl.dart';
 
 import '../api.dart';
 import '../card_widget.dart';
+import '../effects.dart';
 import '../main.dart';
 import '../models.dart';
+import '../promo_widgets.dart';
 import 'login_screen.dart';
 
 const _kind = {'EARN': 'Yığıldı', 'USE': 'Xərcləndi', 'ADJUST': 'Mağaza tərəfindən', 'REVERSE': 'Qaytarma'};
@@ -26,6 +28,7 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
   final _pages = PageController(viewportFraction: 0.88);
   String? _name;
   List<LoyaltyCard>? _cards;
+  List<Promo> _promos = const [];
   String? _error;
   int _page = 0;
   bool _showHello = true;
@@ -73,9 +76,19 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
         _history.clear();
       });
       _loadHistory();
+      _loadPromos();
     } on ApiException catch (e) {
       if (e.status == 401) return _logout();
       if (mounted) setState(() => _error = e.message);
+    }
+  }
+
+  Future<void> _loadPromos() async {
+    try {
+      final list = (await Api.instance.get('/promos') as List).cast<Map<String, dynamic>>().map(Promo.new).toList();
+      if (mounted) setState(() => _promos = list);
+    } catch (_) {
+      // the offers are a bonus: the wallet works without them
     }
   }
 
@@ -104,7 +117,9 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
     return Scaffold(
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 600),
-        child: _showHello ? _Hello(key: const ValueKey('hello'), controller: _hello, name: _name) : _wallet(),
+        child: _showHello
+            ? _Hello(key: const ValueKey('hello'), controller: _hello, name: _name)
+            : AuroraBackground(key: const ValueKey('wallet'), child: _wallet()),
       ),
     );
   }
@@ -112,7 +127,6 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
   Widget _wallet() {
     final cards = _cards;
     return SafeArea(
-      key: const ValueKey('wallet'),
       child: RefreshIndicator(
         onRefresh: _load,
         child: ListView(padding: const EdgeInsets.only(bottom: 32), children: [
@@ -121,8 +135,11 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
             child: Row(children: [
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(_name == null ? 'Kartlarım' : 'Salam, $_name!',
-                      style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: navy)),
+                  ShaderMask(
+                    shaderCallback: (r) => const LinearGradient(colors: [navy, Color(0xFF7C3AED)]).createShader(r),
+                    child: Text(_name == null ? 'Kartlarım' : 'Salam, $_name!',
+                        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white)),
+                  ),
                   Text(cards == null ? '' : '${cards.length} kart', style: TextStyle(color: Colors.grey.shade600)),
                 ]),
               ),
@@ -142,6 +159,7 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
               height: (MediaQuery.of(context).size.width * 0.88 - 24) / cardAspect + 40,
               child: PageView.builder(
                 controller: _pages,
+                clipBehavior: Clip.none, // keep the shadows
                 itemCount: cards.length,
                 itemBuilder: (_, i) => AnimatedBuilder(
                   animation: Listenable.merge([_pages, _deal]),
@@ -180,7 +198,23 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
               ]),
             const SizedBox(height: 6),
             Center(child: Text('Barkodu görmək üçün karta toxunun', style: TextStyle(color: Colors.grey.shade600, fontSize: 12))),
-            _details(cards[_page.clamp(0, cards.length - 1)]),
+            if (_promos.isNotEmpty) ...[
+              Reveal(
+                delay: const Duration(milliseconds: 300),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 22, 20, 4),
+                  child: Row(children: [
+                    const Pulse(glow: Color(0xFFF97316), child: Text('🔥', style: TextStyle(fontSize: 20))),
+                    const SizedBox(width: 8),
+                    const Text('Endirimlər və yeniliklər', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: navy)),
+                    const Spacer(),
+                    Text('${_promos.length}', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ),
+              Reveal(delay: const Duration(milliseconds: 420), child: PromoCarousel(promos: _promos)),
+            ],
+            Reveal(delay: const Duration(milliseconds: 520), child: _details(cards[_page.clamp(0, cards.length - 1)])),
           ],
         ]),
       ),
@@ -226,7 +260,12 @@ class _CardsScreenState extends State<CardsScreen> with TickerProviderStateMixin
   Widget _stat(String label, String value) => Expanded(
         child: Container(
           padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white),
+            boxShadow: [BoxShadow(color: navy.withValues(alpha: 0.06), blurRadius: 16, offset: const Offset(0, 6))],
+          ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
             const SizedBox(height: 4),

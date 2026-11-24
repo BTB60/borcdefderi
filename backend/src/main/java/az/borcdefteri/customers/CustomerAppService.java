@@ -55,8 +55,11 @@ public class CustomerAppService {
     private final SmsService sms;
     private final ObjectMapper json;
     private final Clock clock;
+    private final az.borcdefteri.sales.StorePromoService promos;
 
-    public CustomerAppService(JdbcClient jdbc, JwtService jwt, SmsService sms, ObjectMapper json, Clock clock) {
+    public CustomerAppService(JdbcClient jdbc, JwtService jwt, SmsService sms, ObjectMapper json, Clock clock,
+                              az.borcdefteri.sales.StorePromoService promos) {
+        this.promos = promos;
         this.jdbc = jdbc;
         this.jwt = jwt;
         this.sms = sms;
@@ -135,6 +138,12 @@ public class CustomerAppService {
         List<Card> cards = cards(phone);
         Card latest = cards.isEmpty() ? null : cards.get(0);
         return new Me(phone, latest == null ? null : latest.fullName(), latest == null ? null : latest.firstName(), cards);
+    }
+
+    /** Live promo posts (discounts, new goods) of the stores whose card the customer holds. */
+    @GetMapping("/promos")
+    public List<az.borcdefteri.sales.StorePromoService.FeedItem> promos(@RequestHeader(value = "Authorization", required = false) String auth) {
+        return promos.feed(last9(customer(auth).getValue()));
     }
 
     @GetMapping("/cards/{id}/history")

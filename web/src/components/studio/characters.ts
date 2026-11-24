@@ -143,6 +143,74 @@ export const CHARACTERS: Character[] = [
       <path d="M114 132 L126 132 L120 140 Z" fill="#f9a8d4"/><path d="M106 146 Q120 156 134 146" fill="none" stroke="#e5e7eb" stroke-width="4" stroke-linecap="round"/>
       <path d="M70 134 l-30 -6 M70 144 l-28 6 M170 134 l30 -6 M170 144 l28 6" stroke="#e5e7eb" stroke-width="3" stroke-linecap="round"/>`,
   },
+  {
+    id: "snowman", name: "Şən qardan adam", tags: ["newyear"],
+    svg: `<defs>${shine("csnow", "#ffffff", "#cbd5e1")}${shine("cscarf", "#f87171", "#b91c1c")}${shine("chat", "#334155", "#0f172a")}</defs>${shadow(120, 224, 64)}
+      <circle cx="120" cy="170" r="54" fill="url(#csnow)" stroke="#94a3b8" stroke-width="3"/>
+      <circle cx="120" cy="92" r="42" fill="url(#csnow)" stroke="#94a3b8" stroke-width="3"/>
+      <rect x="86" y="36" width="68" height="16" rx="4" fill="url(#chat)"/><rect x="96" y="6" width="48" height="36" rx="6" fill="url(#chat)"/>
+      <rect x="96" y="30" width="48" height="8" fill="#dc2626"/>
+      ${eyes(104, 136, 86, 8)}
+      <path d="M120 98 L156 106 L120 110 Z" fill="#f97316"/>
+      <path d="M104 116 Q120 126 136 116" fill="none" stroke="#334155" stroke-width="4" stroke-linecap="round"/>
+      <path d="M80 128 Q120 146 160 128 L156 140 Q120 156 84 140 Z" fill="url(#cscarf)"/><path d="M140 138 l10 36 l-16 2 z" fill="#dc2626"/>
+      <circle cx="120" cy="160" r="5" fill="#334155"/><circle cx="120" cy="182" r="5" fill="#334155"/>
+      <path d="M68 160 L30 132 M38 138 l-8 -14 M172 160 L210 132 M202 138 l8 -14" stroke="#78350f" stroke-width="6" stroke-linecap="round"/>`,
+  },
+  {
+    id: "tree", name: "Bayram ağacı", tags: ["newyear"],
+    svg: `<defs><linearGradient id="ctree" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4ade80"/><stop offset="1" stop-color="#15803d"/></linearGradient>${shine("cts", "#fff7ae", "#f59e0b")}</defs>${shadow(120, 224, 60)}
+      <rect x="106" y="190" width="28" height="28" rx="4" fill="#92400e"/>
+      <path d="M120 40 L190 196 H50 Z" fill="url(#ctree)" stroke="#14532d" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M78 140 Q120 160 162 132 M66 172 Q120 196 176 164 M94 100 Q120 116 146 96" fill="none" stroke="#fde047" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="96" cy="150" r="8" fill="#ef4444"/><circle cx="148" cy="122" r="8" fill="#3b82f6"/><circle cx="132" cy="176" r="8" fill="#a855f7"/><circle cx="84" cy="184" r="7" fill="#f59e0b"/><circle cx="160" cy="178" r="7" fill="#ef4444"/>
+      ${eyes(106, 134, 128, 8)}
+      <path d="M110 150 Q120 158 130 150" fill="none" stroke="#14532d" stroke-width="4" stroke-linecap="round"/>
+      <path d="M120 14 l8 18 l20 2 l-15 13 l5 20 l-18 -10 l-18 10 l5 -20 l-15 -13 l20 -2 z" fill="url(#cts)" stroke="#b45309" stroke-width="3"/>`,
+  },
+  {
+    id: "ornament", name: "Bayram şarı", tags: ["newyear"],
+    svg: `<defs>${shine("corn", "#93c5fd", "#1d4ed8")}${shine("corncap", "#fde68a", "#b45309")}</defs>${shadow(120, 224, 56)}
+      <path d="M120 6 V40" stroke="#b45309" stroke-width="4"/>
+      <rect x="100" y="36" width="40" height="22" rx="6" fill="url(#corncap)"/>
+      <circle cx="120" cy="134" r="80" fill="url(#corn)" stroke="#1e3a8a" stroke-width="4"/>
+      <path d="M44 120 Q120 150 196 120" fill="none" stroke="#fde68a" stroke-width="8" opacity=".9"/>
+      <path d="M60 170 l8 -8 l8 8 l8 -8 l8 8 l8 -8 l8 8 l8 -8 l8 8 l8 -8 l8 8 l8 -8 l8 8" fill="none" stroke="#fff" stroke-width="4" opacity=".8"/>
+      ${eyes(100, 140, 104, 10)}
+      <path d="M104 132 Q120 146 136 132" fill="none" stroke="#1e3a8a" stroke-width="5" stroke-linecap="round"/>
+      <ellipse cx="82" cy="88" rx="14" ry="22" fill="#fff" opacity=".35" transform="rotate(30 82 88)"/>`,
+  },
+  {
+    id: "semeni", name: "Səməni", tags: ["novruz"],
+    svg: `<defs>${shine("cplate", "#fde68a", "#d97706")}<linearGradient id="cgrass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#86efac"/><stop offset="1" stop-color="#16a34a"/></linearGradient></defs>${shadow(120, 222, 76)}
+      <path d="M58 150 C56 90 70 40 76 30 M74 150 C74 80 88 36 96 24 M92 150 C94 90 104 40 112 18 M110 150 C112 80 120 30 124 16 M128 150 C130 86 138 40 146 22 M146 150 C148 90 156 46 166 28 M162 150 C164 100 174 56 182 40" fill="none" stroke="url(#cgrass)" stroke-width="7" stroke-linecap="round"/>
+      <path d="M60 104 Q120 92 180 104" fill="none" stroke="#dc2626" stroke-width="10"/>
+      <path d="M112 100 q-14 -20 -2 -26 q10 4 8 22 M128 100 q14 -20 2 -26 q-10 4 -8 22" fill="#dc2626"/>
+      <ellipse cx="120" cy="164" rx="92" ry="34" fill="url(#cplate)" stroke="#92400e" stroke-width="4"/>
+      <ellipse cx="120" cy="152" rx="70" ry="14" fill="#fef3c7" opacity=".5"/>
+      ${eyes(98, 142, 166, 9)}
+      <path d="M108 184 Q120 192 132 184" fill="none" stroke="#92400e" stroke-width="4" stroke-linecap="round"/>`,
+  },
+  {
+    id: "bonfire", name: "Tonqal", tags: ["novruz"],
+    svg: `<defs><radialGradient id="cfire" cx="50%" cy="75%" r="70%"><stop offset="0" stop-color="#fef08a"/><stop offset=".45" stop-color="#fb923c"/><stop offset="1" stop-color="#dc2626"/></radialGradient></defs>${shadow(120, 224, 74)}
+      <path d="M48 214 L192 180 M48 180 L192 214" stroke="#78350f" stroke-width="16" stroke-linecap="round"/>
+      <path d="M120 22 C150 70 196 96 178 156 C168 190 140 204 120 204 C100 204 72 190 62 156 C46 104 96 92 92 52 C110 70 112 84 120 22 Z" fill="url(#cfire)" stroke="#b91c1c" stroke-width="4"/>
+      <path d="M120 96 C134 120 150 134 142 164 C136 182 104 182 98 164 C92 140 112 132 120 96 Z" fill="#fef9c3" opacity=".8"/>
+      ${eyes(104, 136, 140, 9)}
+      <path d="M108 166 Q120 176 132 166" fill="none" stroke="#7c2d12" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="60" cy="60" r="4" fill="#fb923c"/><circle cx="184" cy="48" r="3" fill="#fde047"/><circle cx="170" cy="86" r="3" fill="#fb923c"/>`,
+  },
+  {
+    id: "pastry", name: "Şəkərbura", tags: ["novruz", "cafe"],
+    svg: `<defs>${shine("cdough", "#fff1c1", "#e2a64b")}</defs>${shadow(120, 222, 80)}
+      <path d="M24 150 C24 92 70 62 120 62 C170 62 216 92 216 150 Q120 176 24 150 Z" fill="url(#cdough)" stroke="#b45309" stroke-width="4"/>
+      <path d="M44 122 l12 -10 l12 10 l12 -10 l12 10 l12 -10 l12 10 l12 -10 l12 10 l12 -10 l12 10 l12 -10 l12 10" fill="none" stroke="#b45309" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M70 100 l10 -8 M100 90 l10 -8 M130 90 l10 -8 M160 100 l10 -8" stroke="#c2410c" stroke-width="3" stroke-linecap="round"/>
+      ${eyes(98, 142, 138, 9)}
+      <path d="M108 158 Q120 166 132 158" fill="none" stroke="#92400e" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="78" cy="152" r="8" fill="#fb7185" opacity=".5"/><circle cx="162" cy="152" r="8" fill="#fb7185" opacity=".5"/>`,
+  },
 ];
 
 export const characterById = (id?: string | null) => CHARACTERS.find((c) => c.id === id) ?? null;

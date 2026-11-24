@@ -33,7 +33,7 @@ public class CardDesignAi {
     /** What the model returns; the server checks every field before it reaches the browser. */
     public record AiCard(
             @JsonPropertyDescription("Short Azerbaijani name for this design, 2-4 words, no brand names") String name,
-            @JsonPropertyDescription("Background style, one of: gradient, radial, stripes, dots, waves, confetti, mesh, sunburst, grid") String background,
+            @JsonPropertyDescription("Background style, one of: gradient, radial, stripes, dots, waves, confetti, mesh, sunburst, grid, snow (New Year), buta (Novruz)") String background,
             @JsonPropertyDescription("Main background colour, #RRGGBB") String color1,
             @JsonPropertyDescription("Second background colour, #RRGGBB, contrasting with color1") String color2,
             @JsonPropertyDescription("Accent colour for badges and the icon, #RRGGBB") String accent,
@@ -127,7 +127,7 @@ public class CardDesignAi {
     static AiCard clean(AiCard c) {
         return new AiCard(
                 cut(c.name(), 40, "AI dizaynı"),
-                pick(c.background(), "gradient", "gradient", "radial", "stripes", "dots", "waves", "confetti", "mesh", "sunburst", "grid"),
+                pick(c.background(), "gradient", "gradient", "radial", "stripes", "dots", "waves", "confetti", "mesh", "sunburst", "grid", "snow", "buta"),
                 color(c.color1(), "#7C3AED"), color(c.color2(), "#DB2777"), color(c.accent(), "#FACC15"), color(c.textColor(), "#FFFFFF"),
                 pick(c.font(), "rounded", "rounded", "serif", "bold", "mono", "playful", "elegant"),
                 pick(c.layout(), "classic", "classic", "split", "centered", "badge", "diagonal"),

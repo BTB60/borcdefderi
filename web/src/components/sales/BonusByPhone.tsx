@@ -7,6 +7,7 @@ import { formatMoney } from "@/lib/format";
 
 export type PhoneMatch = {
   cardId: string; customerId: string; number: string; fullName: string; phone: string; percent: number; balance: number; active: boolean; smsOn: boolean;
+  discountPercent?: number;
 };
 
 /** "Kart yoxdur?": the customer left the card at home or the phone is dead — find the bonus card by phone number. */

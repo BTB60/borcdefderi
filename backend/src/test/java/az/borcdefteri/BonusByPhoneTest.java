@@ -57,4 +57,29 @@ class BonusByPhoneTest extends IntegrationTestBase {
         post(a, "/api/loyalty-cards/" + id + "/bonus-code/verify", Map.of("code", code)).andExpect(status().isBadRequest());
         verify(gateway, times(1)).send(anyString(), anyString());
     }
+
+    @Test
+    void aCashierWithoutTheCustomerListGetsTheCustomerFromTheCard() throws Exception {
+        String a = register("Kassir Mağaza");
+        giveCardCredits(activateSubscription(a, "MONTHLY"), 10);
+        JsonNode card = body(post(a, "/api/loyalty-cards", Map.of("firstName", "Aysel", "lastName", "Quliyeva", "phone", "050 444 22 11",
+                "percent", "5", "sendSms", false)).andExpect(status().isCreated()));
+        String email = uniqueEmail("kassir");
+        post(a, "/api/employees", Map.of("email", email, "password", EMPLOYEE_PASSWORD, "fullName", "Kassir", "permissions", perms("SALES")))
+                .andExpect(status().isCreated());
+        String cashier = login(email, EMPLOYEE_PASSWORD);
+
+        // the cashier may not list customers, but the card itself names the customer for the till
+        get(cashier, "/api/customers").andExpect(status().isForbidden());
+        get(cashier, "/api/loyalty-cards/lookup?phone=0504442211").andExpect(jsonPath("$[0].customerId", is(card.get("customerId").asText())))
+                .andExpect(jsonPath("$[0].discountPercent", is(0.0)));
+        // a scanned card number, however it is cased; an unknown one is 404
+        String number = card.get("number").asText();
+        get(cashier, "/api/loyalty-cards/by-number/" + number.toLowerCase()).andExpect(jsonPath("$.fullName", is("Quliyeva Aysel")))
+                .andExpect(jsonPath("$.active", is(true)));
+        get(cashier, "/api/loyalty-cards/by-number/HP-999999").andExpect(status().isNotFound());
+        String other = register("Başqa Mağaza");
+        activateSubscription(other, "MONTHLY");
+        get(other, "/api/loyalty-cards/by-number/" + number).andExpect(status().isNotFound());
+    }
 }

@@ -161,8 +161,25 @@ public class LoyaltyCardService {
 
     // ---------- "Kart yoxdur": the till finds the card by the customer's phone ----------
 
+    /** A card as the till needs it; carries the customer's discount so a cashier without the customer list can pick them. */
     public record PhoneMatch(UUID cardId, UUID customerId, String number, String fullName, String phone, BigDecimal percent,
-                             BigDecimal balance, boolean active, boolean smsOn) {}
+                             BigDecimal balance, boolean active, boolean smsOn, BigDecimal discountPercent) {}
+
+    private PhoneMatch tillView(Card c, boolean smsOn) {
+        BigDecimal discount = jdbc.sql("SELECT discount_percent FROM customers WHERE id = :id").param("id", c.customerId())
+                .query(BigDecimal.class).optional().orElse(BigDecimal.ZERO);
+        return new PhoneMatch(c.id(), c.customerId(), c.number(), c.fullName(), c.phone(), c.percent(), c.balance(), c.active(), smsOn, discount);
+    }
+
+    /** The card scanned or typed at the till (HP-000123): the card is at hand, so no SMS code. */
+    @GetMapping("/by-number/{number}")
+    public PhoneMatch byNumber(@PathVariable String number) {
+        CurrentMember m = requireAccess();
+        return jdbc.sql(SELECT + " WHERE lc.store_id = :s AND upper(c.code) = upper(:n)")
+                .param("s", m.storeId()).param("n", number.trim()).query((rs, n) -> map(rs)).optional()
+                .map(c -> tillView(c, sms.configured()))
+                .orElseThrow(() -> ApiException.notFound("Bonus kartı tapılmadı"));
+    }
 
     /** The store's card(s) for a phone number (matched on its last 9 digits, however it was typed). */
     @GetMapping("/lookup")
@@ -174,7 +191,7 @@ public class LoyaltyCardService {
         boolean smsOn = sms.configured();
         List<PhoneMatch> found = jdbc.sql(SELECT + " WHERE lc.store_id = :s AND right(regexp_replace(lc.phone, '[^0-9]', '', 'g'), 9) = :p ORDER BY lc.active DESC, lc.created_at DESC")
                 .param("s", m.storeId()).param("p", last9).query((rs, n) -> map(rs)).list().stream()
-                .map(c -> new PhoneMatch(c.id(), c.customerId(), c.number(), c.fullName(), c.phone(), c.percent(), c.balance(), c.active(), smsOn))
+                .map(c -> tillView(c, smsOn))
                 .toList();
         audit.log(m.storeId(), m.userId(), "BONUS_CARD_BY_PHONE", "CUSTOMER", found.isEmpty() ? null : found.get(0).customerId().toString(),
                 "Kart telefonla axtarıldı: ***" + last9.substring(5) + (found.isEmpty() ? " (tapılmadı)" : " → " + found.get(0).number()));

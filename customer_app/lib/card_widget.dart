@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'api.dart';
 import 'effects.dart';
 import 'models.dart';
+import 'themes.dart';
 
 final _money = NumberFormat('#,##0.00', 'az');
 String money(double v) => '${_money.format(v)} ₼';
@@ -15,37 +16,50 @@ const cardAspect = 85.6 / 54;
 
 /// The front of a card in its store's design: title, store, holder, logo and the balance.
 class CardFront extends StatelessWidget {
-  const CardFront({super.key, required this.card, this.animateBalance = true});
+  const CardFront({super.key, required this.card, this.animateBalance = true, this.theme});
 
   final LoyaltyCard card;
   final bool animateBalance;
+  /// The customer's chosen look; null = the store's own design.
+  final KartTheme? theme;
 
   @override
   Widget build(BuildContext context) {
     final d = card.design;
-    final text = TextStyle(color: d.textColor);
+    final t = theme;
+    final c1 = t?.color1 ?? d.color1, c2 = t?.color2 ?? d.color2, fg = t?.text ?? d.textColor;
+    final text = TextStyle(color: fg);
     return AspectRatio(
       aspectRatio: cardAspect,
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(22),
-          gradient: LinearGradient(colors: [d.color1, d.color2], begin: Alignment.topLeft, end: Alignment.bottomRight),
-          image: d.background == null
+          gradient: LinearGradient(colors: [c1, c2], begin: Alignment.topLeft, end: Alignment.bottomRight),
+          image: d.background == null || t != null
               ? null
               : DecorationImage(
                   image: MemoryImage(d.background!),
                   fit: BoxFit.cover,
                   colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: d.shade), BlendMode.darken),
                 ),
-          boxShadow: [BoxShadow(color: d.color1.withValues(alpha: 0.45), blurRadius: 24, offset: const Offset(0, 12))],
+          boxShadow: [BoxShadow(color: c1.withValues(alpha: 0.45), blurRadius: 24, offset: const Offset(0, 12))],
         ),
+        child: Stack(children: [
+          if (t != null && t.pattern != CardPattern.none)
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: CustomPaint(painter: PatternPainter(t.pattern, (t.accent ?? fg).withValues(alpha: 0.16))),
+              ),
+            ),
+          Padding(
         padding: const EdgeInsets.all(20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('${d.title.toUpperCase()}${d.showPercent ? ' · ${_pct(card.percent)}%' : ''}',
-                    style: text.copyWith(fontSize: 11, letterSpacing: 1.6, fontWeight: FontWeight.w600).apply(color: d.textColor.withValues(alpha: 0.8))),
+                    style: text.copyWith(fontSize: 11, letterSpacing: 1.6, fontWeight: FontWeight.w600).apply(color: fg.withValues(alpha: 0.8))),
                 if (d.showStore) ...[
                   const SizedBox(height: 4),
                   Text(card.storeName, maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -56,7 +70,7 @@ class CardFront extends StatelessWidget {
             if (d.logo != null) Image.memory(d.logo!, height: 40, width: 90, fit: BoxFit.contain, alignment: Alignment.topRight),
           ]),
           const Spacer(),
-          Text('BONUS', style: text.copyWith(fontSize: 10, letterSpacing: 2).apply(color: d.textColor.withValues(alpha: 0.7))),
+          Text('BONUS', style: text.copyWith(fontSize: 10, letterSpacing: 2).apply(color: fg.withValues(alpha: 0.7))),
           animateBalance
               ? TweenAnimationBuilder<double>(
                   tween: Tween(begin: 0, end: card.balance),
@@ -70,6 +84,8 @@ class CardFront extends StatelessWidget {
             Expanded(child: Text(card.fullName, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.copyWith(fontSize: 13))),
             Text(card.number, style: text.copyWith(fontSize: 13, letterSpacing: 1.5, fontWeight: FontWeight.w600)),
           ]),
+        ]),
+          ),
         ]),
       ),
     );
@@ -112,9 +128,10 @@ class CardBack extends StatelessWidget {
 
 /// A card that turns over (3D) when tapped: front ⇄ barcode.
 class FlipCard extends StatefulWidget {
-  const FlipCard({super.key, required this.card});
+  const FlipCard({super.key, required this.card, this.theme});
 
   final LoyaltyCard card;
+  final KartTheme? theme;
 
   @override
   State<FlipCard> createState() => _FlipCardState();
@@ -175,7 +192,15 @@ class _FlipCardState extends State<FlipCard> with TickerProviderStateMixin {
                   ..rotateY(angle + _tilt.dx * 0.22),
                 child: back
                     ? Transform(alignment: Alignment.center, transform: Matrix4.identity()..rotateY(pi), child: CardBack(card: widget.card))
-                    : Shine(child: CardFront(card: widget.card)),
+                    // a new look fades in over the old one
+                    : Shine(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 500),
+                          transitionBuilder: (child, a) => FadeTransition(
+                              opacity: a, child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(a), child: child)),
+                          child: CardFront(key: ValueKey(widget.theme?.id ?? storeThemeId), card: widget.card, theme: widget.theme),
+                        ),
+                      ),
               );
             },
           ),

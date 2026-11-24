@@ -24,6 +24,7 @@ import java.math.BigDecimal;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -45,7 +46,9 @@ public class LoyaltyCardService {
             @NotNull(message = "Kartın faizini daxil edin") @DecimalMin(value = "0", message = "Faiz 0–50 arası olmalıdır")
             @DecimalMax(value = "50", message = "Faiz 0–50 arası olmalıdır") @Digits(integer = 2, fraction = 2) BigDecimal percent,
             /** Update only: false blocks the card (no bonus is earned or spent). */
-            Boolean active) {}
+            Boolean active,
+            /** Create only: false skips the SMS with the card number and the app's activation code (default: sent). */
+            Boolean sendSms) {}
 
     public record Card(UUID id, UUID customerId, String number, String firstName, String lastName, String patronymic,
                        String fullName, String phone, BigDecimal percent, boolean active, BigDecimal balance,
@@ -59,12 +62,18 @@ public class LoyaltyCardService {
     private final TenantService tenant;
     private final AuditService audit;
     private final az.borcdefteri.subscriptions.PlanService plans;
+    private final az.borcdefteri.notifications.SmsService sms;
 
-    public LoyaltyCardService(JdbcClient jdbc, TenantService tenant, AuditService audit, az.borcdefteri.subscriptions.PlanService plans) {
+    /** Short link to the customers' app (web redirect to the kart-latest APK). */
+    static final String APP_LINK = "hesabpro.cloud/kart";
+
+    public LoyaltyCardService(JdbcClient jdbc, TenantService tenant, AuditService audit, az.borcdefteri.subscriptions.PlanService plans,
+                              az.borcdefteri.notifications.SmsService sms) {
         this.jdbc = jdbc;
         this.tenant = tenant;
         this.audit = audit;
         this.plans = plans;
+        this.sms = sms;
     }
 
     private CurrentMember requireAccess() {
@@ -142,7 +151,40 @@ public class LoyaltyCardService {
                 .param("l", req.lastName().trim()).param("p", blank(req.patronymic())).param("ph", req.phone().trim())
                 .param("pct", req.percent()).param("code", code()).param("by", m.userId()).update();
         audit.log(m.storeId(), m.userId(), "LOYALTY_CARD_CREATED", "CUSTOMER", customer.toString(), fullName + ", " + req.percent() + "%");
-        return load(m.storeId(), id);
+        Card card = load(m.storeId(), id);
+        if (!Boolean.FALSE.equals(req.sendSms())) sendCardSms(m.storeId(), card);
+        return card;
+    }
+
+    /** Sends the card's number and the app's activation code to the customer's phone again. */
+    @PostMapping("/{id}/sms")
+    public Map<String, Object> resendSms(@PathVariable UUID id) {
+        CurrentMember m = requireAccess();
+        if (!sms.configured()) {
+            throw ApiException.conflict("SMS_OFF", "SMS göndərmə hələ qoşulmayıb. Kodu WhatsApp ilə göndərin.");
+        }
+        Card card = load(m.storeId(), id);
+        if (!card.active()) throw ApiException.conflict("CARD_BLOCKED", "Kart bloklanıb");
+        boolean sent = sendCardSms(m.storeId(), card);
+        if (!sent) {
+            String why = jdbc.sql("SELECT error FROM sms_messages WHERE store_id = :s AND ref_id = :id ORDER BY created_at DESC LIMIT 1")
+                    .param("s", m.storeId()).param("id", id).query(String.class).optional().orElse(null);
+            throw ApiException.conflict("SMS_FAILED", "SMS göndərilmədi" + (why == null ? "" : ": " + why));
+        }
+        return Map.of("sent", true, "phone", card.phone());
+    }
+
+    /** The card SMS: store, card number, the app's activation code and the app link. Never fails the caller. */
+    private boolean sendCardSms(UUID storeId, Card c) {
+        if (!sms.configured()) return false;
+        String store = jdbc.sql("SELECT name FROM stores WHERE id = :s").param("s", storeId).query(String.class).optional().orElse("");
+        String text = (store.isBlank() ? "" : store + ": ") + "bonus kartiniz " + c.number()
+                + ". HesabPro Kart tetbiqine giris kodu: " + c.activationCode() + ". Tetbiq: " + APP_LINK;
+        try {
+            return sms.send(storeId, c.phone(), text, "LOYALTY_CARD", c.id());
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     @PutMapping("/{id}")

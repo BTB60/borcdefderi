@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -90,5 +91,28 @@ class CustomerAppTest extends IntegrationTestBase {
                 "phone", "050 555 44 33", "percent", "7", "active", false))).andExpect(status().isOk());
         anon("GET", "/api/public/customer-app/me", null, token).andExpect(jsonPath("$.cards.length()", is(1)));
         verify(gateway, times(1)).send(anyString(), anyString());
+    }
+
+    @Test
+    void theNewCardGoesToTheCustomerBySms() throws Exception {
+        String a = register("Ətir Dünyası");
+        activateSubscription(a, "MONTHLY");
+        // no provider: the card is made, nothing is sent, and a resend says SMS is off
+        when(gateway.configured()).thenReturn(false);
+        JsonNode quiet = body(post(a, "/api/loyalty-cards", Map.of("firstName", "Leyla", "lastName", "Quliyeva", "phone", "055 111 22 33", "percent", "5")));
+        post(a, "/api/loyalty-cards/" + quiet.get("id").asText() + "/sms", Map.of()).andExpect(status().isConflict());
+        verify(gateway, never()).send(anyString(), anyString());
+
+        when(gateway.configured()).thenReturn(true);
+        JsonNode card = body(post(a, "/api/loyalty-cards", Map.of("firstName", "Rəna", "lastName", "Həsənova", "phone", "070 222 33 44", "percent", "4")));
+        ArgumentCaptor<String> text = ArgumentCaptor.forClass(String.class);
+        verify(gateway).send(eq("994702223344"), text.capture());
+        assertThat(text.getValue(), allOf(containsString(card.get("number").asText()), containsString(card.get("activationCode").asText()),
+                containsString("hesabpro.cloud/kart"), containsString("Ətir Dünyası")));
+
+        // the store can send it again, or skip it when making a card
+        post(a, "/api/loyalty-cards/" + card.get("id").asText() + "/sms", Map.of()).andExpect(status().isOk()).andExpect(jsonPath("$.sent", is(true)));
+        body(post(a, "/api/loyalty-cards", Map.of("firstName", "Orxan", "lastName", "Məmmədli", "phone", "077 333 44 55", "percent", "2", "sendSms", false)));
+        verify(gateway, times(2)).send(anyString(), anyString());
     }
 }

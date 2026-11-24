@@ -5,7 +5,7 @@ import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader
 import { TemporaryPasswordModal, type TemporaryPassword } from "@/components/PasswordReset";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { JOB_TITLE_LABEL, JOB_TITLE_PERMISSIONS, PERMISSION_LABEL } from "@/lib/format";
+import { JOB_TITLE_LABEL, JOB_TITLE_PERMISSIONS, PERMISSION_LABEL, formatMoney } from "@/lib/format";
 import type { Employee, JobTitle, Permission } from "@/lib/types";
 
 const ALL_PERMISSIONS = Object.keys(PERMISSION_LABEL) as Permission[];
@@ -28,6 +28,32 @@ function JobPicker({ value, onPick }: { value: JobTitle | null; onPick: (j: JobT
     </fieldset>
   );
 }
+
+type Pay = { type: "" | "MONTHLY" | "HOURLY"; rate: string };
+
+/** Maaş: monthly salary or hourly rate; empty = set later on the "İşçi maaşı" page. */
+function PayFields({ value, onChange, error }: { value: Pay; onChange: (p: Pay) => void; error?: string }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <Field label="Maaş növü">
+        <select className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" value={value.type}
+          onChange={(e) => onChange({ ...value, type: e.target.value as Pay["type"] })}>
+          <option value="">Sonra təyin ediləcək</option>
+          <option value="MONTHLY">Aylıq maaş</option>
+          <option value="HOURLY">Saatlıq</option>
+        </select>
+      </Field>
+      {value.type && (
+        <Field label={value.type === "MONTHLY" ? "Aylıq maaş (₼)" : "Saatlıq ödəniş (₼)"} error={error}>
+          <Input required inputMode="decimal" value={value.rate} placeholder={value.type === "MONTHLY" ? "700" : "5"}
+            onChange={(e) => onChange({ ...value, rate: e.target.value })} />
+        </Field>
+      )}
+    </div>
+  );
+}
+
+const payJson = (p: Pay) => p.type ? { payType: p.type, payRate: p.rate.replace(",", ".") } : { payType: null, payRate: null };
 
 function PermissionChecks({ value, onChange, options }: { value: Permission[]; onChange: (v: Permission[]) => void; options: Permission[] }) {
   return (
@@ -119,7 +145,7 @@ export default function EmployeesPage() {
             <tbody className="divide-y divide-slate-100">
               {items.map((e) => (
                 <tr key={e.memberId} className="transition-colors hover:bg-gold-500/5">
-                  <Td className="font-medium text-navy-800">{e.fullName}<div className="text-xs font-normal text-slate-500">{e.jobTitle ? JOB_TITLE_LABEL[e.jobTitle] : "Vəzifə seçilməyib"}</div></Td>
+                  <Td className="font-medium text-navy-800">{e.fullName}<div className="text-xs font-normal text-slate-500">{e.jobTitle ? JOB_TITLE_LABEL[e.jobTitle] : "Vəzifə seçilməyib"}{e.payType && e.payRate != null ? ` · ${formatMoney(e.payRate)}${e.payType === "HOURLY" ? "/saat" : "/ay"}` : ""}</div></Td>
                   <Td className="text-slate-500">{e.email}</Td>
                   <Td>
                     <div className="flex flex-wrap gap-1.5">
@@ -171,6 +197,7 @@ export default function EmployeesPage() {
 
 function CreateEmployeeModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({ fullName: "", email: "", password: "", phone: "" });
+  const [pay, setPay] = useState<Pay>({ type: "", rate: "" });
   const [perms, setPerms] = useState<Permission[]>(["CUSTOMER_DEBTS"]);
   const [job, setJob] = useState<JobTitle | null>(null);
   const pickJob = (j: JobTitle) => { setJob(j); if (j !== "OTHER") setPerms(JOB_TITLE_PERMISSIONS[j]); };
@@ -184,7 +211,7 @@ function CreateEmployeeModal({ onClose, onSaved }: { onClose: () => void; onSave
     setError(null);
     setErrors({});
     try {
-      await api("/api/employees", { method: "POST", json: { ...form, phone: form.phone || null, permissions: perms, jobTitle: job } });
+      await api("/api/employees", { method: "POST", json: { ...form, phone: form.phone || null, permissions: perms, jobTitle: job, ...payJson(pay) } });
       onSaved();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -212,6 +239,7 @@ function CreateEmployeeModal({ onClose, onSaved }: { onClose: () => void; onSave
         </Field>
         <Field label="Telefon"><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
         <JobPicker value={job} onPick={pickJob} />
+        <PayFields value={pay} onChange={setPay} error={errors.payRate} />
         <PermissionChecks value={perms} onChange={setPerms} options={EMPLOYEE_PERMISSIONS} />
         {perms.length === 0 && <p className="text-xs text-rose-600">Ən azı bir icazə seçin</p>}
       </form>
@@ -223,6 +251,7 @@ function EditPermissionsModal({ employee, onClose, onSaved }: { employee: Employ
   const [perms, setPerms] = useState<Permission[]>(employee.permissions);
   const [job, setJob] = useState<JobTitle | null>(employee.jobTitle ?? null);
   const pickJob = (j: JobTitle) => { setJob(j); if (j !== "OTHER") setPerms(JOB_TITLE_PERMISSIONS[j]); };
+  const [pay, setPay] = useState<Pay>({ type: employee.payType ?? "", rate: employee.payRate != null ? String(employee.payRate) : "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -230,7 +259,9 @@ function EditPermissionsModal({ employee, onClose, onSaved }: { employee: Employ
     e.preventDefault();
     setBusy(true);
     try {
-      await api(`/api/employees/${employee.memberId}`, { method: "PUT", json: { permissions: perms, active: employee.active, jobTitle: job } });
+      const p = payJson(pay);
+      await api(`/api/employees/${employee.memberId}`, { method: "PUT", json: { permissions: perms, active: employee.active, jobTitle: job,
+        payType: p.payType ?? "NONE", payRate: p.payRate } });
       onSaved();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Yadda saxlanılmadı");
@@ -242,13 +273,14 @@ function EditPermissionsModal({ employee, onClose, onSaved }: { employee: Employ
   return (
     <Modal
       open
-      title={`Vəzifə və icazələr — ${employee.fullName}`}
+      title={`Vəzifə, maaş və icazələr — ${employee.fullName}`}
       onClose={onClose}
       footer={<><Button variant="ghost" onClick={onClose}>Ləğv et</Button><Button type="submit" form="perm-form" disabled={busy}>Yadda saxla</Button></>}
     >
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       <form id="perm-form" onSubmit={submit} className="space-y-4">
         <JobPicker value={job} onPick={pickJob} />
+        <PayFields value={pay} onChange={setPay} />
         <PermissionChecks value={perms} onChange={setPerms} options={EMPLOYEE_PERMISSIONS} />
       </form>
     </Modal>

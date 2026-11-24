@@ -147,4 +147,27 @@ class HandoverOrdersPayrollTest extends IntegrationTestBase {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.bonusBalance", is(7.5)))
                 .andExpect(jsonPath("$.customerCode").exists());
     }
+
+    @Test
+    void theSalaryIsSetWhenTheEmployeeIsRegistered() throws Exception {
+        String owner = register("Maaş Market");
+        activateSubscription(owner, "MONTHLY");
+        // a salary needs its amount
+        post(owner, "/api/employees", Map.of("email", uniqueEmail("x"), "password", EMPLOYEE_PASSWORD, "fullName", "Boş Maaş",
+                "permissions", perms("SALES"), "payType", "MONTHLY")).andExpect(status().isBadRequest());
+        JsonNode e = body(post(owner, "/api/employees", Map.of("email", uniqueEmail("kassir"), "password", EMPLOYEE_PASSWORD,
+                "fullName", "Kassir Elnur", "permissions", perms("SALES"), "payType", "MONTHLY", "payRate", "750"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.payType", is("MONTHLY"))).andExpect(jsonPath("$.payRate", is(750.0))));
+        JsonNode row = body(get(owner, "/api/payroll")).get("rows").get(0);
+        assertEquals("MONTHLY", row.get("payType").asText());
+        assertEquals(0, new java.math.BigDecimal("750").compareTo(row.get("rate").decimalValue()));
+
+        // editing: no pay fields keeps it (older apps), HOURLY changes it, NONE clears it
+        String member = e.get("memberId").asText();
+        put(owner, "/api/employees/" + member, Map.of("permissions", perms("SALES"), "active", true)).andExpect(jsonPath("$.payRate", is(750.0)));
+        put(owner, "/api/employees/" + member, Map.of("permissions", perms("SALES"), "active", true, "payType", "HOURLY", "payRate", "6.5"))
+                .andExpect(jsonPath("$.payType", is("HOURLY"))).andExpect(jsonPath("$.payRate", is(6.5)));
+        JsonNode cleared = body(put(owner, "/api/employees/" + member, Map.of("permissions", perms("SALES"), "active", true, "payType", "NONE")));
+        assertTrue(cleared.path("payType").isNull() || cleared.path("payType").isMissingNode());
+    }
 }

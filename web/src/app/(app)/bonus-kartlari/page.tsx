@@ -9,6 +9,7 @@ import { useDebounced } from "@/lib/useDebounced";
 import { waLink } from "@/lib/whatsapp";
 import { CardFace, printLoyaltyCard, type CardDesign } from "@/components/LoyaltyCard";
 import { CardDesigner } from "@/components/CardDesigner";
+import { BuyCardsModal, CardCreditBar, type CreditBalance } from "@/components/CardCredits";
 
 type LoyaltyCard = {
   id: string; customerId: string; number: string; firstName: string; lastName: string; patronymic: string | null; fullName: string;
@@ -36,6 +37,10 @@ export default function LoyaltyCardsPage() {
   const [design, setDesign] = useState<CardDesign | null>(null);
   const [designing, setDesigning] = useState(false);
   const mayDesign = isOwner || can("TILL_SETTINGS");
+  const [credits, setCredits] = useState<CreditBalance | null>(null);
+  const [buying, setBuying] = useState(false);
+  const loadCredits = useCallback(() => { api<CreditBalance>("/api/card-credits").then(setCredits).catch(() => undefined); }, []);
+  useEffect(() => { loadCredits(); }, [loadCredits]);
   useEffect(() => { api<{ card?: CardDesign }>("/api/settings/print-design").then((d) => setDesign(d.card ?? null)).catch(() => undefined); }, []);
 
   const load = useCallback(() => {
@@ -57,6 +62,7 @@ export default function LoyaltyCardsPage() {
         </div>} />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       {notice && <div className="mb-4"><Alert kind="success">{notice}</Alert></div>}
+      <CardCreditBar balance={credits} isOwner={isOwner} onBuy={() => setBuying(true)} />
       <div className="mb-4 grid gap-3 sm:grid-cols-2">
         <StatCard label="Kartlar" value={String(cards?.length ?? 0)} hint={query ? "axtarışa görə" : "hamısı"} />
         <StatCard label="Kartlardakı bonus" value={formatMoney(total)} hint="müştərilərin xərcləyə biləcəyi" tone="emerald" />
@@ -85,8 +91,10 @@ export default function LoyaltyCardsPage() {
         )}
       </Card>
       {editing && <CardModal card={editing === "new" ? null : editing} onClose={() => setEditing(null)}
-        onSaved={(c, created) => { setEditing(null); setNotice(created ? `Kart yaradıldı: ${c.number} · ${c.fullName} · ${Number(c.percent)}%` : `${c.fullName}: kart yeniləndi`); load(); if (created) setViewing(c); }} />}
+        onSaved={(c, created) => { setEditing(null); if (created) loadCredits(); setNotice(created ? `Kart yaradıldı: ${c.number} · ${c.fullName} · ${Number(c.percent)}%` : `${c.fullName}: kart yeniləndi`); load(); if (created) setViewing(c); }} />}
       {viewing && <CardDetail card={viewing} design={design} storeName={me?.storeName ?? ""} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
+      {buying && credits && <BuyCardsModal balance={credits} onClose={() => setBuying(false)}
+        onSent={(r) => { setBuying(false); loadCredits(); setNotice(`Sorğu göndərildi: ${r.quantity} kart. Admin təsdiqləyən kimi balansınıza əlavə olunacaq`); }} />}
       {designing && <CardDesigner initial={design} store={me?.storeName ?? ""} onClose={() => setDesigning(false)}
         onSaved={(d) => { setDesign(d); setDesigning(false); setNotice("Kartın dizaynı yadda saxlanıldı"); }} />}
     </>

@@ -1,5 +1,5 @@
 /** Platform admin sections, grouped as they appear in the left (blue) menu. d = 24px outline icon path. */
-export type AdminTab = "overview" | "stores" | "expiring" | "subscriptions" | "plans" | "revenue" | "costs" | "growth" | "users" | "audit" | "settings";
+export type AdminTab = "overview" | "stores" | "expiring" | "subscriptions" | "cards" | "plans" | "revenue" | "costs" | "growth" | "users" | "audit" | "settings";
 
 export const ADMIN_GROUPS: { title: string; items: { key: AdminTab; label: string; d: string }[] }[] = [
   { title: "", items: [{ key: "overview", label: "İcmal", d: "M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10" }] },
@@ -9,6 +9,7 @@ export const ADMIN_GROUPS: { title: string; items: { key: AdminTab; label: strin
       { key: "stores", label: "Bütün mağazalar", d: "M4 7h16l-1 4H5L4 7zm1 4v9h14v-9M9 20v-5h6v5" },
       { key: "expiring", label: "Bitən abunəliklər", d: "M12 7v5l3 3M12 3a9 9 0 100 18 9 9 0 000-18z" },
       { key: "subscriptions", label: "Ödəniş sorğuları", d: "M3 7h18v10H3zM3 11h18M7 15h3" },
+      { key: "cards", label: "Bonus kart paketləri", d: "M3 6h18v12H3V6Zm0 4h18M7 15h3" },
     ],
   },
   {
@@ -33,7 +34,7 @@ export const ADMIN_GROUPS: { title: string; items: { key: AdminTab; label: strin
 export const ADMIN_TABS = ADMIN_GROUPS.flatMap((g) => g.items);
 
 /** What a köməkçi admin (SUPPORT_ADMIN) may open. */
-export const SUPPORT_TABS: AdminTab[] = ["stores", "expiring", "subscriptions"];
+export const SUPPORT_TABS: AdminTab[] = ["stores", "expiring", "subscriptions", "cards"];
 
 /** The groups as a köməkçi admin sees them. */
 export const SUPPORT_GROUPS = ADMIN_GROUPS

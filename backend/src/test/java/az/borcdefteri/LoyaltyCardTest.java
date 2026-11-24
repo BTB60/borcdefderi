@@ -19,7 +19,7 @@ class LoyaltyCardTest extends IntegrationTestBase {
     @Test
     void eachCardEarnsAtItsOwnPercent() throws Exception {
         String owner = register("Kart Mağaza");
-        activateSubscription(owner, "MONTHLY");
+        giveCardCredits(activateSubscription(owner, "MONTHLY"), 50);
         put(owner, "/api/settings/bonus", Map.of("bonusPercent", "2")).andExpect(status().isOk());
         String p = body(post(owner, "/api/products", new HashMap<>(Map.of("name", "Su", "purchasePrice", "0.5", "salePrice", "10",
                 "initialStock", "100")))).get("id").asText();

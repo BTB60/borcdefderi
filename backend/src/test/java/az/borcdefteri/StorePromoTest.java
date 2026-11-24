@@ -21,9 +21,9 @@ class StorePromoTest extends IntegrationTestBase {
     @Test
     void customersSeeTheLivePromosOfTheirStoresOnly() throws Exception {
         String a = register("Geyim Evi");
-        activateSubscription(a, "MONTHLY");
+        giveCardCredits(activateSubscription(a, "MONTHLY"), 50);
         String b = register("Başqa Mağaza");
-        activateSubscription(b, "MONTHLY");
+        giveCardCredits(activateSubscription(b, "MONTHLY"), 50);
         JsonNode card = body(post(a, "/api/loyalty-cards", Map.of("firstName", "Leyla", "lastName", "Əliyeva", "phone", "050 444 33 22", "percent", "5")));
 
         JsonNode promo = body(post(a, "/api/promos", Map.of("title", "Qış kolleksiyası", "subtitle", "Bütün paltolar", "badge", "-30%",

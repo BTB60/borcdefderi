@@ -49,7 +49,8 @@ public class CardCreditService {
     private final TenantService tenant;
     private final ReceiptStorage receipts;
     private final AuditService audit;
-    private final BigDecimal price;
+    /** The default when the admin has not set a price (app.cards.price-per-card). */
+    private final BigDecimal defaultPrice;
 
     public CardCreditService(JdbcClient jdbc, TenantService tenant, ReceiptStorage receipts, AuditService audit,
                              @Value("${app.cards.price-per-card:0.85}") BigDecimal price) {
@@ -57,7 +58,7 @@ public class CardCreditService {
         this.tenant = tenant;
         this.receipts = receipts;
         this.audit = audit;
-        this.price = Money.of(price);
+        this.defaultPrice = Money.of(price);
     }
 
     // ---------- the store ----------
@@ -68,7 +69,7 @@ public class CardCreditService {
         List<Request> history = jdbc.sql(SELECT + " WHERE r.store_id = :s ORDER BY r.requested_at DESC LIMIT 30")
                 .param("s", m.storeId()).query((rs, n) -> map(rs)).list();
         Request pending = history.stream().filter(r -> "PENDING".equals(r.status())).findFirst().orElse(null);
-        return new Balance(credits(m.storeId()), price, PACKAGES, MIN_QUANTITY, pending, history);
+        return new Balance(credits(m.storeId()), price(), PACKAGES, MIN_QUANTITY, pending, history);
     }
 
     /** "Ödəniş etdim": a new PENDING request, or the store's pending one updated (a new receipt replaces the old one). */
@@ -87,7 +88,7 @@ public class CardCreditService {
         }
         String ref = cut(payerReference, 120), text = cut(note, 500);
         ReceiptStorage.Stored stored = receipt == null || receipt.isEmpty() ? null : receipts.store(receipt);
-        BigDecimal amount = Money.of(price.multiply(BigDecimal.valueOf(quantity)));
+        BigDecimal amount = Money.of(price().multiply(BigDecimal.valueOf(quantity)));
         jdbc.sql("SELECT id FROM stores WHERE id = :s FOR UPDATE").param("s", m.storeId()).query(UUID.class).single();
         UUID id = jdbc.sql("SELECT id FROM card_credit_requests WHERE store_id = :s AND status = 'PENDING' ORDER BY requested_at DESC LIMIT 1")
                 .param("s", m.storeId()).query(UUID.class).optional().orElse(null);
@@ -135,7 +136,7 @@ public class CardCreditService {
                 .param("s", storeId).update();
         if (updated == 0) {
             throw new ApiException(HttpStatus.PAYMENT_REQUIRED, "NO_CARD_CREDITS",
-                    "Bonus kart balansınız bitib. “Kart paketi al” ilə kart alın (1 kart = " + price.toPlainString().replace('.', ',') + " ₼)");
+                    "Bonus kart balansınız bitib. “Kart paketi al” ilə kart alın (1 kart = " + price().toPlainString().replace('.', ',') + " ₼)");
         }
     }
 
@@ -195,11 +196,50 @@ public class CardCreditService {
                 INSERT INTO card_credit_requests (id, store_id, quantity, amount, status, note, reviewed_by, reviewed_at)
                 VALUES (:id, :s, :q, :a, 'GRANT', :n, :by, now())""")
                 .param("id", id).param("s", storeId).param("q", body.quantity())
-                .param("a", Money.of(price.multiply(BigDecimal.valueOf(body.quantity()))))
+                .param("a", Money.of(price().multiply(BigDecimal.valueOf(body.quantity()))))
                 .param("n", cut(body.note(), 500)).param("by", tenant.currentUserId()).update();
         jdbc.sql("UPDATE stores SET card_credits = card_credits + :q WHERE id = :s").param("q", body.quantity()).param("s", storeId).update();
         audit.log(storeId, tenant.currentUserId(), "CARD_CREDITS_GRANTED", "CARD_CREDITS", id.toString(), body.quantity() + " kart");
         return get(id);
+    }
+
+    // ---------- the price of one card (the platform admin sets it) ----------
+
+    public record Price(BigDecimal price) {}
+
+    /** One card's price now: the admin's setting, or the default. Requests already sent keep their amount. */
+    public BigDecimal price() {
+        return jdbc.sql("SELECT value FROM platform_settings WHERE key = 'card_price'").query(String.class).optional()
+                .flatMap(v -> {
+                    try {
+                        return java.util.Optional.of(Money.of(new BigDecimal(v.trim())));
+                    } catch (RuntimeException e) {
+                        return java.util.Optional.empty();
+                    }
+                })
+                .orElse(defaultPrice);
+    }
+
+    @GetMapping("/api/admin/card-credits/price")
+    public Price adminPrice() {
+        tenant.requirePlatformAdmin();
+        return new Price(price());
+    }
+
+    @PutMapping("/api/admin/card-credits/price")
+    @Transactional
+    public Price setPrice(@RequestBody Price body) {
+        tenant.requireSuperAdmin();
+        if (body == null || body.price() == null || body.price().signum() <= 0 || body.price().compareTo(new BigDecimal("100")) > 0) {
+            throw ApiException.badRequest("INVALID_PRICE", "Kartın qiyməti 0-dan böyük, 100 ₼-dan az olmalıdır");
+        }
+        BigDecimal next = Money.of(body.price()), before = price();
+        jdbc.sql("""
+                INSERT INTO platform_settings (key, value, updated_at, updated_by) VALUES ('card_price', :v, now(), :by)
+                ON CONFLICT (key) DO UPDATE SET value = :v, updated_at = now(), updated_by = :by""")
+                .param("v", next.toPlainString()).param("by", tenant.currentUserId()).update();
+        audit.log(null, tenant.currentUserId(), "CARD_PRICE_CHANGED", "CARD_CREDITS", null, before + " → " + next + " AZN");
+        return new Price(next);
     }
 
     // ---------- helpers ----------
